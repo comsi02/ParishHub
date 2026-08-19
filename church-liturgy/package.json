@@ -1,0 +1,19 @@
+{
+  "name": "church-liturgy",
+  "version": "1.0.0",
+  "description": "Catholic Church Liturgy Presentation System",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clasp:login": "clasp login",
+    "clasp:push": "npm run build && clasp push",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "vite": "^5.0.0",
+    "vite-plugin-singlefile": "^1.0.0"
+  },
+  "dependencies": {}
+}

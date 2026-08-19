@@ -1,0 +1,14 @@
+[
+  { "id": "1", "massId": "1", "sequence": 1, "type": "hymn", "title": "입당성가", "content": "48번", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "2", "massId": "1", "sequence": 2, "type": "reading", "title": "시작예식", "content": "성부와 성자와 성령의 이름으로. 아멘.", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "3", "massId": "1", "sequence": 3, "type": "reading", "title": "제1독서", "content": "이사야서의 말씀입니다.\n\n주님께서 이렇게 말씀하신다.\n---PAGE---\n'나는 그들의 행실과 생각들을 안다. 나는 모든 민족들과 언어가 다른 사람들을 모으러 오리니, 그들이 와서 나의 영광을 보리라.'\n\n주님의 말씀입니다.", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "4", "massId": "1", "sequence": 4, "type": "psalm", "title": "화답송", "content": "주님, 온 세상아 주님을 찬양하여라.", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "5", "massId": "1", "sequence": 5, "type": "reading", "title": "제2독서", "content": "히브리서의 말씀입니다.\n형제 여러분, 여러분은 시련을 겪을 때에 훈육으로 여기십시오.", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "6", "massId": "1", "sequence": 6, "type": "gospel", "title": "복음", "content": "루카가 전한 거룩한 복음입니다.\n그때에 예수님께서 여러 고을과 마을을 지나시며 가르치시고 예루살렘으로 여행을 계속하셨다.", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "7", "massId": "1", "sequence": 7, "type": "prayer", "title": "신앙고백", "content": "전능하신 천주 성부 천지의 창조주를 저는 믿나이다.", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "8", "massId": "1", "sequence": 8, "type": "prayer", "title": "보편지향기도", "content": "교회를 위하여 기도합시다.", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "9", "massId": "1", "sequence": 9, "type": "hymn", "title": "봉헌성가", "content": "211번", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "10", "massId": "1", "sequence": 10, "type": "hymn", "title": "영성체성가", "content": "165번", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "11", "massId": "1", "sequence": 11, "type": "announcement", "title": "공지사항", "content": "이번 주일은 연중 제21주일입니다.", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "12", "massId": "1", "sequence": 12, "type": "hymn", "title": "파견성가", "content": "82번", "subtitle": "", "notes": "", "enabled": true }
+]

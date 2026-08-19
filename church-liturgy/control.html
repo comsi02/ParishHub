@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liturgy Control</title>
+  <link rel="stylesheet" href="/src/web/styles/base.css">
+  <link rel="stylesheet" href="/src/web/styles/control.css">
+</head>
+<body data-theme="light"> <!-- Control usually better in light mode -->
+  <header class="control-header">
+    <div class="header-info">
+      <h1 id="mass-title">미사 불러오는 중...</h1>
+      <span id="slide-counter">0 / 0</span>
+    </div>
+    <div class="header-actions">
+      <button id="theme-toggle" class="theme-toggle">다크 모드</button>
+    </div>
+  </header>
+
+  <main class="control-main">
+    <div class="left-panel">
+      <h2>슬라이드 목록</h2>
+      <ul id="slide-list" class="slide-list">
+        <!-- List will be populated by JS -->
+      </ul>
+    </div>
+    <div class="right-panel">
+      <div class="preview-container">
+        <h2>미리보기</h2>
+        <div id="preview-box" class="preview-box" data-theme="dark">
+          <h3 id="preview-title"></h3>
+          <p id="preview-text"></p>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="btn-prev" class="control-btn">이전 (←)</button>
+        <button id="btn-next" class="control-btn">다음 (→, Space)</button>
+      </div>
+    </div>
+  </main>
+  
+  <script type="module" src="/src/web/scripts/control.js"></script>
+</body>
+</html>

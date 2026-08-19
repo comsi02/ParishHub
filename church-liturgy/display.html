@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liturgy Display</title>
+  <link rel="stylesheet" href="/src/web/styles/base.css">
+  <link rel="stylesheet" href="/src/web/styles/display.css">
+</head>
+<body data-theme="dark"> <!-- Defaulting display to dark theme for projectors -->
+  <div id="slide-container" class="slide-container">
+    <div id="loading" class="loading">로딩 중...</div>
+    <div id="slide-content" class="slide" style="display: none;">
+      <h1 id="slide-title"></h1>
+      <p id="slide-text"></p>
+    </div>
+  </div>
+  <script type="module" src="/src/web/scripts/display.js"></script>
+</body>
+</html>

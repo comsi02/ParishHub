@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Church Liturgy Presentation</title>
+  <script>
+    // Simple router
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const page = urlParams.get('page') || 'display';
+      
+      if (page === 'control') {
+        window.location.href = '/control.html';
+      } else {
+        window.location.href = '/display.html';
+      }
+    });
+  </script>
+</head>
+<body>
+  Redirecting...
+</body>
+</html>
