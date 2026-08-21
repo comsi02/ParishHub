@@ -5,5 +5,12 @@
     "title": "연중 제21주일",
     "language": "ko",
     "status": "Active"
+  },
+  {
+    "id": "2",
+    "date": "2026-08-30",
+    "title": "연중 제22주일",
+    "language": "ko",
+    "status": "Active"
   }
 ]

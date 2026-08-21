@@ -1,7 +1,7 @@
 :root {
   /* Default Theme: Light Mode */
   --bg-color: #ffffff;
-  --text-color: #121212;
+  --text-color: #000000;
   --accent-color: #4a90e2;
   --header-bg: #f5f5f5;
   --border-color: #dddddd;
@@ -17,8 +17,8 @@
 
 [data-theme="dark"] {
   /* Dark Mode */
-  --bg-color: #121212;
-  --text-color: #f5f5f5;
+  --bg-color: #000000;
+  --text-color: #ffffff;
   --accent-color: #64b5f6;
   --header-bg: #1e1e1e;
   --border-color: #333333;
@@ -43,13 +43,20 @@ body {
   flex-direction: column;
 }
 
-/* Theme toggle button styling for control screen */
-.theme-toggle {
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  background-color: var(--accent-color);
-  color: #fff;
+/* Theme toggle icon button styling */
+.theme-toggle-icon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
   border: none;
-  border-radius: 4px;
-  font-size: 1rem;
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 1000;
+  opacity: 0.3;
+  transition: opacity 0.3s;
+}
+
+.theme-toggle-icon:hover {
+  opacity: 1;
 }

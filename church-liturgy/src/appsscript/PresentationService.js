@@ -10,10 +10,12 @@ function apiGetPresentationState() {
   const props = PropertiesService.getScriptProperties();
   const massId = props.getProperty('CURRENT_MASS_ID');
   const slideId = props.getProperty('CURRENT_SLIDE_ID');
+  const theme = props.getProperty('CURRENT_THEME');
   
   return {
     massId: massId || '1',
-    slideId: slideId || '1'
+    slideId: slideId || '1',
+    theme: theme || 'dark'
   };
 }
 
@@ -29,6 +31,9 @@ function apiSetPresentationState(state) {
   const props = PropertiesService.getScriptProperties();
   props.setProperty('CURRENT_MASS_ID', state.massId);
   props.setProperty('CURRENT_SLIDE_ID', state.slideId);
+  if (state.theme) {
+    props.setProperty('CURRENT_THEME', state.theme);
+  }
   
   return true;
 }

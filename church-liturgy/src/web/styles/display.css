@@ -15,7 +15,6 @@
 #slide-title {
   font-size: var(--title-size);
   margin-bottom: var(--spacing);
-  color: var(--accent-color);
 }
 
 #slide-text {
@@ -30,6 +29,3 @@
 }
 
 /* Slide type specific styles can be added here later */
-.slide-hymn #slide-title {
-  color: #ff9800;
-}

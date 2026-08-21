@@ -30,4 +30,24 @@ export class GasProvider extends DataProvider {
   async setPresentationState(state) {
     return this._runGasFunction('apiSetPresentationState', state);
   }
+
+  async updateSlide(massId, slideId, updates) {
+    return this._runGasFunction('apiUpdateSlide', massId, slideId, updates);
+  }
+
+  async addSlide(massId, slideData) {
+    return this._runGasFunction('apiAddSlide', massId, slideData);
+  }
+
+  async deleteSlide(massId, slideId) {
+    return this._runGasFunction('apiDeleteSlide', massId, slideId);
+  }
+
+  async createMass(newMassData, sourceMassId) {
+    return this._runGasFunction('apiCreateMass', newMassData, sourceMassId);
+  }
+
+  async reorderSlides(massId, orderedSlideIds) {
+    return this._runGasFunction('apiReorderSlides', massId, orderedSlideIds);
+  }
 }

@@ -10,5 +10,7 @@
   { "id": "9", "massId": "1", "sequence": 9, "type": "hymn", "title": "봉헌성가", "content": "211번", "subtitle": "", "notes": "", "enabled": true },
   { "id": "10", "massId": "1", "sequence": 10, "type": "hymn", "title": "영성체성가", "content": "165번", "subtitle": "", "notes": "", "enabled": true },
   { "id": "11", "massId": "1", "sequence": 11, "type": "announcement", "title": "공지사항", "content": "이번 주일은 연중 제21주일입니다.", "subtitle": "", "notes": "", "enabled": true },
-  { "id": "12", "massId": "1", "sequence": 12, "type": "hymn", "title": "파견성가", "content": "82번", "subtitle": "", "notes": "", "enabled": true }
+  { "id": "12", "massId": "1", "sequence": 12, "type": "hymn", "title": "파견성가", "content": "82번", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "13", "massId": "2", "sequence": 1, "type": "hymn", "title": "입당성가", "content": "100번", "subtitle": "", "notes": "", "enabled": true },
+  { "id": "14", "massId": "2", "sequence": 2, "type": "reading", "title": "제1독서", "content": "연중 제22주일 제1독서입니다.", "subtitle": "", "notes": "", "enabled": true }
 ]

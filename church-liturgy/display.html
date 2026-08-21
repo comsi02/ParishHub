@@ -8,11 +8,12 @@
   <link rel="stylesheet" href="/src/web/styles/display.css">
 </head>
 <body data-theme="dark"> <!-- Defaulting display to dark theme for projectors -->
+  <button id="theme-toggle" class="theme-toggle-icon" title="테마 전환">🌓</button>
   <div id="slide-container" class="slide-container">
     <div id="loading" class="loading">로딩 중...</div>
     <div id="slide-content" class="slide" style="display: none;">
-      <h1 id="slide-title"></h1>
-      <p id="slide-text"></p>
+      <h1 id="slide-title" contenteditable="true" spellcheck="false"></h1>
+      <p id="slide-text" contenteditable="true" spellcheck="false"></p>
     </div>
   </div>
   <script type="module" src="/src/web/scripts/display.js"></script>

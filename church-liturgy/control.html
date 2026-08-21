@@ -8,19 +8,24 @@
   <link rel="stylesheet" href="/src/web/styles/control.css">
 </head>
 <body data-theme="light"> <!-- Control usually better in light mode -->
+  <button id="theme-toggle" class="theme-toggle-icon" title="테마 전환">🌓</button>
   <header class="control-header">
     <div class="header-info">
-      <h1 id="mass-title">미사 불러오는 중...</h1>
+      <div class="mass-selector-group">
+        <select id="mass-select" class="mass-select"></select>
+        <button id="btn-new-mass" class="btn-new-mass" title="새 전례 생성">+ 새 미사</button>
+      </div>
       <span id="slide-counter">0 / 0</span>
     </div>
-    <div class="header-actions">
-      <button id="theme-toggle" class="theme-toggle">다크 모드</button>
-    </div>
-  </header>
-
-  <main class="control-main">
+  </header>  <main class="control-main">
     <div class="left-panel">
-      <h2>슬라이드 목록</h2>
+      <div class="list-header">
+        <h2>슬라이드 목록</h2>
+        <div class="list-actions">
+          <button id="btn-add-slide" title="슬라이드 추가">+</button>
+          <button id="btn-delete-slide" title="슬라이드 삭제">-</button>
+        </div>
+      </div>
       <ul id="slide-list" class="slide-list">
         <!-- List will be populated by JS -->
       </ul>
@@ -28,9 +33,9 @@
     <div class="right-panel">
       <div class="preview-container">
         <h2>미리보기</h2>
-        <div id="preview-box" class="preview-box" data-theme="dark">
-          <h3 id="preview-title"></h3>
-          <p id="preview-text"></p>
+        <div id="preview-box" class="preview-box">
+          <h3 id="preview-title" contenteditable="true" spellcheck="false"></h3>
+          <p id="preview-text" contenteditable="true" spellcheck="false"></p>
         </div>
       </div>
       <div class="controls">
@@ -41,5 +46,28 @@
   </main>
   
   <script type="module" src="/src/web/scripts/control.js"></script>
+
+  <!-- Modal for Creating New Mass -->
+  <div id="modal-new-mass" class="modal-overlay hidden">
+    <div class="modal-content">
+      <h2>새 미사(전례) 만들기</h2>
+      <div class="form-group">
+        <label for="new-mass-date">날짜</label>
+        <input type="date" id="new-mass-date" required>
+      </div>
+      <div class="form-group">
+        <label for="new-mass-title">제목 (예: 연중 제23주일)</label>
+        <input type="text" id="new-mass-title" placeholder="미사 제목 입력" required>
+      </div>
+      <div class="form-group">
+        <label for="new-mass-source">복사해올 기존 전례</label>
+        <select id="new-mass-source"></select>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-modal-cancel" class="btn-secondary">취소</button>
+        <button id="btn-modal-create" class="btn-primary">생성하기</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
