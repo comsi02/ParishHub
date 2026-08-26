@@ -15,7 +15,8 @@ function apiGetPresentationState() {
   return {
     massId: massId || '1',
     slideId: slideId || '1',
-    theme: theme || 'dark'
+    theme: theme || 'dark',
+    displayMode: props.getProperty('DISPLAY_MODE') || 'normal'
   };
 }
 
@@ -33,6 +34,9 @@ function apiSetPresentationState(state) {
   props.setProperty('CURRENT_SLIDE_ID', state.slideId);
   if (state.theme) {
     props.setProperty('CURRENT_THEME', state.theme);
+  }
+  if (state.displayMode) {
+    props.setProperty('DISPLAY_MODE', state.displayMode);
   }
   
   return true;

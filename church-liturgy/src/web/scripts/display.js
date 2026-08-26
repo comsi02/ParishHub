@@ -7,6 +7,7 @@ let currentMassId = null;
 let currentSlideId = null;
 let slidesCache = [];
 let pollingIntervalId = null;
+let currentDisplayMode = 'normal'; // 'normal' | 'blackout' | 'freeze'
 
 const domSlideContent = document.getElementById('slide-content');
 const domLoading = document.getElementById('loading');
@@ -17,6 +18,7 @@ async function init() {
   setupThemeToggle();
   setupKeyboardControls();
   setupInlineEditing();
+  setupDisplayControls();
   await pollState();
   pollingIntervalId = setInterval(pollState, POLLING_INTERVAL);
 }
@@ -37,9 +39,19 @@ async function pollState() {
       localStorage.setItem(`slides_${currentMassId}`, JSON.stringify(slidesCache));
     }
 
-    if (state.slideId !== currentSlideId) {
-      currentSlideId = state.slideId;
-      renderCurrentSlide();
+    // Handle displayMode
+    const newMode = state.displayMode || 'normal';
+    if (newMode !== currentDisplayMode) {
+      currentDisplayMode = newMode;
+      applyDisplayMode();
+    }
+
+    // Only update slide if not frozen/blacked out
+    if (currentDisplayMode === 'normal') {
+      if (state.slideId !== currentSlideId) {
+        currentSlideId = state.slideId;
+        renderCurrentSlide();
+      }
     }
     
     // Sync theme
@@ -56,6 +68,29 @@ async function pollState() {
     console.error("Polling error:", error);
     // Keep showing current slide on temporary error
   }
+}
+
+function applyDisplayMode() {
+  const overlay = document.getElementById('display-mode-overlay');
+  if (!overlay) return;
+
+  const isBlackout = currentDisplayMode === 'blackout';
+  document.body.classList.toggle('blackout-mode', isBlackout);
+
+  if (isBlackout) {
+    overlay.style.display = 'flex';
+    overlay.style.backgroundColor = '#000000';
+    overlay.innerHTML = '';
+  } else if (currentDisplayMode === 'freeze') {
+    overlay.style.display = 'none';
+  } else {
+    overlay.style.display = 'none';
+    // Resume: render latest slide
+    renderCurrentSlide();
+  }
+
+  // Always sync button visuals
+  updateDisplayCtrlButtons();
 }
 
 function renderCurrentSlide() {
@@ -179,6 +214,50 @@ function setupInlineEditing() {
 
   domSlideTitle.addEventListener('blur', handleEdit);
   domSlideText.addEventListener('blur', handleEdit);
+}
+
+function updateDisplayCtrlButtons() {
+  const btnBlackout = document.getElementById('display-btn-blackout');
+  if (!btnBlackout) return;
+
+  const isBlackout = currentDisplayMode === 'blackout';
+
+  // Blackout button: crossed-out monitor when off, normal monitor when on (active = blackout engaged)
+  btnBlackout.classList.toggle('active', isBlackout);
+  btnBlackout.title = isBlackout ? 'Display 켜기 (현재: 꺼짐)' : 'Display 끄기';
+  btnBlackout.innerHTML = isBlackout
+    ? `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>`
+    : `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/><line x1="2" y1="3" x2="22" y2="17"/></svg>`;
+}
+
+async function setDisplayModeFromDisplay(mode) {
+  currentDisplayMode = mode;
+  applyDisplayMode();
+  updateDisplayCtrlButtons();
+  try {
+    await provider.setPresentationState({
+      massId: currentMassId,
+      slideId: currentSlideId,
+      theme: document.body.getAttribute('data-theme') || 'dark',
+      displayMode: mode
+    });
+  } catch (err) {
+    console.error("Failed to set display mode from display", err);
+  }
+}
+
+function setupDisplayControls() {
+  const btnBlackout = document.getElementById('display-btn-blackout');
+
+  if (btnBlackout) {
+    btnBlackout.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newMode = currentDisplayMode === 'blackout' ? 'normal' : 'blackout';
+      setDisplayModeFromDisplay(newMode);
+    });
+  }
+
+  updateDisplayCtrlButtons();
 }
 
 document.addEventListener('DOMContentLoaded', init);

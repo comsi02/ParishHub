@@ -40,7 +40,17 @@
       </div>
       <div class="controls">
         <button id="btn-prev" class="control-btn">이전 (←)</button>
-        <button id="btn-next" class="control-btn">다음 (→, Space)</button>
+        <button id="btn-next" class="control-btn">다음 (→)</button>
+      </div>
+      <div class="display-controls">
+        <button id="btn-blackout" class="display-control-btn btn-blackout" title="화면을 검게 만들어 아무것도 표시하지 않습니다">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align:middle;margin-right:6px"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/><line x1="2" y1="3" x2="22" y2="17"/></svg>
+          Display 끄기
+        </button>
+        <button id="btn-freeze" class="display-control-btn btn-freeze" title="현재 화면을 고정합니다. 진행자가 슬라이드를 변경해도 화면은 바뀌지 않습니다">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align:middle;margin-right:6px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="12" x2="16" y2="14"/></svg>
+          Display 멈추기
+        </button>
       </div>
     </div>
   </main>

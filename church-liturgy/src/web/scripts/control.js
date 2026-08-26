@@ -18,6 +18,10 @@ const btnNext = document.getElementById('btn-next');
 const btnThemeToggle = document.getElementById('theme-toggle');
 const btnAddSlide = document.getElementById('btn-add-slide');
 const btnDeleteSlide = document.getElementById('btn-delete-slide');
+const btnBlackout = document.getElementById('btn-blackout');
+const btnFreeze = document.getElementById('btn-freeze');
+
+let currentDisplayMode = 'normal'; // 'normal' | 'blackout' | 'freeze'
 
 // Drag and drop state
 const dragPlaceholder = document.createElement('li');
@@ -110,12 +114,18 @@ async function init() {
     
     await loadSlidesForCurrentMass(state ? state.slideId : null);
     
+    // Restore displayMode from saved state
+    if (state && state.displayMode) {
+      currentDisplayMode = state.displayMode;
+      updateDisplayControlButtons();
+    }
+    
     domMassSelect.addEventListener('change', async (e) => {
       currentMassId = e.target.value;
       await loadSlidesForCurrentMass();
     });
     
-    // Start polling for theme changes from display
+    // Start polling for theme + displayMode changes from display
     setInterval(async () => {
       try {
         const polledState = await provider.getPresentationState();
@@ -127,6 +137,11 @@ async function init() {
               window.updateControlThemeIcon();
             }
           }
+        }
+        // Sync displayMode if changed externally
+        if (polledState && polledState.displayMode && polledState.displayMode !== currentDisplayMode) {
+          currentDisplayMode = polledState.displayMode;
+          updateDisplayControlButtons();
         }
       } catch (err) {
         // silently ignore polling errors
@@ -146,6 +161,55 @@ async function init() {
   if (btnNewMass) btnNewMass.addEventListener('click', openNewMassModal);
   if (btnModalCancel) btnModalCancel.addEventListener('click', closeNewMassModal);
   if (btnModalCreate) btnModalCreate.addEventListener('click', handleCreateMass);
+  
+  setupDisplayControls();
+}
+
+function updateDisplayControlButtons() {
+  if (!btnBlackout || !btnFreeze) return;
+
+  const isBlackout = currentDisplayMode === 'blackout';
+  const isFreeze = currentDisplayMode === 'freeze';
+
+  btnBlackout.classList.toggle('active', isBlackout);
+  btnBlackout.innerHTML = isBlackout
+    ? `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align:middle;margin-right:6px"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg> Display 켜기`
+    : `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align:middle;margin-right:6px"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/><line x1="2" y1="3" x2="22" y2="17"/></svg> Display 끄기`;
+
+  btnFreeze.classList.toggle('active', isFreeze);
+  btnFreeze.innerHTML = isFreeze
+    ? `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align:middle;margin-right:6px"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg> Display 재개`
+    : `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align:middle;margin-right:6px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="12" x2="16" y2="14"/></svg> Display 멈추기`;
+}
+
+async function setDisplayMode(mode) {
+  currentDisplayMode = mode;
+  updateDisplayControlButtons();
+  try {
+    await provider.setPresentationState({
+      massId: currentMassId,
+      slideId: currentSlideId,
+      theme: document.body.getAttribute('data-theme') || 'dark',
+      displayMode: mode
+    });
+  } catch (err) {
+    console.error("Failed to set display mode", err);
+  }
+}
+
+function setupDisplayControls() {
+  if (btnBlackout) {
+    btnBlackout.addEventListener('click', () => {
+      const newMode = currentDisplayMode === 'blackout' ? 'normal' : 'blackout';
+      setDisplayMode(newMode);
+    });
+  }
+  if (btnFreeze) {
+    btnFreeze.addEventListener('click', () => {
+      const newMode = currentDisplayMode === 'freeze' ? 'normal' : 'freeze';
+      setDisplayMode(newMode);
+    });
+  }
 }
 
 function openNewMassModal() {
@@ -247,7 +311,8 @@ function setupThemeToggle() {
       await provider.setPresentationState({
         massId: currentMassId,
         slideId: currentSlideId,
-        theme: newTheme
+        theme: newTheme,
+        displayMode: currentDisplayMode  // Always preserve the current display mode
       });
     } catch (err) {
       console.error("Failed to update theme state", err);
@@ -384,7 +449,10 @@ function prevSlide() {
 
 function setupKeyboardControls() {
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight' || e.key === ' ') {
+    // Disable global slide navigation if we are typing inside an input or contenteditable
+    if (e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
+
+    if (e.key === 'ArrowRight') {
       e.preventDefault();
       nextSlide();
     } else if (e.key === 'ArrowLeft') {
@@ -420,7 +488,8 @@ async function updatePreviewAndState() {
     await provider.setPresentationState({
       massId: currentMassId,
       slideId: currentSlideId,
-      theme: document.body.getAttribute('data-theme') || 'dark'
+      theme: document.body.getAttribute('data-theme') || 'dark',
+      displayMode: currentDisplayMode  // Always preserve the current display mode
     });
   } catch (err) {
     console.error("Failed to update state", err);

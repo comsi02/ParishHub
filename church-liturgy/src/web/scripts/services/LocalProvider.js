@@ -55,14 +55,19 @@ export class LocalProvider extends DataProvider {
   async getPresentationState() {
     const state = localStorage.getItem('liturgy_state');
     if (state) {
-      return JSON.parse(state);
+      const parsed = JSON.parse(state);
+      if (!parsed.displayMode) parsed.displayMode = 'normal';
+      return parsed;
     }
-    return { massId: "1", slideId: "1", lastUpdated: Date.now() };
+    return { massId: "1", slideId: "1", lastUpdated: Date.now(), displayMode: 'normal' };
   }
 
   async setPresentationState(state) {
-    state.lastUpdated = Date.now();
-    localStorage.setItem('liturgy_state', JSON.stringify(state));
+    // Merge with existing state to prevent partial overwrites from wiping fields like displayMode
+    const existing = localStorage.getItem('liturgy_state');
+    const prev = existing ? JSON.parse(existing) : {};
+    const merged = { ...prev, ...state, lastUpdated: Date.now() };
+    localStorage.setItem('liturgy_state', JSON.stringify(merged));
     return true;
   }
 

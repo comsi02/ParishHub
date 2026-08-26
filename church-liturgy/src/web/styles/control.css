@@ -179,6 +179,44 @@ body {
   opacity: 0.9;
 }
 
+.display-controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.display-control-btn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+  border: 2px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.display-control-btn:hover {
+  border-color: var(--accent-color);
+  background-color: var(--hover-bg);
+}
+
+.btn-blackout.active {
+  background-color: #1a1a1a;
+  color: #ffffff;
+  border-color: #555;
+}
+
+.btn-freeze.active {
+  background-color: #1e3a5f;
+  color: #ffffff;
+  border-color: #4a7ab5;
+}
+
 .mass-selector-group {
   display: flex;
   align-items: center;
