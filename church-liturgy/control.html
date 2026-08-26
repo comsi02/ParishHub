@@ -14,8 +14,12 @@
       <div class="mass-selector-group">
         <select id="mass-select" class="mass-select"></select>
         <button id="btn-new-mass" class="btn-new-mass" title="새 전례 생성">+ 새 미사</button>
+        <button id="btn-delete-mass" class="btn-delete-mass" title="선택된 미사 삭제">미사 삭제</button>
       </div>
-      <span id="slide-counter">0 / 0</span>
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <span id="save-status" class="save-status"></span>
+        <span id="slide-counter">0 / 0</span>
+      </div>
     </div>
   </header>  <main class="control-main">
     <div class="left-panel">
@@ -34,9 +38,217 @@
       <div class="preview-container">
         <h2>미리보기</h2>
         <div id="preview-box" class="preview-box">
-          <h3 id="preview-title" contenteditable="true" spellcheck="false"></h3>
-          <p id="preview-text" contenteditable="true" spellcheck="false"></p>
-        </div>
+          <div class="list-title-row">
+            <span class="title-field-label">목록용 제목:</span>
+            <div id="preview-list-title" class="preview-list-title-input" contenteditable="true" spellcheck="false" placeholder="목록에 표시될 제목"></div>
+          </div>
+          <div class="title-row">
+            <span class="title-field-label">화면용 제목:</span>
+            <h3 id="preview-title" contenteditable="true" spellcheck="false"></h3>
+            <button id="btn-hide-title" class="btn-hide-title" title="Display 화면에서 제목 숨김 여부 전환">제목 표시</button>
+          </div>
+          <div id="preview-contents-container">
+            <div class="content-block" data-index="0">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+
+            <div class="content-block content-block-hidden" data-index="1">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+
+            <div class="content-block content-block-hidden" data-index="2">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+
+            <div class="content-block content-block-hidden" data-index="3">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+
+            <div class="content-block content-block-hidden" data-index="4">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+
+            <div class="content-block content-block-hidden" data-index="5">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+
+            <div class="content-block content-block-hidden" data-index="6">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+
+            <div class="content-block content-block-hidden" data-index="7">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+
+            <div class="content-block content-block-hidden" data-index="8">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+
+            <div class="content-block content-block-hidden" data-index="9">
+              <div class="content-toolbar">
+                <select class="role-select">
+                  <option value="none">역할 없음</option>
+                  <option value="priest">사제 (➕)</option>
+                  <option value="leader_cong">전례자+신자 (◎)</option>
+                  <option value="leader">전례자 (○)</option>
+                  <option value="cong">신자 (●)</option>
+                </select>
+                <div class="align-group">
+                  <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
+                  <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
+                  <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
+                  <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                  <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                </div>
+              </div>
+              <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left"></p>
+            </div>
+          </div>
+          <button id="btn-add-content" class="btn-add-content" title="본문 추가 (최대 10개)">+ 본문 추가</button>
       </div>
       <div class="controls">
         <button id="btn-prev" class="control-btn">이전 (←)</button>
@@ -54,6 +266,22 @@
       </div>
     </div>
   </main>
+  
+  <!-- Custom Modal for Alerts and Confirms -->
+  <div id="custom-modal-overlay" class="custom-modal-overlay hidden">
+    <div class="custom-modal">
+      <div class="custom-modal-header">
+        <h3 id="custom-modal-title">알림</h3>
+      </div>
+      <div class="custom-modal-body">
+        <p id="custom-modal-message"></p>
+      </div>
+      <div class="custom-modal-footer">
+        <button id="custom-modal-cancel" class="btn-cancel hidden">취소</button>
+        <button id="custom-modal-confirm" class="btn-confirm">확인</button>
+      </div>
+    </div>
+  </div>
   
   <script type="module" src="/src/web/scripts/control.js"></script>
 

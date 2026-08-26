@@ -8,7 +8,11 @@ export class LocalProvider extends DataProvider {
     const addedMassesJSON = localStorage.getItem('liturgy_added_masses');
     const addedMasses = addedMassesJSON ? JSON.parse(addedMassesJSON) : [];
     
-    return [...masses, ...addedMasses].filter(m => m.status === 'Active');
+    const deletedMassesJSON = localStorage.getItem('liturgy_deleted_masses');
+    const deletedMasses = deletedMassesJSON ? JSON.parse(deletedMassesJSON) : [];
+    
+    return [...masses, ...addedMasses]
+      .filter(m => m.status === 'Active' && !deletedMasses.includes(String(m.id)));
   }
 
   async getSlides(massId) {
@@ -34,8 +38,9 @@ export class LocalProvider extends DataProvider {
     // Handle pagination (---PAGE---)
     const paginatedSlides = [];
     slides.forEach(slide => {
-      if (slide.content.includes('---PAGE---')) {
-        const parts = slide.content.split('---PAGE---');
+      const content = slide.content || '';
+      if (content.includes('---PAGE---')) {
+        const parts = content.split('---PAGE---');
         parts.forEach((part, index) => {
           paginatedSlides.push({
             ...slide,
@@ -86,19 +91,15 @@ export class LocalProvider extends DataProvider {
     }
     
     if (updates.title !== undefined) overrides[baseSlideId].title = updates.title;
+    if (updates.listTitle !== undefined) overrides[baseSlideId].listTitle = updates.listTitle;
+    if (updates.contents !== undefined) {
+      overrides[baseSlideId].contents = updates.contents;
+    }
     if (updates.content !== undefined) {
-      if (String(slideId).includes('_p')) {
-        // If it's a paginated slide, we can't easily merge back to the full text
-        // without fetching the original and splitting. For simplicity, we just
-        // overwrite the base content with the new part if they edit a part.
-        // Or better yet, we fetch original and update just that part.
-        // Let's do a simple overwrite for now.
-        // Actually, this will break pagination if they edit a part.
-        // Let's just overwrite the base content.
-        overrides[baseSlideId].content = updates.content;
-      } else {
-        overrides[baseSlideId].content = updates.content;
-      }
+      overrides[baseSlideId].content = updates.content;
+    }
+    if (updates.hideTitle !== undefined) {
+      overrides[baseSlideId].hideTitle = updates.hideTitle;
     }
 
     localStorage.setItem('liturgy_overrides', JSON.stringify(overrides));
@@ -172,6 +173,25 @@ export class LocalProvider extends DataProvider {
     }
     
     return newMass;
+  }
+
+  async deleteMass(massId) {
+    const targetId = String(massId);
+    const deletedMassesJSON = localStorage.getItem('liturgy_deleted_masses');
+    const deletedMasses = deletedMassesJSON ? JSON.parse(deletedMassesJSON) : [];
+    
+    if (!deletedMasses.includes(targetId)) {
+      deletedMasses.push(targetId);
+      localStorage.setItem('liturgy_deleted_masses', JSON.stringify(deletedMasses));
+    }
+
+    const addedMassesJSON = localStorage.getItem('liturgy_added_masses');
+    if (addedMassesJSON) {
+      const addedMasses = JSON.parse(addedMassesJSON).filter(m => String(m.id) !== targetId);
+      localStorage.setItem('liturgy_added_masses', JSON.stringify(addedMasses));
+    }
+
+    return true;
   }
 
   async reorderSlides(massId, orderedSlideIds) {

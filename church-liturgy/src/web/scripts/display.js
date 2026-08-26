@@ -12,7 +12,6 @@ let currentDisplayMode = 'normal'; // 'normal' | 'blackout' | 'freeze'
 const domSlideContent = document.getElementById('slide-content');
 const domLoading = document.getElementById('loading');
 const domSlideTitle = document.getElementById('slide-title');
-const domSlideText = document.getElementById('slide-text');
 
 async function init() {
   setupThemeToggle();
@@ -35,6 +34,7 @@ async function pollState() {
       currentMassId = state.massId;
       showLoading("미사 준비 중...");
       slidesCache = await provider.getSlides(currentMassId);
+      slidesCache.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
       // Cache locally
       localStorage.setItem(`slides_${currentMassId}`, JSON.stringify(slidesCache));
     }
@@ -48,8 +48,16 @@ async function pollState() {
 
     // Only update slide if not frozen/blacked out
     if (currentDisplayMode === 'normal') {
-      if (state.slideId !== currentSlideId) {
+      const newLastUpdated = state.lastUpdated || 0;
+      const slideChanged = state.slideId !== currentSlideId;
+      const contentUpdated = newLastUpdated > (window._lastRenderedAt || 0);
+
+      if (slideChanged || contentUpdated) {
         currentSlideId = state.slideId;
+        window._lastRenderedAt = newLastUpdated;
+        // Refresh slides cache to pick up any edits saved via updateSlide
+        slidesCache = await provider.getSlides(currentMassId);
+        slidesCache.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
         renderCurrentSlide();
       }
     }
@@ -102,8 +110,27 @@ function renderCurrentSlide() {
   domSlideContent.style.display = 'block';
 
   domSlideContent.className = `slide slide-${slide.type}`;
+  if (!slide.contents) {
+    slide.contents = [{ text: slide.content || '', align: 'left', role: 'none' }];
+  }
+
   domSlideTitle.textContent = slide.title;
-  domSlideText.textContent = slide.content;
+  domSlideTitle.style.display = slide.hideTitle ? 'none' : '';
+  
+  const contentBlocks = document.querySelectorAll('.slide-text');
+  contentBlocks.forEach((p, idx) => {
+    const cData = slide.contents[idx];
+    if (cData && cData.text) {
+      p.style.display = 'block';
+      p.textContent = cData.text;
+      p.setAttribute('data-align', cData.align || 'left');
+      p.setAttribute('data-role', cData.role || 'none');
+      p.setAttribute('data-bold', cData.bold ? 'true' : 'false');
+    } else {
+      p.style.display = 'none';
+      p.textContent = '';
+    }
+  });
 }
 
 function showLoading(msg) {
@@ -180,27 +207,30 @@ function setupInlineEditing() {
     if (!currentSlideId) return;
     const target = e.target;
     
-    const isTitle = target.id === 'slide-title';
-    const isContent = target.id === 'slide-text';
-    
     const currentIndex = slidesCache.findIndex(s => s.id === currentSlideId);
     if (currentIndex === -1) return;
-    
     const slide = slidesCache[currentIndex];
     const newText = target.innerText;
     
     let changed = false;
     const updates = {};
     
-    if (isTitle && slide.title !== newText) {
-      slide.title = newText;
-      updates.title = newText;
-      changed = true;
-    }
-    if (isContent && slide.content !== newText) {
-      slide.content = newText;
-      updates.content = newText;
-      changed = true;
+    if (target.id === 'slide-title') {
+      if (slide.title !== newText) {
+        slide.title = newText;
+        updates.title = newText;
+        changed = true;
+      }
+    } else if (target.classList.contains('slide-text')) {
+      const idx = parseInt(target.getAttribute('data-index'), 10);
+      if (!slide.contents) slide.contents = [];
+      while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none' });
+      
+      if (slide.contents[idx].text !== newText) {
+        slide.contents[idx].text = newText;
+        updates.contents = slide.contents;
+        changed = true;
+      }
     }
     
     if (changed) {
@@ -213,7 +243,9 @@ function setupInlineEditing() {
   };
 
   domSlideTitle.addEventListener('blur', handleEdit);
-  domSlideText.addEventListener('blur', handleEdit);
+  
+  const contentBlocks = document.querySelectorAll('.slide-text');
+  contentBlocks.forEach(p => p.addEventListener('blur', handleEdit));
 }
 
 function updateDisplayCtrlButtons() {

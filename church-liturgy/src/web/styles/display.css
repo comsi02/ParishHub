@@ -1,26 +1,70 @@
 .slide-container {
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 5%;
+  padding: 3vh 5vw;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .slide {
   width: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   text-align: center;
+  overflow: hidden;
 }
 
 #slide-title {
   font-size: var(--title-size);
-  margin-bottom: var(--spacing);
+  margin-bottom: 1.2rem;
+  flex-shrink: 0;
 }
 
-#slide-text {
-  font-size: var(--content-size);
+#slide-contents-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+}
+
+.slide-text {
+  font-size: clamp(1.4rem, 3.2vw, 3.8vw);
+  line-height: 1.35;
   white-space: pre-wrap; /* Preserve newlines */
   word-break: keep-all; /* Better Korean word breaking */
+  margin: 0;
+  outline: none;
+}
+
+/* Alignment utilities */
+.slide-text[data-align="left"] { text-align: left; }
+.slide-text[data-align="center"] { text-align: center; }
+.slide-text[data-align="right"] { text-align: right; }
+
+/* Text bold attribute */
+.slide-text[data-bold="true"] { font-weight: bold; }
+.slide-text[data-bold="false"] { font-weight: normal; }
+
+/* Role prefixes in Display */
+.slide-text[data-role="priest"]::before { content: "➕ "; font-weight: bold; }
+.slide-text[data-role="leader_cong"]::before { content: "◎ "; font-weight: bold; }
+.slide-text[data-role="leader"]::before { content: "○ "; font-weight: bold; }
+.slide-text[data-role="cong"]::before { content: "● "; font-weight: bold; }
+
+/* Hanging indent: continuation lines start aligned with text after symbol */
+.slide-text[data-role="priest"],
+.slide-text[data-role="leader_cong"],
+.slide-text[data-role="leader"],
+.slide-text[data-role="cong"] {
+  padding-left: 1.2em;
+  text-indent: -1.2em;
 }
 
 .loading {
