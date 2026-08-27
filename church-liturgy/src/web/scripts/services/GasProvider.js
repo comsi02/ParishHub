@@ -1,5 +1,9 @@
 import { DataProvider } from './DataProvider.js';
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 export class GasProvider extends DataProvider {
   _runGasFunction(funcName, ...args) {
     return new Promise((resolve, reject) => {
@@ -16,11 +20,13 @@ export class GasProvider extends DataProvider {
   }
 
   async getMasses() {
-    return this._runGasFunction('apiGetMasses');
+    const result = await this._runGasFunction('apiGetMasses');
+    return asArray(result);
   }
 
   async getSlides(massId) {
-    return this._runGasFunction('apiGetSlides', massId);
+    const result = await this._runGasFunction('apiGetSlides', massId);
+    return asArray(result);
   }
 
   async getPresentationState() {

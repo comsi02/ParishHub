@@ -4,10 +4,10 @@
   "description": "Catholic Church Liturgy Presentation System",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "build": "node scripts/build-gas.mjs",
     "clasp:login": "clasp login",
     "clasp:push": "npm run build && clasp push",
+    "preview": "vite preview",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {

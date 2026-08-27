@@ -101,6 +101,10 @@ const selectNewMassSource = document.getElementById('new-mass-source');
 
 let cachedMasses = [];
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 async function init() {
   setupThemeToggle();
   setupKeyboardControls();
@@ -109,7 +113,7 @@ async function init() {
   setupHideTitleButton();
 
   try {
-    cachedMasses = await provider.getMasses();
+    cachedMasses = asArray(await provider.getMasses());
     
     // Populate select
     domMassSelect.innerHTML = '';
@@ -233,10 +237,18 @@ function setupDisplayControls() {
 }
 
 function openNewMassModal() {
+  openNewMassModalAsync().catch(err => {
+    console.error('Failed to open new mass modal', err);
+    alert('미사 목록을 불러오지 못했습니다.\n\n' + (err.message || err));
+  });
+}
+
+async function openNewMassModalAsync() {
   inputNewMassDate.value = new Date().toISOString().split('T')[0];
   inputNewMassTitle.value = '';
   
   selectNewMassSource.innerHTML = '<option value="">선택 안함 (빈 전례)</option>';
+  cachedMasses = asArray(await provider.getMasses());
   cachedMasses.forEach(m => {
     const option = document.createElement('option');
     option.value = m.id;
@@ -268,9 +280,12 @@ async function handleCreateMass() {
   
   try {
     const newMass = await provider.createMass({ date, title, language: 'ko' }, sourceMassId);
+    if (!newMass || !newMass.id) {
+      throw new Error('서버에서 전례 데이터를 반환하지 않았습니다.');
+    }
     
     // Refresh mass list
-    cachedMasses = await provider.getMasses();
+    cachedMasses = asArray(await provider.getMasses());
     
     domMassSelect.innerHTML = '';
     cachedMasses.forEach(m => {
@@ -288,7 +303,7 @@ async function handleCreateMass() {
     closeNewMassModal();
   } catch (err) {
     console.error("Failed to create mass", err);
-    alert('전례 생성에 실패했습니다.');
+    alert('전례 생성에 실패했습니다.\n\n' + (err.message || err));
   } finally {
     btnModalCreate.disabled = false;
     btnModalCreate.textContent = '생성하기';
@@ -296,7 +311,7 @@ async function handleCreateMass() {
 }
 
 async function loadSlidesForCurrentMass(targetSlideId = null) {
-  slides = await provider.getSlides(currentMassId);
+  slides = asArray(await provider.getSlides(currentMassId));
   // Sort by sequence
   slides.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
   
@@ -937,7 +952,7 @@ async function handleDeleteMass() {
     await provider.deleteMass(currentMassId);
 
     // Refresh masses list
-    cachedMasses = await provider.getMasses();
+    cachedMasses = asArray(await provider.getMasses());
     if (cachedMasses.length > 0) {
       currentMassId = cachedMasses[0].id;
     } else {

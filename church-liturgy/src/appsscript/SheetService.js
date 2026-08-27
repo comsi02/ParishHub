@@ -1,4 +1,25 @@
 // SheetService.js
+
+function getSpreadsheet_() {
+  const id = CONFIG.SPREADSHEET_ID;
+  if (!id || id === 'YOUR_SPREADSHEET_ID_HERE') {
+    throw new Error('SPREADSHEET_ID가 설정되지 않았습니다. Apps Script → 프로젝트 설정 → 스크립트 속성에서 설정하세요.');
+  }
+  try {
+    return SpreadsheetApp.openById(id);
+  } catch (e) {
+    throw new Error('스프레드시트를 열 수 없습니다. SPREADSHEET_ID와 접근 권한을 확인하세요.');
+  }
+}
+
+function getSheet_(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    throw new Error('시트 "' + sheetName + '"를 찾을 수 없습니다. 스프레드시트에 해당 이름의 시트 탭을 만드세요.');
+  }
+  return sheet;
+}
+
 function getSheetData(sheetName) {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -27,7 +48,8 @@ function getSheetData(sheetName) {
 }
 
 function apiGetMasses() {
-  return getSheetData(CONFIG.SHEET_MASSES);
+  const rows = getSheetData(CONFIG.SHEET_MASSES);
+  return rows.filter(m => !m.status || m.status === 'Active');
 }
 
 function apiGetSlides(massId) {
@@ -172,87 +194,81 @@ function apiDeleteSlide(massId, slideId) {
 }
 
 function apiCreateMass(newMassData, sourceMassId) {
-  try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-    const massesSheet = ss.getSheetByName(CONFIG.SHEET_MASSES);
-    const slidesSheet = ss.getSheetByName(CONFIG.SHEET_SLIDES);
-    
-    if (!massesSheet || !slidesSheet) return null;
-    
-    // Generate new Mass ID
-    const massesData = massesSheet.getDataRange().getValues();
-    let maxMassId = 0;
-    if (massesData.length > 1) {
-      const idIndex = massesData[0].findIndex(h => h.toLowerCase() === 'id');
-      if (idIndex !== -1) {
-        for (let i = 1; i < massesData.length; i++) {
-          const currentId = parseInt(massesData[i][idIndex], 10);
-          if (!isNaN(currentId) && currentId > maxMassId) {
-            maxMassId = currentId;
-          }
+  const ss = getSpreadsheet_();
+  const massesSheet = getSheet_(ss, CONFIG.SHEET_MASSES);
+
+  const massesData = massesSheet.getDataRange().getValues();
+  let maxMassId = 0;
+  if (massesData.length > 1) {
+    const idIndex = massesData[0].findIndex(h => h.toLowerCase() === 'id');
+    if (idIndex !== -1) {
+      for (let i = 1; i < massesData.length; i++) {
+        const currentId = parseInt(massesData[i][idIndex], 10);
+        if (!isNaN(currentId) && currentId > maxMassId) {
+          maxMassId = currentId;
         }
       }
     }
-    const newMassId = String(maxMassId + 1);
-    
-    // Append new Mass
-    const massRow = [
-      newMassId,
-      newMassData.date || '',
-      newMassData.title || '',
-      newMassData.language || 'ko',
-      'Active'
-    ];
-    massesSheet.appendRow(massRow);
-    
-    // If copying from source
-    if (sourceMassId) {
-      const slidesData = slidesSheet.getDataRange().getValues();
-      if (slidesData.length > 1) {
-        const headers = slidesData[0];
-        const idIdx = headers.findIndex(h => h.toLowerCase() === 'id');
-        const massIdIdx = headers.findIndex(h => h.toLowerCase() === 'massid');
-        const enabledIdx = headers.findIndex(h => h.toLowerCase() === 'enabled');
-        
-        let maxSlideId = 0;
-        for (let i = 1; i < slidesData.length; i++) {
-          const currentId = parseInt(slidesData[i][idIdx], 10);
-          if (!isNaN(currentId) && currentId > maxSlideId) {
-            maxSlideId = currentId;
-          }
-        }
-        
-        const rowsToAppend = [];
-        for (let i = 1; i < slidesData.length; i++) {
-          if (String(slidesData[i][massIdIdx]) === String(sourceMassId) && slidesData[i][enabledIdx] !== false) {
-            maxSlideId++;
-            const newRow = [...slidesData[i]];
-            newRow[idIdx] = String(maxSlideId);
-            newRow[massIdIdx] = newMassId;
-            rowsToAppend.push(newRow);
-          }
-        }
-        
-        if (rowsToAppend.length > 0) {
-          // Append in batch
-          slidesSheet.getRange(slidesSheet.getLastRow() + 1, 1, rowsToAppend.length, rowsToAppend[0].length).setValues(rowsToAppend);
-        }
-      }
-    }
-    
-    return {
-      id: newMassId,
-      date: newMassData.date,
-      title: newMassData.title,
-      language: newMassData.language,
-      status: 'Active'
-    };
-    
-    
-  } catch (e) {
-    console.error("Error creating mass: " + e.toString());
-    return null;
   }
+  const newMassId = String(maxMassId + 1);
+
+  massesSheet.appendRow([
+    newMassId,
+    newMassData.date || '',
+    newMassData.title || '',
+    newMassData.language || 'ko',
+    'Active'
+  ]);
+
+  if (sourceMassId) {
+    const slidesSheet = getSheet_(ss, CONFIG.SHEET_SLIDES);
+    const slidesData = slidesSheet.getDataRange().getValues();
+    if (slidesData.length > 1) {
+      const headers = slidesData[0];
+      const idIdx = headers.findIndex(h => h.toLowerCase() === 'id');
+      const massIdIdx = headers.findIndex(h => h.toLowerCase() === 'massid');
+      const enabledIdx = headers.findIndex(h => h.toLowerCase() === 'enabled');
+
+      if (idIdx === -1 || massIdIdx === -1) {
+        throw new Error('Slides 시트 헤더가 올바르지 않습니다. Id, MassId 열을 확인하세요.');
+      }
+
+      let maxSlideId = 0;
+      for (let i = 1; i < slidesData.length; i++) {
+        const currentId = parseInt(slidesData[i][idIdx], 10);
+        if (!isNaN(currentId) && currentId > maxSlideId) {
+          maxSlideId = currentId;
+        }
+      }
+
+      const rowsToAppend = [];
+      for (let i = 1; i < slidesData.length; i++) {
+        const isEnabled = enabledIdx === -1 ? true : slidesData[i][enabledIdx] !== false;
+        if (String(slidesData[i][massIdIdx]) === String(sourceMassId) && isEnabled) {
+          maxSlideId++;
+          const newRow = [...slidesData[i]];
+          newRow[idIdx] = String(maxSlideId);
+          newRow[massIdIdx] = newMassId;
+          rowsToAppend.push(newRow);
+        }
+      }
+
+      if (rowsToAppend.length > 0) {
+        const startRow = slidesSheet.getLastRow() + 1;
+        const numRows = rowsToAppend.length;
+        const numCols = rowsToAppend[0].length;
+        slidesSheet.getRange(startRow, 1, numRows, numCols).setValues(rowsToAppend);
+      }
+    }
+  }
+
+  return {
+    id: newMassId,
+    date: newMassData.date,
+    title: newMassData.title,
+    language: newMassData.language || 'ko',
+    status: 'Active'
+  };
 }
 
 function apiReorderSlides(massId, orderedSlideIds) {
