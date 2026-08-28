@@ -26,16 +26,315 @@ body {
 .mass-selector-group {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
+  position: relative;
 }
 
-.mass-select {
-  font-size: 1.25rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
+/* ─────────────────────────────────────────────────
+   검색 가능한 미사 콤보박스 (Searchable Mass Combobox)
+   ───────────────────────────────────────────────── */
+
+.mass-combobox {
+  position: relative;
+  display: inline-block;
+}
+
+.mass-combobox-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 1.05rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
   background-color: var(--bg-color);
   color: var(--text-color);
   border: 1px solid var(--border-color);
+  cursor: pointer;
+  min-width: 220px;
+  max-width: 360px;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.mass-combobox-trigger:hover {
+  border-color: var(--accent-color);
+  background-color: var(--hover-bg);
+}
+
+.mass-selected-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.combobox-chevron {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  color: var(--text-color);
+  opacity: 0.7;
+}
+
+.mass-combobox.open .combobox-chevron {
+  transform: rotate(180deg);
+}
+
+.mass-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 320px;
+  width: max-content;
+  max-width: 450px;
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: combobox-fade 0.15s ease-out;
+}
+
+@keyframes combobox-fade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mass-dropdown-search-row {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--header-bg);
+}
+
+.mass-search-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 0.875rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-color);
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.mass-search-input:focus {
+  border-color: var(--accent-color);
+}
+
+.mass-filter-tabs {
+  display: flex;
+  padding: 6px 10px;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--header-bg);
+}
+
+.filter-tab-btn {
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-tab-btn.active {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  font-weight: bold;
+}
+
+.mass-dropdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.mass-dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-color);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--hover-bg);
+  transition: background-color 0.15s;
+}
+
+.mass-dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.mass-dropdown-item:hover,
+.mass-dropdown-item.focused {
+  background-color: var(--hover-bg);
+}
+
+.mass-dropdown-item.selected {
+  background-color: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  font-weight: bold;
+  border-left: 3px solid var(--accent-color);
+}
+
+.mass-dropdown-item-title {
+  font-weight: 500;
+}
+
+.mass-dropdown-item-date {
+  font-size: 0.75rem;
+  color: var(--accent-color);
+  opacity: 0.85;
+}
+
+.mass-dropdown-empty {
+  padding: 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.mass-select {
+  display: none;
+}
+
+/* ─────────────────────────────────────────────────
+   모드 스위처 (프리젠테이션 vs 수정/편집)
+   ───────────────────────────────────────────────── */
+
+.mode-switcher {
+  display: flex;
+  align-items: center;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.mode-btn {
+  padding: 5px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+}
+
+.mode-btn:hover {
+  opacity: 1;
+}
+
+.mode-btn.active {
+  opacity: 1;
+  color: #ffffff;
+}
+
+#btn-mode-presentation.active {
+  background-color: #0284c7; /* Sky Blue */
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.4);
+}
+
+#btn-mode-admin.active {
+  background-color: #d97706; /* Amber / Orange */
+  box-shadow: 0 1px 4px rgba(217, 119, 6, 0.4);
+}
+
+.preview-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.preview-header-row h2 {
+  margin: 0;
+}
+
+.preview-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+}
+
+/* ─────────────────────────────────────────────────
+   프리젠테이션 모드 전용 스타일
+   ───────────────────────────────────────────────── */
+
+#app-main.mode-presentation .btn-edit-mass,
+#app-main.mode-presentation .btn-new-mass,
+#app-main.mode-presentation .btn-delete-mass,
+#app-main.mode-presentation .list-actions,
+#app-main.mode-presentation .slide-drag-handle,
+#app-main.mode-presentation .content-drag-handle,
+#app-main.mode-presentation .title-field-label,
+#app-main.mode-presentation .list-title-row,
+#app-main.mode-presentation .btn-hide-title,
+#app-main.mode-presentation .content-actions,
+#app-main.mode-presentation #btn-add-content,
+#app-main.mode-presentation .admin-mode-badge {
+  display: none !important;
+}
+
+#app-main.mode-presentation .preview-list-title-input,
+#app-main.mode-presentation #preview-title {
+  cursor: default;
+  border-bottom-color: transparent !important;
+  user-select: none;
+}
+
+#app-main.mode-presentation .preview-text {
+  cursor: text;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 0.2s ease;
+}
+
+#app-main.mode-presentation .preview-text:hover,
+#app-main.mode-presentation .preview-text:focus {
+  border-bottom-color: var(--accent-color);
+}
+
+/* ─────────────────────────────────────────────────
+   수정/편집(Admin) 모드 전용 스타일
+   ───────────────────────────────────────────────── */
+
+#app-main.mode-admin .controls,
+#app-main.mode-admin .display-controls {
+  display: none !important;
+}
+
+#app-main.mode-admin .admin-mode-badge {
+  display: inline-flex;
 }
 
 .header-right-controls {
@@ -89,6 +388,25 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
+  padding-bottom: 0.25rem;
+}
+
+.list-header h2 {
+  margin: 0;
+}
+
+.list-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.list-header-right .slide-counter {
+  font-size: 0.95rem;
+  font-weight: bold;
+  color: var(--accent-color);
+  white-space: nowrap;
 }
 
 .list-actions button {
@@ -170,8 +488,12 @@ body {
 }
 
 .slide-item.active::before {
-  content: "▶ ";
+  content: "▶";
   color: var(--accent-color);
+  margin-right: 0.5rem;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
 }
 
 .preview-container {
@@ -186,8 +508,8 @@ body {
   flex: 1;
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  padding: 1.25rem 1.5rem;
-  margin-top: 0.5rem;
+  padding: 0.85rem 1.2rem;
+  margin-top: 0.35rem;
   text-align: center;
   overflow-y: auto;
   min-height: 0;
@@ -205,7 +527,7 @@ body {
 
 #preview-title {
   font-size: var(--title-size);
-  margin: 0 0 1rem;
+  margin: 0 0 0.5rem;
   min-height: 1.5em;
   outline: none;
   border-bottom: 1px dashed transparent;
@@ -217,7 +539,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.4rem;
 }
 
 .title-field-label {
@@ -284,44 +606,28 @@ body {
 #preview-contents-container {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.5rem; /* 블록 간 간격 축소 */
 }
 
 .content-block {
   border: 1px dashed transparent;
-  padding: 0.5rem;
+  padding: 0.25rem 0.4rem;
   border-radius: 4px;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s;
   position: relative;
 }
 
-.content-block:focus-within {
+.content-block:focus-within,
+.content-block:hover {
   border-color: var(--accent-color);
-}
-
-
-.save-status {
-  font-size: 0.9rem;
-  color: #10b981; /* Green success color */
-  opacity: 0;
-  transition: opacity 0.5s ease-out;
-  font-weight: 500;
-}
-
-.save-status.show {
-  opacity: 1;
-  transition: opacity 0.1s ease-in;
-}
-
-.save-status.saving {
-  color: #f59e0b; /* Orange warning color */
 }
 
 .content-toolbar {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 0.5rem;
-  opacity: 0.3;
+  align-items: center;
+  margin-bottom: 0.2rem;
+  opacity: 0.35;
   transition: opacity 0.2s;
 }
 
@@ -330,18 +636,67 @@ body {
   opacity: 1;
 }
 
+.content-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.content-drag-handle {
+  cursor: grab;
+  color: var(--text-color);
+  opacity: 0.45;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 3px;
+  border-radius: 4px;
+  transition: opacity 0.2s, background-color 0.2s;
+  user-select: none;
+}
+
+.content-drag-handle svg {
+  pointer-events: none;
+}
+
+.content-drag-handle:hover {
+  opacity: 1;
+  background-color: var(--border-color);
+}
+
+.content-drag-handle:active {
+  cursor: grabbing;
+}
+
+.content-block.dragging {
+  opacity: 0.35;
+  border: 1px dashed var(--accent-color);
+  background-color: color-mix(in srgb, var(--accent-color) 6%, transparent);
+}
+
+.content-block-placeholder {
+  height: 48px;
+  border: 2px dashed var(--accent-color);
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  margin: 0.25rem 0;
+  box-sizing: border-box;
+}
+
 .role-select {
-  padding: 0.2rem;
-  font-size: 0.9rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.85rem;
   border-radius: 4px;
   background-color: var(--bg-color);
   color: var(--text-color);
   border: 1px solid var(--border-color);
+  cursor: pointer;
 }
 
 .align-group {
   display: flex;
-  gap: 0.2rem;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .align-btn,
@@ -350,9 +705,10 @@ body {
   color: var(--text-color);
   border: 1px solid var(--border-color);
   cursor: pointer;
-  padding: 0.2rem 0.5rem;
+  padding: 0.15rem 0.4rem;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.3;
 }
 
 .align-btn.active,
@@ -362,12 +718,42 @@ body {
   border-color: var(--accent-color);
 }
 
-/* Text bold attribute */
-p[data-bold="true"] {
-  font-weight: bold;
+/* 색상 피커 */
+.color-picker {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  background: none;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
-p[data-bold="false"] {
-  font-weight: normal;
+
+.color-picker::-webkit-color-swatch-wrapper {
+  padding: 1px;
+}
+
+.color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.preview-text {
+  margin: 0;
+  padding: 0.2rem 0.4rem;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  min-height: 1.5em;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.preview-text:focus {
+  border-color: var(--accent-color);
+  outline: none;
 }
 
 .delete-block-btn {
@@ -375,11 +761,10 @@ p[data-bold="false"] {
   color: #ef4444;
   border: 1px solid transparent;
   cursor: pointer;
-  padding: 0.2rem 0.4rem;
+  padding: 0.15rem 0.35rem;
   border-radius: 4px;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   transition: all 0.2s;
-  margin-left: 0.2rem;
 }
 
 .delete-block-btn:hover {
@@ -496,51 +881,59 @@ p[data-role="cong"]::before { content: "●  "; font-weight: bold; }
 .mass-selector-group {
   display: flex;
   align-items: center;
+  gap: 0.35rem;
 }
 
-.btn-edit-mass {
-  margin-left: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  font-size: 1rem;
-  background-color: transparent;
+.header-action-icon-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: var(--bg-color);
   color: var(--text-color);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
-.btn-edit-mass:hover {
+.header-action-icon-btn:hover {
   background-color: var(--hover-bg);
   border-color: var(--accent-color);
 }
 
+.btn-edit-mass {
+  color: var(--text-color);
+}
+
+.btn-edit-mass:hover {
+  color: var(--accent-color);
+}
+
 .btn-new-mass {
-  margin-left: 0.4rem;
-  padding: 0.25rem 0.5rem;
-  font-size: 1rem;
   background-color: var(--accent-color);
   color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+  border-color: var(--accent-color);
+}
+
+.btn-new-mass:hover {
+  opacity: 0.9;
+  background-color: var(--accent-color);
 }
 
 .btn-delete-mass {
-  margin-left: 0.4rem;
-  padding: 0.25rem 0.5rem;
-  font-size: 1rem;
   background-color: transparent;
   color: #ef4444;
-  border: 1px solid #ef4444;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 .btn-delete-mass:hover {
   background-color: #ef4444;
   color: white;
+  border-color: #ef4444;
 }
 
 /* Header icon button (theme toggle, etc.) */
@@ -797,15 +1190,25 @@ p[data-role="cong"]::before { content: "●  "; font-weight: bold; }
 
   .mass-selector-group {
     flex: 1;
-    min-width: 180px;
+    min-width: 170px;
     gap: 0.3rem;
   }
 
-  .mass-select {
-    font-size: 0.9rem;
-    padding: 0.25rem 0.4rem;
-    max-width: 140px;
-    text-overflow: ellipsis;
+  .mass-combobox {
+    flex: 1;
+    max-width: 170px;
+  }
+
+  .mass-combobox-trigger {
+    min-width: 120px;
+    max-width: 170px;
+    font-size: 0.85rem;
+    padding: 4px 8px;
+  }
+
+  .mass-dropdown-menu {
+    min-width: 270px;
+    max-width: 90vw;
   }
 
   .btn-edit-mass,

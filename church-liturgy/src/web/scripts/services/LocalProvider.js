@@ -1,4 +1,5 @@
 import { DataProvider } from './DataProvider.js';
+import { formatKoreanDate } from './FirebaseProvider.js';
 
 export class LocalProvider extends DataProvider {
   async getMasses() {
@@ -34,7 +35,7 @@ export class LocalProvider extends DataProvider {
     
     // Apply local overrides
     slides = slides.map(s => overrides[s.id] ? { ...s, ...overrides[s.id] } : s);
-    return slides;
+    return slides.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
   }
 
   async updateMass(massId, updates) {
@@ -137,25 +138,55 @@ export class LocalProvider extends DataProvider {
     addedMasses.push(newMass);
     localStorage.setItem('liturgy_added_masses', JSON.stringify(addedMasses));
     
+    const formattedDate = formatKoreanDate(newMassData.date);
+
     // Copy slides from source mass
     if (sourceMassId) {
-      const sourceSlides = await this.getSlides(sourceMassId); // Includes base and overrides and added
+      const sourceSlides = await this.getSlides(sourceMassId);
       const addedSlidesJSON = localStorage.getItem('liturgy_added_slides');
       const addedSlides = addedSlidesJSON ? JSON.parse(addedSlidesJSON) : [];
       
-      sourceSlides.forEach(slide => {
-        // Only copy base slides (not paginated parts if they exist in source array directly)
-        // Since getSlides returns paginated versions, wait, getSlides returns paginated array!
-        // Actually, getSlides handles pagination. So it returns `_p1`, `_p2` etc.
-        // It's better to fetch the raw array. But for local testing, copying the paginated ones 
-        // as new base slides is okay, or we can fetch the original array again.
-        // Let's just copy what we get from getSlides to keep it simple.
+      sourceSlides.forEach((slide, index) => {
         const newSlide = {
           ...slide,
           id: "local_" + Date.now() + "_" + Math.random().toString(36).substring(7),
           massId: newMassId
         };
+
+        if (index === 0) {
+          newSlide.listTitle = '시작';
+          newSlide.title = newMassData.title || newSlide.title;
+          newSlide.contents = [{
+            text: formattedDate,
+            align: 'center',
+            role: 'none',
+            bold: true
+          }];
+          newSlide.content = formattedDate;
+        }
+
         addedSlides.push(newSlide);
+      });
+      localStorage.setItem('liturgy_added_slides', JSON.stringify(addedSlides));
+    } else {
+      const addedSlidesJSON = localStorage.getItem('liturgy_added_slides');
+      const addedSlides = addedSlidesJSON ? JSON.parse(addedSlidesJSON) : [];
+      addedSlides.push({
+        id: "local_" + Date.now() + "_" + Math.random().toString(36).substring(7),
+        massId: newMassId,
+        sequence: 1,
+        type: 'reading',
+        listTitle: '시작',
+        title: newMassData.title || '',
+        contents: [{
+          text: formattedDate,
+          align: 'center',
+          role: 'none',
+          bold: true
+        }],
+        content: formattedDate,
+        enabled: true,
+        hideTitle: false
       });
       localStorage.setItem('liturgy_added_slides', JSON.stringify(addedSlides));
     }

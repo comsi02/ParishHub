@@ -183,20 +183,83 @@
   </div>
 
   <!-- 메인 앱 컨테이너 (로그인 성공 시 표시) -->
-  <div id="app-main">
+  <div id="app-main" class="mode-presentation">
     <header class="control-header">
       <div class="mass-selector-group">
-        <select id="mass-select" class="mass-select"></select>
-        <button id="btn-edit-mass" class="btn-edit-mass" title="선택된 미사 제목 및 날짜 수정">미사 수정</button>
-        <button id="btn-new-mass" class="btn-new-mass" title="새 전례 생성">+ 새 미사</button>
-        <button id="btn-delete-mass" class="btn-delete-mass" title="선택된 미사 삭제">미사 삭제</button>
+        <!-- Searchable Mass Combobox -->
+        <div id="mass-combobox" class="mass-combobox">
+          <button id="mass-combobox-trigger" class="mass-combobox-trigger" type="button" aria-haspopup="listbox"
+            aria-expanded="false" title="미사 선택">
+            <span id="mass-combobox-selected-text" class="mass-selected-text">미사 선택...</span>
+            <svg class="combobox-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <div id="mass-dropdown-menu" class="mass-dropdown-menu hidden">
+            <div class="mass-dropdown-search-row">
+              <input type="text" id="mass-search-input" class="mass-search-input" placeholder="🔍 미사 제목 또는 날짜 검색..."
+                autocomplete="off" />
+            </div>
+            <div class="mass-filter-tabs">
+              <button type="button" id="tab-filter-recent" class="filter-tab-btn active" data-filter="recent">최근
+                ±1달</button>
+              <button type="button" id="tab-filter-all" class="filter-tab-btn" data-filter="all">전체 목록</button>
+            </div>
+            <ul id="mass-dropdown-list" class="mass-dropdown-list" role="listbox">
+              <!-- JS Populated Items -->
+            </ul>
+          </div>
+        </div>
+
+        <select id="mass-select" class="mass-select hidden"></select>
+
+        <button id="btn-edit-mass" class="header-action-icon-btn btn-edit-mass" title="선택된 미사 제목 및 날짜 수정" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </button>
+        <button id="btn-new-mass" class="header-action-icon-btn btn-new-mass" title="새 미사 생성" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+        <button id="btn-delete-mass" class="header-action-icon-btn btn-delete-mass" title="선택된 미사 삭제" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
       </div>
+
       <div class="header-right-controls">
         <span id="save-status" class="save-status"></span>
-        <span id="slide-counter" class="slide-counter">0 / 0</span>
-        <button id="theme-toggle" class="header-icon-btn" title="테마 전환">
-          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </button>
+        <!-- 모드 스위처 (로그인 바로 왼쪽) -->
+        <div id="mode-switcher" class="mode-switcher" role="group" aria-label="작업 모드 선택">
+          <button id="btn-mode-presentation" class="mode-btn active" type="button" title="실시간 프로젝터 송출 및 슬라이드 넘기기">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="none"
+              style="vertical-align: middle; margin-right: 3px;">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            프리젠테이션
+          </button>
+          <button id="btn-mode-admin" class="mode-btn" type="button" title="미사 및 슬라이드 내용 편집 (프로젝터 송출 안 됨)">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+              style="vertical-align: middle; margin-right: 3px;">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            수정(편집)
+          </button>
+        </div>
         <div id="user-info" class="user-info-bar">
           <span class="user-badge-icon">👤</span>
           <span id="user-name" class="user-name-text"></span>
@@ -208,11 +271,22 @@
     <!-- 모바일 전용 탭 전환 바 (진행 제어 vs 목록/편집) -->
     <div class="mobile-view-tabs">
       <button id="tab-btn-control" class="mobile-tab-btn active" type="button">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none" style="vertical-align: middle; margin-right: 4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"
+          style="vertical-align: middle; margin-right: 4px;">
+          <polygon points="5 3 19 12 5 21 5 3" />
+        </svg>
         진행 제어
       </button>
       <button id="tab-btn-list" class="mobile-tab-btn" type="button">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+          style="vertical-align: middle; margin-right: 4px;">
+          <line x1="8" y1="6" x2="21" y2="6" />
+          <line x1="8" y1="12" x2="21" y2="12" />
+          <line x1="8" y1="18" x2="21" y2="18" />
+          <line x1="3" y1="6" x2="3.01" y2="6" />
+          <line x1="3" y1="12" x2="3.01" y2="12" />
+          <line x1="3" y1="18" x2="3.01" y2="18" />
+        </svg>
         목록 / 편집
       </button>
     </div>
@@ -221,9 +295,12 @@
       <div class="left-panel">
         <div class="list-header">
           <h2>목록</h2>
-          <div class="list-actions">
-            <button id="btn-add-slide" title="슬라이드 추가">+</button>
-            <button id="btn-delete-slide" title="슬라이드 삭제">-</button>
+          <div class="list-header-right">
+            <span id="slide-counter" class="slide-counter">0 / 0</span>
+            <div class="list-actions">
+              <button id="btn-add-slide" title="슬라이드 추가">+</button>
+              <button id="btn-delete-slide" title="슬라이드 삭제">-</button>
+            </div>
           </div>
         </div>
         <ul id="slide-list" class="slide-list">
@@ -232,7 +309,20 @@
       </div>
       <div class="right-panel">
         <div class="preview-container">
-          <h2>미리보기</h2>
+          <div class="preview-header-row">
+            <h2>미리보기</h2>
+            <div class="preview-header-right">
+              <div id="admin-mode-banner" class="admin-mode-badge" style="display: none;">
+                🛠️ 수정 모드 중 (프로젝터 송출 안 됨)
+              </div>
+              <button id="theme-toggle" class="header-icon-btn" title="테마 전환">
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              </button>
+            </div>
+          </div>
           <div id="preview-box" class="preview-box">
             <div class="list-title-row">
               <span class="title-field-label">목록용 제목:</span>
@@ -247,18 +337,32 @@
             <div id="preview-contents-container">
               <div class="content-block" data-index="0">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -268,18 +372,32 @@
 
               <div class="content-block content-block-hidden" data-index="1">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -289,18 +407,32 @@
 
               <div class="content-block content-block-hidden" data-index="2">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -310,18 +442,32 @@
 
               <div class="content-block content-block-hidden" data-index="3">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -331,18 +477,32 @@
 
               <div class="content-block content-block-hidden" data-index="4">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -352,18 +512,32 @@
 
               <div class="content-block content-block-hidden" data-index="5">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -373,18 +547,32 @@
 
               <div class="content-block content-block-hidden" data-index="6">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -394,18 +582,32 @@
 
               <div class="content-block content-block-hidden" data-index="7">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -415,18 +617,32 @@
 
               <div class="content-block content-block-hidden" data-index="8">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -436,18 +652,32 @@
 
               <div class="content-block content-block-hidden" data-index="9">
                 <div class="content-toolbar">
-                  <select class="role-select">
-                    <option value="none">역할 없음</option>
-                    <option value="priest">사제 (➕)</option>
-                    <option value="leader_cong">전례자+신자 (◎)</option>
-                    <option value="leader">전례자 (○)</option>
-                    <option value="cong">신자 (●)</option>
-                  </select>
+                  <div class="content-toolbar-left">
+                    <div class="content-drag-handle" draggable="true" title="드래그하여 본문 순서 변경">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="12" r="1" />
+                        <circle cx="9" cy="5" r="1" />
+                        <circle cx="9" cy="19" r="1" />
+                        <circle cx="15" cy="12" r="1" />
+                        <circle cx="15" cy="5" r="1" />
+                        <circle cx="15" cy="19" r="1" />
+                      </svg>
+                    </div>
+                    <select class="role-select">
+                      <option value="none">역할 없음</option>
+                      <option value="priest">사제 (➕)</option>
+                      <option value="leader_cong">전례자+신자 (◎)</option>
+                      <option value="leader">전례자 (○)</option>
+                      <option value="cong">신자 (●)</option>
+                    </select>
+                  </div>
                   <div class="align-group">
                     <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
                     <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
                     <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
                     <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
+                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" />
                     <button class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
@@ -513,7 +743,7 @@
         <input type="date" id="new-mass-date" required>
       </div>
       <div class="form-group">
-        <label for="new-mass-title">제목 (예: 연중 제23주일)</label>
+        <label for="new-mass-title">제목 (예: 연중 제1주일)</label>
         <input type="text" id="new-mass-title" placeholder="미사 제목 입력" required>
       </div>
       <div class="form-group">
@@ -536,7 +766,7 @@
         <input type="date" id="edit-mass-date" required>
       </div>
       <div class="form-group">
-        <label for="edit-mass-title">제목 (예: 연중 제23주일)</label>
+        <label for="edit-mass-title">제목 (예: 연중 제1주일)</label>
         <input type="text" id="edit-mass-title" placeholder="미사 제목 입력" required>
       </div>
       <div class="modal-actions">

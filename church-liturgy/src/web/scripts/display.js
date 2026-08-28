@@ -81,6 +81,14 @@ async function handleStateChange(state) {
     if (slideChanged || contentUpdated) {
       currentSlideId = state.slideId;
       window._lastRenderedAt = state.lastUpdated || 0;
+      if (typeof provider.onSlidesChange !== 'function') {
+        try {
+          const slides = await provider.getSlides(currentMassId);
+          slidesCache = slides.slice().sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+        } catch (e) {
+          console.error('Failed to reload slides in display', e);
+        }
+      }
       renderCurrentSlide();
     }
   }
@@ -166,6 +174,7 @@ function renderCurrentSlide() {
       p.setAttribute('data-align', cData.align || 'left');
       p.setAttribute('data-role', cData.role || 'none');
       p.setAttribute('data-bold', cData.bold ? 'true' : 'false');
+      p.style.color = cData.color || '';
     } else {
       p.style.display = 'none';
       p.textContent = '';
@@ -216,10 +225,10 @@ function setupKeyboardControls() {
     const currentIndex = slidesCache.findIndex(s => s.id === currentSlideId);
     let newIndex = currentIndex;
 
-    if (e.key === 'ArrowRight' || e.key === ' ') {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
       e.preventDefault();
       if (currentIndex < slidesCache.length - 1) newIndex = currentIndex + 1;
-    } else if (e.key === 'ArrowLeft') {
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (currentIndex > 0) newIndex = currentIndex - 1;
     }

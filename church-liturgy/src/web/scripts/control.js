@@ -2,6 +2,7 @@
 // 관리자 전용 (Google 로그인 + admins 권한 체크)
 
 import { getProvider } from './services/index.js';
+import { formatKoreanDate, calculateLiturgicalTitle } from './services/FirebaseProvider.js';
 import { onAuthStateChanged, signInWithGoogle, signOut, checkIsAdmin } from '../../auth.js';
 
 const provider = getProvider();
@@ -15,7 +16,16 @@ let massInfo = null;
 let unsubscribeState = null;
 
 // DOM Elements
-const domMassSelect    = document.getElementById('mass-select');
+const domMassSelect        = document.getElementById('mass-select');
+const massComboboxEl       = document.getElementById('mass-combobox');
+const massComboboxTrigger  = document.getElementById('mass-combobox-trigger');
+const massSelectedTextEl   = document.getElementById('mass-combobox-selected-text');
+const massDropdownMenuEl   = document.getElementById('mass-dropdown-menu');
+const massSearchInputEl    = document.getElementById('mass-search-input');
+const massDropdownListEl   = document.getElementById('mass-dropdown-list');
+const tabFilterRecent      = document.getElementById('tab-filter-recent');
+const tabFilterAll         = document.getElementById('tab-filter-all');
+
 const domSlideCounter  = document.getElementById('slide-counter');
 const domSlideList     = document.getElementById('slide-list');
 const domPreviewTitle  = document.getElementById('preview-title');
@@ -31,6 +41,8 @@ const btnBlackout      = document.getElementById('btn-blackout');
 const btnFreeze        = document.getElementById('btn-freeze');
 
 let currentDisplayMode = 'normal'; // 'normal' | 'blackout' | 'freeze'
+let massFilterMode     = 'recent'; // 'recent' (최근 ±1달) | 'all' (전체)
+let massSearchQuery    = '';
 
 // ─────────────────────────────────────────────────
 // 인증 게이트
@@ -229,18 +241,35 @@ function handleDrop() {
     toIndex--;
   }
 
-  if (fromIndex !== toIndex && toIndex >= 0) {
+  if (fromIndex !== toIndex && toIndex >= 0 && toIndex < slides.length) {
     dragPlaceholder.parentNode.insertBefore(draggedItem, dragPlaceholder);
     draggedItem.classList.remove('dragging');
     if (dragPlaceholder.parentNode) {
       dragPlaceholder.parentNode.removeChild(dragPlaceholder);
     }
 
+    // 1. 메모리 상의 slides 배열 순서 변경
+    const [movedSlide] = slides.splice(fromIndex, 1);
+    slides.splice(toIndex, 0, movedSlide);
+
+    // 2. sequence 번호 재할당
+    slides.forEach((slide, idx) => {
+      slide.sequence = idx + 1;
+    });
+
+    // 3. 변경된 순서의 ID 목록을 provider에 저장
     const slideIds = slides.map(s => String(s.id));
     provider.reorderSlides(currentMassId, slideIds).catch(err => {
       console.error('Failed to reorder slides', err);
       alert('순서 저장에 실패했습니다.');
     });
+
+    renderList();
+  } else {
+    draggedItem.classList.remove('dragging');
+    if (dragPlaceholder.parentNode) {
+      dragPlaceholder.parentNode.removeChild(dragPlaceholder);
+    }
   }
 }
 
@@ -271,10 +300,67 @@ function asArray(value) {
 }
 
 // ─────────────────────────────────────────────────
+// 작업 모드 관리 (프리젠테이션 vs 수정/편집)
+// ─────────────────────────────────────────────────
+
+let currentAppMode = 'presentation'; // 기본값: 프리젠테이션 모드
+
+function setupModeSwitcher() {
+  const btnPresentation = document.getElementById('btn-mode-presentation');
+  const btnAdmin        = document.getElementById('btn-mode-admin');
+
+  if (btnPresentation) {
+    btnPresentation.addEventListener('click', () => setAppMode('presentation'));
+  }
+  if (btnAdmin) {
+    btnAdmin.addEventListener('click', () => setAppMode('admin'));
+  }
+
+  setAppMode('presentation'); // 초기 모드 세팅
+}
+
+function setAppMode(mode) {
+  currentAppMode = mode;
+  const appContainer    = document.getElementById('app-main');
+  const btnPresentation = document.getElementById('btn-mode-presentation');
+  const btnAdmin        = document.getElementById('btn-mode-admin');
+
+  if (appContainer) {
+    appContainer.classList.toggle('mode-presentation', mode === 'presentation');
+    appContainer.classList.toggle('mode-admin', mode === 'admin');
+  }
+
+  if (btnPresentation) btnPresentation.classList.toggle('active', mode === 'presentation');
+  if (btnAdmin) btnAdmin.classList.toggle('active', mode === 'admin');
+
+  // 편집 가능 여부 업데이트
+  updateContentEditable();
+}
+
+function updateContentEditable() {
+  const isTitleEditable = currentAppMode === 'admin';
+
+  if (domPreviewTitle) {
+    domPreviewTitle.setAttribute('contenteditable', isTitleEditable ? 'true' : 'false');
+  }
+  if (domPreviewListTitle) {
+    domPreviewListTitle.setAttribute('contenteditable', isTitleEditable ? 'true' : 'false');
+  }
+
+  // 본문 내용은 프리젠테이션 모드 및 관리자 모드 모두에서 수정 가능
+  const pElements = document.querySelectorAll('.preview-text');
+  pElements.forEach(p => {
+    p.setAttribute('contenteditable', 'true');
+  });
+}
+
+// ─────────────────────────────────────────────────
 // 앱 초기화 (로그인 후)
 // ─────────────────────────────────────────────────
 
 async function initApp() {
+  setupModeSwitcher();
+  setupMassCombobox();
   setupMobileTabs();
   setupThemeToggle();
   setupKeyboardControls();
@@ -284,14 +370,6 @@ async function initApp() {
 
   try {
     cachedMasses = asArray(await provider.getMasses());
-
-    domMassSelect.innerHTML = '';
-    cachedMasses.forEach(m => {
-      const option = document.createElement('option');
-      option.value = m.id;
-      option.textContent = formatMassOptionText(m);
-      domMassSelect.appendChild(option);
-    });
 
     const state = await provider.getPresentationState();
     let targetSlideId = null;
@@ -322,14 +400,16 @@ async function initApp() {
       currentMassId = massInfo ? massInfo.id : '1';
     }
 
-    domMassSelect.value = currentMassId;
+    populateMassSelect();
     
     // 초기 로드 시에는 다른 클라이언트에 덮어쓰지 않도록 shouldBroadcast = false 전달
     await loadSlidesForCurrentMass(targetSlideId, false);
 
     domMassSelect.addEventListener('change', async (e) => {
       currentMassId = e.target.value;
-      await loadSlidesForCurrentMass(null, true);
+      populateMassSelect();
+      const shouldBroadcast = currentAppMode === 'presentation';
+      await loadSlidesForCurrentMass(null, shouldBroadcast);
     });
 
     // presentation_state → onSnapshot으로 다른 제어기/화면과 실시간 양방향 동기화
@@ -352,6 +432,25 @@ async function initApp() {
   if (btnModalCreate) btnModalCreate.addEventListener('click', handleCreateMass);
   if (btnModalEditCancel) btnModalEditCancel.addEventListener('click', closeEditMassModal);
   if (btnModalEditSave) btnModalEditSave.addEventListener('click', handleUpdateMass);
+
+  // 날짜 변경 시 전례 제목 자동 계산 연동
+  if (inputNewMassDate && inputNewMassTitle) {
+    const handleNewDateChange = () => {
+      const title = calculateLiturgicalTitle(inputNewMassDate.value);
+      if (title) inputNewMassTitle.value = title;
+    };
+    inputNewMassDate.addEventListener('input', handleNewDateChange);
+    inputNewMassDate.addEventListener('change', handleNewDateChange);
+  }
+
+  if (inputEditMassDate && inputEditMassTitle) {
+    const handleEditDateChange = () => {
+      const title = calculateLiturgicalTitle(inputEditMassDate.value);
+      if (title) inputEditMassTitle.value = title;
+    };
+    inputEditMassDate.addEventListener('input', handleEditDateChange);
+    inputEditMassDate.addEventListener('change', handleEditDateChange);
+  }
 
   setupDisplayControls();
 }
@@ -497,8 +596,14 @@ function openNewMassModal() {
 }
 
 async function openNewMassModalAsync() {
-  inputNewMassDate.value = new Date().toISOString().split('T')[0];
-  inputNewMassTitle.value = '';
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+
+  inputNewMassDate.value = todayStr;
+  inputNewMassTitle.value = calculateLiturgicalTitle(todayStr);
 
   selectNewMassSource.innerHTML = '<option value="">선택 안함 (빈 전례)</option>';
   cachedMasses = asArray(await provider.getMasses());
@@ -587,6 +692,27 @@ async function handleUpdateMass() {
   try {
     await provider.updateMass(currentMassId, { date, title });
     
+    // 첫 번째 슬라이드가 있으면 제목과 날짜를 1번 슬라이드에 동기화
+    if (slides && slides.length > 0) {
+      const firstSlide = slides[0];
+      const formattedDate = formatKoreanDate(date);
+      const updates = {
+        listTitle: '시작',
+        title: title,
+        contents: [{
+          text: formattedDate,
+          align: 'center',
+          role: 'none',
+          bold: true
+        }],
+        content: formattedDate
+      };
+      await provider.updateSlide(currentMassId, firstSlide.id, updates);
+      Object.assign(firstSlide, updates);
+      renderList();
+      updatePreviewUI();
+    }
+
     // 캐시 목록 갱신
     cachedMasses = asArray(await provider.getMasses());
     populateMassSelect();
@@ -617,6 +743,37 @@ async function handleUpdateMass() {
 async function loadSlidesForCurrentMass(targetSlideId = null, shouldBroadcast = true) {
   slides = asArray(await provider.getSlides(currentMassId));
   slides.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+
+  // 항상 첫 번째 슬라이드를 '시작' 슬라이드로 강제 설정
+  const currentMass = cachedMasses.find(m => String(m.id) === String(currentMassId));
+  if (currentMass) {
+    const formattedDate = formatKoreanDate(currentMass.date);
+    const startSlideData = {
+      listTitle: '시작',
+      title: currentMass.title || '',
+      contents: [{ text: formattedDate, align: 'center', role: 'none', bold: true }],
+      content: formattedDate,
+    };
+
+    if (slides.length === 0) {
+      // 슬라이드가 전혀 없으면 '시작' 슬라이드 새로 추가
+      const added = await provider.addSlide(currentMassId, {
+        ...startSlideData,
+        sequence: 1,
+        type: 'reading',
+        enabled: true,
+        hideTitle: false,
+      });
+      if (added) {
+        slides = [{ ...added, ...startSlideData }];
+      }
+    } else {
+      // 슬라이드가 있으면 첫 번째 슬라이드를 무조건 '시작' 내용으로 덮어씀
+      const first = slides[0];
+      await provider.updateSlide(currentMassId, first.id, startSlideData);
+      Object.assign(first, startSlideData);
+    }
+  }
 
   if (targetSlideId && slides.find(s => s.id === targetSlideId)) {
     currentSlideId = targetSlideId;
@@ -709,7 +866,9 @@ function renderList() {
       currentSlideId = slide.id;
       renderList();
       updatePreviewUI();
-      await broadcastState();
+      if (currentAppMode === 'presentation') {
+        await broadcastState();
+      }
       // 모바일 화면에서는 항목 선택 시 진행 제어 탭으로 자동 복귀
       if (typeof window.switchToMobileControlTab === 'function') {
         window.switchToMobileControlTab();
@@ -753,10 +912,10 @@ function prevSlide() {
 function setupKeyboardControls() {
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
-    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
       e.preventDefault();
       nextSlide();
-    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
       e.preventDefault();
       prevSlide();
     } else if (e.key === 'Home') {
@@ -805,6 +964,12 @@ function updatePreviewUI() {
     const roleSelect = block.querySelector('.role-select');
     roleSelect.value = cData.role;
 
+    const colorPicker = block.querySelector('.color-picker');
+    if (colorPicker) {
+      colorPicker.value = cData.color || '#ffffff';
+      p.style.color = cData.color || 'inherit';
+    }
+
     const alignBtns = block.querySelectorAll('.align-btn');
     alignBtns.forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-align') === cData.align);
@@ -829,6 +994,8 @@ function updatePreviewUI() {
 
   const activeLi = domSlideList.querySelector('.active');
   if (activeLi) activeLi.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  updateContentEditable();
 }
 
 // Firestore 상태 전송 함수 (명시적 사용자 액션 시에만 호출)
@@ -910,12 +1077,9 @@ function setupInlineEditing() {
       showSaveStatus('saving', '저장 중...');
       await provider.updateSlide(currentMassId, currentSlideId, updates);
       if (updates.title !== undefined || updates.listTitle !== undefined) renderList();
-      await provider.setPresentationState({
-        massId: currentMassId,
-        slideId: currentSlideId,
-        theme: document.body.getAttribute('data-theme') || 'dark',
-        displayMode: currentDisplayMode,
-      });
+      if (currentAppMode === 'presentation') {
+        await broadcastState();
+      }
       showSaveStatus('success', '✅ 저장됨');
     } catch (err) {
       console.error('Failed to save slide edit', err);
@@ -959,17 +1123,161 @@ function setupInlineEditing() {
     saveTimer = setTimeout(() => { executeEdit(e.target); }, DEBOUNCE_MS);
   };
 
+  const contentPlaceholder = document.createElement('div');
+  contentPlaceholder.className = 'content-block-placeholder';
+  let draggedContentIndex = -1;
+  let currentDropTargetIndex = -1;
+  let dropPosition = 'after'; // 'before' | 'after'
+  let isDraggingContent = false;
+
+  const handleContentDrop = () => {
+    if (!isDraggingContent || draggedContentIndex === -1) return;
+    isDraggingContent = false;
+
+    const fromIndex = draggedContentIndex;
+    let toIndex = currentDropTargetIndex;
+
+    if (contentPlaceholder.parentNode) {
+      contentPlaceholder.parentNode.removeChild(contentPlaceholder);
+    }
+    const draggingEl = document.querySelector('.content-block.dragging');
+    if (draggingEl) draggingEl.classList.remove('dragging');
+
+    draggedContentIndex = -1;
+
+    if (!currentSlideId) return;
+    const ci = slides.findIndex(s => s.id === currentSlideId);
+    if (ci === -1) return;
+    const slide = slides[ci];
+    if (!slide.contents || slide.contents.length <= 1) return;
+
+    if (toIndex !== -1 && toIndex !== fromIndex) {
+      if (dropPosition === 'before') {
+        if (fromIndex < toIndex) toIndex--;
+      } else if (dropPosition === 'after') {
+        if (fromIndex > toIndex) toIndex++;
+      }
+
+      if (toIndex >= 0 && toIndex < slide.contents.length && toIndex !== fromIndex) {
+        const moved = slide.contents.splice(fromIndex, 1)[0];
+        slide.contents.splice(toIndex, 0, moved);
+
+        saveSlideUpdates(slide, { contents: slide.contents }).then(() => {
+          updatePreviewUI();
+        });
+      }
+    }
+
+    currentDropTargetIndex = -1;
+  };
+
+  contentPlaceholder.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  });
+  contentPlaceholder.addEventListener('drop', (e) => {
+    e.preventDefault();
+    handleContentDrop();
+  });
+
+  const previewContainer = document.getElementById('preview-contents-container');
+  if (previewContainer) {
+    previewContainer.addEventListener('dragover', (e) => {
+      if (isDraggingContent) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      }
+    });
+    previewContainer.addEventListener('drop', (e) => {
+      if (isDraggingContent) {
+        e.preventDefault();
+        handleContentDrop();
+      }
+    });
+  }
+
   const contentBlocks = document.querySelectorAll('.content-block');
   contentBlocks.forEach(block => {
-    const idx      = parseInt(block.getAttribute('data-index'), 10);
-    const p        = block.querySelector('.preview-text');
+    const idx        = parseInt(block.getAttribute('data-index'), 10);
+    const p          = block.querySelector('.preview-text');
     const roleSelect = block.querySelector('.role-select');
     const alignBtns  = block.querySelectorAll('.align-btn');
     const boldBtn    = block.querySelector('.bold-btn');
     const delBtn     = block.querySelector('.delete-block-btn');
+    const dragHandle = block.querySelector('.content-drag-handle');
 
     p.addEventListener('blur', handleEdit);
     p.addEventListener('input', handleInput);
+
+    if (dragHandle) {
+      dragHandle.addEventListener('dragstart', (e) => {
+        const ci = slides.findIndex(s => s.id === currentSlideId);
+        if (ci === -1 || !slides[ci].contents || slides[ci].contents.length <= 1) {
+          e.preventDefault();
+          return;
+        }
+
+        isDraggingContent = true;
+        draggedContentIndex = idx;
+        currentDropTargetIndex = idx;
+        dropPosition = 'after';
+
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(idx));
+
+        if (e.dataTransfer.setDragImage) {
+          e.dataTransfer.setDragImage(block, 20, 20);
+        }
+
+        setTimeout(() => {
+          block.classList.add('dragging');
+          if (block.nextSibling) {
+            block.parentNode.insertBefore(contentPlaceholder, block.nextSibling);
+          } else {
+            block.parentNode.appendChild(contentPlaceholder);
+          }
+        }, 0);
+      });
+
+      dragHandle.addEventListener('dragend', () => {
+        isDraggingContent = false;
+        block.classList.remove('dragging');
+        if (contentPlaceholder.parentNode) {
+          contentPlaceholder.parentNode.removeChild(contentPlaceholder);
+        }
+        draggedContentIndex = -1;
+        currentDropTargetIndex = -1;
+      });
+    }
+
+    block.addEventListener('dragover', (e) => {
+      if (!isDraggingContent || draggedContentIndex === -1) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const ci = slides.findIndex(s => s.id === currentSlideId);
+      if (ci === -1) return;
+      const visibleCount = Math.max(1, slides[ci].contents ? slides[ci].contents.length : 1);
+      if (idx >= visibleCount) return;
+
+      const rect = block.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      currentDropTargetIndex = idx;
+
+      if (e.clientY < midY) {
+        dropPosition = 'before';
+        block.parentNode.insertBefore(contentPlaceholder, block);
+      } else {
+        dropPosition = 'after';
+        block.parentNode.insertBefore(contentPlaceholder, block.nextSibling);
+      }
+    });
+
+    block.addEventListener('drop', (e) => {
+      if (!isDraggingContent) return;
+      e.preventDefault();
+      handleContentDrop();
+    });
 
     if (boldBtn) {
       boldBtn.addEventListener('click', () => {
@@ -1030,6 +1338,26 @@ function setupInlineEditing() {
         saveSlideUpdates(slide, { contents: slide.contents });
       });
     });
+
+    const colorPicker = block.querySelector('.color-picker');
+    if (colorPicker) {
+      const handleColorChange = (e) => {
+        if (!currentSlideId) return;
+        const ci = slides.findIndex(s => s.id === currentSlideId);
+        if (ci === -1) return;
+        const slide = slides[ci];
+        if (!slide.contents) slide.contents = [];
+        while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none' });
+        
+        const newColor = e.target.value;
+        slide.contents[idx].color = newColor;
+        p.style.color = newColor;
+        saveSlideUpdates(slide, { contents: slide.contents });
+      };
+      
+      colorPicker.addEventListener('input', handleColorChange);
+      colorPicker.addEventListener('change', handleColorChange);
+    }
   });
 
   domPreviewTitle.addEventListener('blur', handleEdit);
@@ -1117,12 +1445,9 @@ function setupHideTitleButton() {
     btn.classList.toggle('title-hidden', slide.hideTitle);
     try {
       await provider.updateSlide(currentMassId, currentSlideId, { hideTitle: slide.hideTitle });
-      await provider.setPresentationState({
-        massId: currentMassId,
-        slideId: currentSlideId,
-        theme: document.body.getAttribute('data-theme') || 'dark',
-        displayMode: currentDisplayMode,
-      });
+      if (currentAppMode === 'presentation') {
+        await broadcastState();
+      }
     } catch (err) {
       console.error('Failed to save hideTitle', err);
     }
@@ -1130,18 +1455,192 @@ function setupHideTitleButton() {
 }
 
 // ─────────────────────────────────────────────────
-// 미사 삭제
+// 검색 가능한 미사 콤보박스 (Searchable Mass Combobox)
 // ─────────────────────────────────────────────────
 
-function populateMassSelect() {
-  domMassSelect.innerHTML = '';
-  cachedMasses.forEach(m => {
-    const option = document.createElement('option');
-    option.value = m.id;
-    option.textContent = formatMassOptionText(m);
-    domMassSelect.appendChild(option);
+function isWithinOneMonth(dateStr) {
+  if (!dateStr) return false;
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const oneMonthAgo = new Date(today);
+    oneMonthAgo.setDate(today.getDate() - 31);
+
+    const oneMonthLater = new Date(today);
+    oneMonthLater.setDate(today.getDate() + 31);
+
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const targetDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      return targetDate >= oneMonthAgo && targetDate <= oneMonthLater;
+    }
+  } catch (e) {}
+  return false;
+}
+
+function setupMassCombobox() {
+  if (!massComboboxEl || !massComboboxTrigger || !massDropdownMenuEl) return;
+
+  // 트리거 클릭 시 드롭다운 토글
+  massComboboxTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = massComboboxEl.classList.contains('open');
+    if (isOpen) {
+      closeMassDropdown();
+    } else {
+      openMassDropdown();
+    }
   });
-  domMassSelect.value = currentMassId;
+
+  // 검색창 입력 이벤트
+  if (massSearchInputEl) {
+    massSearchInputEl.addEventListener('input', (e) => {
+      massSearchQuery = e.target.value.trim().toLowerCase();
+      renderMassDropdown();
+    });
+    massSearchInputEl.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  // 필터 탭 (최근 ±1달 vs 전체)
+  if (tabFilterRecent && tabFilterAll) {
+    tabFilterRecent.addEventListener('click', (e) => {
+      e.stopPropagation();
+      massFilterMode = 'recent';
+      tabFilterRecent.classList.add('active');
+      tabFilterAll.classList.remove('active');
+      renderMassDropdown();
+    });
+
+    tabFilterAll.addEventListener('click', (e) => {
+      e.stopPropagation();
+      massFilterMode = 'all';
+      tabFilterAll.classList.add('active');
+      tabFilterRecent.classList.remove('active');
+      renderMassDropdown();
+    });
+  }
+
+  // 외부 클릭 시 드롭다운 닫기
+  document.addEventListener('click', (e) => {
+    if (!massComboboxEl.contains(e.target)) {
+      closeMassDropdown();
+    }
+  });
+
+  // Esc 키 입력 시 닫기
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && massComboboxEl.classList.contains('open')) {
+      closeMassDropdown();
+    }
+  });
+}
+
+function openMassDropdown() {
+  massComboboxEl.classList.add('open');
+  massDropdownMenuEl.classList.remove('hidden');
+  massComboboxTrigger.setAttribute('aria-expanded', 'true');
+  renderMassDropdown();
+  if (massSearchInputEl) {
+    massSearchInputEl.value = '';
+    massSearchQuery = '';
+    setTimeout(() => massSearchInputEl.focus(), 50);
+  }
+}
+
+function closeMassDropdown() {
+  massComboboxEl.classList.remove('open');
+  massDropdownMenuEl.classList.add('hidden');
+  massComboboxTrigger.setAttribute('aria-expanded', 'false');
+}
+
+function renderMassDropdown() {
+  if (!massDropdownListEl) return;
+  massDropdownListEl.innerHTML = '';
+
+  let filtered = cachedMasses.filter(m => {
+    // 1. 검색어 필터링
+    if (massSearchQuery) {
+      const titleMatch = (m.title || '').toLowerCase().includes(massSearchQuery);
+      const dateMatch  = (m.date || '').toLowerCase().includes(massSearchQuery);
+      return titleMatch || dateMatch;
+    }
+    // 2. 검색어가 없을 때는 최근 1달 필터 적용 (단, 현재 선택된 미사는 항상 목록에 노출)
+    if (massFilterMode === 'recent') {
+      if (String(m.id) === String(currentMassId)) return true;
+      return isWithinOneMonth(m.date);
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    const emptyLi = document.createElement('li');
+    emptyLi.className = 'mass-dropdown-empty';
+    emptyLi.textContent = massSearchQuery ? '일치하는 미사가 없습니다.' : '최근 ±1달 이내의 미사가 없습니다.';
+    massDropdownListEl.appendChild(emptyLi);
+    return;
+  }
+
+  filtered.forEach(m => {
+    const li = document.createElement('li');
+    li.className = 'mass-dropdown-item';
+    if (String(m.id) === String(currentMassId)) {
+      li.classList.add('selected');
+    }
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'mass-dropdown-item-title';
+    titleSpan.textContent = m.title;
+
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'mass-dropdown-item-date';
+    dateSpan.textContent = m.date;
+
+    li.appendChild(titleSpan);
+    li.appendChild(dateSpan);
+
+    li.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (currentMassId !== m.id) {
+        currentMassId = m.id;
+        populateMassSelect();
+        const shouldBroadcast = currentAppMode === 'presentation';
+        await loadSlidesForCurrentMass(null, shouldBroadcast);
+      }
+      closeMassDropdown();
+    });
+
+    massDropdownListEl.appendChild(li);
+  });
+}
+
+function populateMassSelect() {
+  // 1. 콤보박스 선택 텍스트 갱신
+  const selected = cachedMasses.find(m => String(m.id) === String(currentMassId));
+  if (massSelectedTextEl) {
+    if (selected) {
+      massSelectedTextEl.textContent = formatMassOptionText(selected);
+      massSelectedTextEl.title = formatMassOptionText(selected);
+    } else {
+      massSelectedTextEl.textContent = '미사 선택...';
+      massSelectedTextEl.title = '';
+    }
+  }
+
+  // 2. 하위 호환 네이티브 select 동기화
+  if (domMassSelect) {
+    domMassSelect.innerHTML = '';
+    cachedMasses.forEach(m => {
+      const option = document.createElement('option');
+      option.value = m.id;
+      option.textContent = formatMassOptionText(m);
+      domMassSelect.appendChild(option);
+    });
+    domMassSelect.value = currentMassId;
+  }
+
+  // 3. 드롭다운 뷰 갱신
+  renderMassDropdown();
 }
 
 async function handleDeleteMass() {
