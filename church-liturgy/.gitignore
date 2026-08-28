@@ -13,6 +13,16 @@ dist
 dist-ssr
 *.local
 
+# Environment files (실제 운영 키가 포함된 파일)
+.env.production
+.env*.local
+
+# Firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -26,5 +36,4 @@ dist-ssr
 Thumbs.db
 
 # Clasp (Google Apps Script)
-# .clasp.json contains sensitive project IDs and should not be shared
 .clasp.json

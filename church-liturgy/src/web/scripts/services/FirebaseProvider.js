@@ -39,11 +39,12 @@ export class FirebaseProvider extends DataProvider {
   async getMasses() {
     const q = query(
       collection(db, 'masses'),
-      where('status', '==', 'Active'),
-      orderBy('date', 'desc')
+      where('status', '==', 'Active')
     );
     const snap = await getDocs(q);
-    return snap.docs.map(docToObj);
+    const masses = snap.docs.map(docToObj);
+    // 날짜 내림차순 정렬 (인덱스 생성 대기 없이 즉시 동작)
+    return masses.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   }
 
   async createMass(newMassData, sourceMassId) {
@@ -63,17 +64,20 @@ export class FirebaseProvider extends DataProvider {
       const slidesSnap = await getDocs(
         query(
           collection(db, 'masses', sourceMassId, 'slides'),
-          where('enabled', '==', true),
-          orderBy('sequence', 'asc')
+          where('enabled', '==', true)
         )
       );
 
       if (!slidesSnap.empty) {
         const batch = writeBatch(db);
-        slidesSnap.docs.forEach((slideDoc) => {
+        const sourceSlides = slidesSnap.docs.map(docToObj)
+          .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+
+        sourceSlides.forEach((slide) => {
           const newSlideRef = doc(collection(db, 'masses', newMassId, 'slides'));
+          const { id, ...slideData } = slide;
           batch.set(newSlideRef, {
-            ...slideDoc.data(),
+            ...slideData,
             updatedAt: serverTimestamp(),
           });
         });
@@ -102,11 +106,11 @@ export class FirebaseProvider extends DataProvider {
   async getSlides(massId) {
     const q = query(
       collection(db, 'masses', massId, 'slides'),
-      where('enabled', '==', true),
-      orderBy('sequence', 'asc')
+      where('enabled', '==', true)
     );
     const snap = await getDocs(q);
     const slides = snap.docs.map(docToObj);
+    slides.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
 
     // ---PAGE--- 분할 처리 (기존 로직 유지)
     return this._paginateSlides(slides);
@@ -220,13 +224,13 @@ export class FirebaseProvider extends DataProvider {
   onSlidesChange(massId, callback) {
     const q = query(
       collection(db, 'masses', massId, 'slides'),
-      where('enabled', '==', true),
-      orderBy('sequence', 'asc')
+      where('enabled', '==', true)
     );
     return onSnapshot(
       q,
       (snap) => {
-        const slides = snap.docs.map(docToObj);
+        const slides = snap.docs.map(docToObj)
+          .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
         callback(this._paginateSlides(slides));
       },
       (error) => {

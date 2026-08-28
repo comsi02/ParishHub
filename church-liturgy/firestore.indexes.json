@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "masses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "slides",
       "queryScope": "COLLECTION",
       "fields": [
