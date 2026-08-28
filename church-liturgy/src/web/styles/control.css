@@ -683,7 +683,8 @@ body {
   box-sizing: border-box;
 }
 
-.role-select {
+.role-select,
+.size-select {
   padding: 0.15rem 0.4rem;
   font-size: 0.85rem;
   border-radius: 4px;
@@ -776,6 +777,14 @@ body {
 p[data-align="left"] { text-align: left; }
 p[data-align="center"] { text-align: center; }
 p[data-align="right"] { text-align: right; }
+
+/* Font size utilities applied to the text p tag */
+.preview-text[data-size="large"],
+p[data-size="large"] { font-size: 1.3rem; }
+.preview-text[data-size="small"],
+p[data-size="small"] { font-size: 0.88rem; }
+.preview-text[data-size="normal"],
+p[data-size="normal"] { font-size: 1.05rem; }
 
 /* Role prefixes in Controller */
 .preview-text[data-role="priest"]::before,

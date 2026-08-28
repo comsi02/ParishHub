@@ -174,6 +174,7 @@ function renderCurrentSlide() {
       p.setAttribute('data-align', cData.align || 'left');
       p.setAttribute('data-role', cData.role || 'none');
       p.setAttribute('data-bold', cData.bold ? 'true' : 'false');
+      p.setAttribute('data-size', cData.size || 'normal');
       p.style.color = cData.color || '';
     } else {
       p.style.display = 'none';

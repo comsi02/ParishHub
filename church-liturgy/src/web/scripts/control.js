@@ -960,9 +960,15 @@ function updatePreviewUI() {
     p.setAttribute('data-align', cData.align);
     p.setAttribute('data-role', cData.role);
     p.setAttribute('data-bold', cData.bold ? 'true' : 'false');
+    p.setAttribute('data-size', cData.size || 'normal');
 
     const roleSelect = block.querySelector('.role-select');
     roleSelect.value = cData.role;
+
+    const sizeSelect = block.querySelector('.size-select');
+    if (sizeSelect) {
+      sizeSelect.value = cData.size || 'normal';
+    }
 
     const colorPicker = block.querySelector('.color-picker');
     if (colorPicker) {
@@ -1322,6 +1328,21 @@ function setupInlineEditing() {
       p.setAttribute('data-role', e.target.value);
       saveSlideUpdates(slide, { contents: slide.contents });
     });
+
+    const sizeSelect = block.querySelector('.size-select');
+    if (sizeSelect) {
+      sizeSelect.addEventListener('change', (e) => {
+        if (!currentSlideId) return;
+        const ci = slides.findIndex(s => s.id === currentSlideId);
+        if (ci === -1) return;
+        const slide = slides[ci];
+        if (!slide.contents) slide.contents = [];
+        while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none' });
+        slide.contents[idx].size = e.target.value;
+        p.setAttribute('data-size', e.target.value);
+        saveSlideUpdates(slide, { contents: slide.contents });
+      });
+    }
 
     alignBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
