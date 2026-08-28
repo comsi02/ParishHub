@@ -7,11 +7,11 @@
   <link rel="stylesheet" href="/src/web/styles/base.css">
   <link rel="stylesheet" href="/src/web/styles/display.css">
 </head>
-<body data-theme="dark"> <!-- Defaulting display to dark theme for projectors -->
-  <button id="theme-toggle" class="theme-toggle-icon" title="테마 전환">🌓</button>
-
   <!-- Display control icon buttons (top-right) -->
   <div class="display-icon-bar">
+    <button id="theme-toggle" class="display-ctrl-btn display-ctrl-theme" title="테마 전환">
+      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
     <button id="display-btn-blackout" class="display-ctrl-btn display-ctrl-blackout" title="Display 끄기">
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/><line x1="2" y1="3" x2="22" y2="17"/></svg>
     </button>

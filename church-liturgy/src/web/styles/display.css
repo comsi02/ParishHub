@@ -72,28 +72,32 @@
   opacity: 0.7;
 }
 
-/* Display control icon bar - top-right corner next to theme toggle */
+/* Display control icon bar - top-right corner */
 .display-icon-bar {
   position: absolute;
-  top: 10px;
-  right: 42px; /* sits just left of the theme-toggle-icon */
+  top: 12px;
+  right: 12px;
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
   z-index: 10000; /* Above the blackout overlay */
 }
 
 /* Hide theme toggle when blackout mode is active */
-body.blackout-mode .theme-toggle-icon {
+body.blackout-mode #theme-toggle {
   display: none;
 }
 
 .display-ctrl-btn {
-  background: transparent;
-  border: none;
+  background: rgba(128, 128, 128, 0.15);
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 6px;
   cursor: pointer;
-  padding: 4px;
-  opacity: 0.3;
-  transition: opacity 0.3s;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  opacity: 0.4;
+  transition: opacity 0.2s, background-color 0.2s, color 0.2s;
   color: currentColor;
   display: flex;
   align-items: center;
@@ -102,9 +106,56 @@ body.blackout-mode .theme-toggle-icon {
 
 .display-ctrl-btn:hover {
   opacity: 1;
+  background: rgba(128, 128, 128, 0.3);
 }
 
 .display-ctrl-blackout.active {
   opacity: 1;
-  color: #ff5555;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* ─────────────────────────────────────────────────
+   모바일 반응형 최적화 (스마트폰 & 태블릿)
+   ───────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .slide-container {
+    padding: 2.5vh 4vw;
+  }
+
+  #slide-title {
+    font-size: clamp(1.25rem, 5.5vw, 2.2rem);
+    margin-bottom: 0.8rem;
+  }
+
+  #slide-contents-container {
+    gap: 0.8rem;
+  }
+
+  .slide-text {
+    font-size: clamp(1.05rem, 4.5vw, 1.8rem);
+    line-height: 1.4;
+  }
+
+  .slide-text[data-role="priest"],
+  .slide-text[data-role="leader_cong"],
+  .slide-text[data-role="leader"],
+  .slide-text[data-role="cong"] {
+    padding-left: 1.1em;
+    text-indent: -1.1em;
+  }
+
+  .display-icon-bar {
+    top: 8px;
+    right: 8px;
+    gap: 6px;
+  }
+
+  .display-ctrl-btn {
+    width: 36px;
+    height: 36px;
+    opacity: 0.6;
+  }
 }

@@ -10,6 +10,7 @@ export class DataProvider {
   async addSlide(massId, slideData) { throw new Error("Not implemented"); }
   async deleteSlide(massId, slideId) { throw new Error("Not implemented"); }
   async createMass(newMassData, sourceMassId) { throw new Error("Not implemented"); }
+  async updateMass(massId, updates) { throw new Error("Not implemented"); }
   async deleteMass(massId) { throw new Error("Not implemented"); }
   async reorderSlides(massId, orderedSlideIds) { throw new Error("Not implemented"); }
 }

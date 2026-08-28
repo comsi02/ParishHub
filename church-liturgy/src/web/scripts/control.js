@@ -236,15 +236,8 @@ function handleDrop() {
       dragPlaceholder.parentNode.removeChild(dragPlaceholder);
     }
 
-    const [movedItem] = slides.splice(fromIndex, 1);
-    slides.splice(toIndex, 0, movedItem);
-    slides.forEach((s, i) => s.sequence = i + 1);
-
-    setTimeout(() => { renderList(); }, 10);
-
-    const baseIds = slides.map(s => String(s.id).split('_p')[0]);
-    const uniqueBaseIds = [...new Set(baseIds)];
-    provider.reorderSlides(currentMassId, uniqueBaseIds).catch(err => {
+    const slideIds = slides.map(s => String(s.id));
+    provider.reorderSlides(currentMassId, slideIds).catch(err => {
       console.error('Failed to reorder slides', err);
       alert('순서 저장에 실패했습니다.');
     });
@@ -254,7 +247,7 @@ function handleDrop() {
 dragPlaceholder.addEventListener('dragover', e => e.preventDefault());
 dragPlaceholder.addEventListener('drop', (e) => { e.preventDefault(); handleDrop(); });
 
-// Modal Elements
+// Modal Elements (Create Mass)
 const btnNewMass       = document.getElementById('btn-new-mass');
 const modalNewMass     = document.getElementById('modal-new-mass');
 const btnModalCancel   = document.getElementById('btn-modal-cancel');
@@ -262,6 +255,14 @@ const btnModalCreate   = document.getElementById('btn-modal-create');
 const inputNewMassDate  = document.getElementById('new-mass-date');
 const inputNewMassTitle = document.getElementById('new-mass-title');
 const selectNewMassSource = document.getElementById('new-mass-source');
+
+// Modal Elements (Edit Mass)
+const btnEditMass          = document.getElementById('btn-edit-mass');
+const modalEditMass        = document.getElementById('modal-edit-mass');
+const btnModalEditCancel   = document.getElementById('btn-modal-edit-cancel');
+const btnModalEditSave     = document.getElementById('btn-modal-edit-save');
+const inputEditMassDate    = document.getElementById('edit-mass-date');
+const inputEditMassTitle   = document.getElementById('edit-mass-title');
 
 let cachedMasses = [];
 
@@ -274,6 +275,7 @@ function asArray(value) {
 // ─────────────────────────────────────────────────
 
 async function initApp() {
+  setupMobileTabs();
   setupThemeToggle();
   setupKeyboardControls();
   setupInlineEditing();
@@ -292,27 +294,45 @@ async function initApp() {
     });
 
     const state = await provider.getPresentationState();
-    if (state && state.massId && cachedMasses.find(m => m.id === state.massId)) {
-      currentMassId = state.massId;
+    let targetSlideId = null;
+
+    if (state) {
+      if (state.theme) {
+        document.body.setAttribute('data-theme', state.theme);
+        if (typeof window.updateControlThemeIcon === 'function') {
+          window.updateControlThemeIcon();
+        }
+      }
+
+      if (state.massId && cachedMasses.find(m => m.id === state.massId)) {
+        currentMassId = state.massId;
+      } else {
+        const massInfo = cachedMasses[0];
+        currentMassId = massInfo ? massInfo.id : '1';
+      }
+
+      if (state.displayMode) {
+        currentDisplayMode = state.displayMode;
+        updateDisplayControlButtons();
+      }
+
+      targetSlideId = state.slideId || null;
     } else {
-      massInfo = cachedMasses[0];
+      const massInfo = cachedMasses[0];
       currentMassId = massInfo ? massInfo.id : '1';
     }
 
     domMassSelect.value = currentMassId;
-    await loadSlidesForCurrentMass(state ? state.slideId : null);
-
-    if (state && state.displayMode) {
-      currentDisplayMode = state.displayMode;
-      updateDisplayControlButtons();
-    }
+    
+    // 초기 로드 시에는 다른 클라이언트에 덮어쓰지 않도록 shouldBroadcast = false 전달
+    await loadSlidesForCurrentMass(targetSlideId, false);
 
     domMassSelect.addEventListener('change', async (e) => {
       currentMassId = e.target.value;
-      await loadSlidesForCurrentMass();
+      await loadSlidesForCurrentMass(null, true);
     });
 
-    // presentation_state → onSnapshot으로 theme/displayMode 동기화
+    // presentation_state → onSnapshot으로 다른 제어기/화면과 실시간 양방향 동기화
     subscribeToState();
 
   } catch (err) {
@@ -326,11 +346,47 @@ async function initApp() {
   if (btnDeleteSlide) btnDeleteSlide.addEventListener('click', handleDeleteSlide);
 
   if (btnNewMass) btnNewMass.addEventListener('click', openNewMassModal);
+  if (btnEditMass) btnEditMass.addEventListener('click', openEditMassModal);
   if (btnDeleteMass) btnDeleteMass.addEventListener('click', handleDeleteMass);
   if (btnModalCancel) btnModalCancel.addEventListener('click', closeNewMassModal);
   if (btnModalCreate) btnModalCreate.addEventListener('click', handleCreateMass);
+  if (btnModalEditCancel) btnModalEditCancel.addEventListener('click', closeEditMassModal);
+  if (btnModalEditSave) btnModalEditSave.addEventListener('click', handleUpdateMass);
 
   setupDisplayControls();
+}
+
+// ─────────────────────────────────────────────────
+// 모바일 탭 제어 (진행 제어 vs 목록/편집)
+// ─────────────────────────────────────────────────
+
+function setupMobileTabs() {
+  const tabBtnControl = document.getElementById('tab-btn-control');
+  const tabBtnList    = document.getElementById('tab-btn-list');
+  const appContainer  = document.getElementById('app-main');
+
+  if (!tabBtnControl || !tabBtnList || !appContainer) return;
+
+  const setMobileTab = (tab) => {
+    if (tab === 'control') {
+      tabBtnControl.classList.add('active');
+      tabBtnList.classList.remove('active');
+      appContainer.classList.remove('mobile-view-list');
+      appContainer.classList.add('mobile-view-control');
+    } else {
+      tabBtnList.classList.add('active');
+      tabBtnControl.classList.remove('active');
+      appContainer.classList.remove('mobile-view-control');
+      appContainer.classList.add('mobile-view-list');
+    }
+  };
+
+  tabBtnControl.addEventListener('click', () => setMobileTab('control'));
+  tabBtnList.addEventListener('click', () => setMobileTab('list'));
+
+  // 기본 상태: 진행 제어 모드
+  setMobileTab('control');
+  window.switchToMobileControlTab = () => setMobileTab('control');
 }
 
 // ─────────────────────────────────────────────────
@@ -341,8 +397,9 @@ function subscribeToState() {
   if (unsubscribeState) unsubscribeState();
 
   if (typeof provider.onPresentationStateChange === 'function') {
-    unsubscribeState = provider.onPresentationStateChange((state) => {
+    unsubscribeState = provider.onPresentationStateChange(async (state) => {
       if (!state) return;
+      
       // 테마 동기화
       if (state.theme) {
         const currentTheme = document.body.getAttribute('data-theme');
@@ -357,6 +414,21 @@ function subscribeToState() {
       if (state.displayMode && state.displayMode !== currentDisplayMode) {
         currentDisplayMode = state.displayMode;
         updateDisplayControlButtons();
+      }
+      // 미사 ID 변경 감지 (다른 제어기가 미사를 바꿨을 때)
+      if (state.massId && state.massId !== currentMassId) {
+        currentMassId = state.massId;
+        if (domMassSelect) domMassSelect.value = currentMassId;
+        await loadSlidesForCurrentMass(state.slideId || null, false);
+        return;
+      }
+      // 슬라이드 ID 변경 감지 (다른 제어기가 슬라이드를 넘겼을 때)
+      if (state.slideId && state.slideId !== currentSlideId) {
+        if (slides.some(s => s.id === state.slideId)) {
+          currentSlideId = state.slideId;
+          renderList();
+          updatePreviewUI();
+        }
       }
     });
   }
@@ -414,7 +486,7 @@ function setupDisplayControls() {
 }
 
 // ─────────────────────────────────────────────────
-// 미사 목록 모달
+// 미사 목록 생성/수정 모달
 // ─────────────────────────────────────────────────
 
 function openNewMassModal() {
@@ -465,13 +537,7 @@ async function handleCreateMass() {
     }
 
     cachedMasses = asArray(await provider.getMasses());
-    domMassSelect.innerHTML = '';
-    cachedMasses.forEach(m => {
-      const option = document.createElement('option');
-      option.value = m.id;
-      option.textContent = formatMassOptionText(m);
-      domMassSelect.appendChild(option);
-    });
+    populateMassSelect();
 
     currentMassId = newMass.id;
     domMassSelect.value = currentMassId;
@@ -487,11 +553,68 @@ async function handleCreateMass() {
   }
 }
 
+// 미사 수정 모달
+function openEditMassModal() {
+  if (!currentMassId) {
+    showCustomAlert('수정할 미사가 선택되지 않았습니다.');
+    return;
+  }
+
+  const selectedMass = cachedMasses.find(m => String(m.id) === String(currentMassId));
+  if (!selectedMass) return;
+
+  inputEditMassDate.value = selectedMass.date || '';
+  inputEditMassTitle.value = selectedMass.title || '';
+  modalEditMass.classList.remove('hidden');
+}
+
+function closeEditMassModal() {
+  modalEditMass.classList.add('hidden');
+}
+
+async function handleUpdateMass() {
+  const date  = inputEditMassDate.value;
+  const title = inputEditMassTitle.value;
+
+  if (!date || !title) {
+    alert('날짜와 제목을 모두 입력해주세요.');
+    return;
+  }
+
+  btnModalEditSave.disabled = true;
+  btnModalEditSave.textContent = '저장 중...';
+
+  try {
+    await provider.updateMass(currentMassId, { date, title });
+    
+    // 캐시 목록 갱신
+    cachedMasses = asArray(await provider.getMasses());
+    populateMassSelect();
+
+    // 프레젠테이션 상태 갱신
+    await provider.setPresentationState({
+      massId: currentMassId,
+      slideId: currentSlideId,
+      theme: document.body.getAttribute('data-theme') || 'dark',
+      displayMode: currentDisplayMode,
+    });
+
+    closeEditMassModal();
+    showCustomAlert('미사 정보가 수정되었습니다.');
+  } catch (err) {
+    console.error('Failed to update mass', err);
+    alert('미사 정보 수정에 실패했습니다.\n\n' + (err.message || err));
+  } finally {
+    btnModalEditSave.disabled = false;
+    btnModalEditSave.textContent = '저장하기';
+  }
+}
+
 // ─────────────────────────────────────────────────
 // 슬라이드 로드 & 렌더
 // ─────────────────────────────────────────────────
 
-async function loadSlidesForCurrentMass(targetSlideId = null) {
+async function loadSlidesForCurrentMass(targetSlideId = null, shouldBroadcast = true) {
   slides = asArray(await provider.getSlides(currentMassId));
   slides.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
 
@@ -501,16 +624,19 @@ async function loadSlidesForCurrentMass(targetSlideId = null) {
     currentSlideId = slides.length > 0 ? slides[0].id : null;
   }
   renderList();
-  updatePreviewAndState();
+  updatePreviewUI();
+  if (shouldBroadcast) {
+    await broadcastState();
+  }
 }
 
 function setupThemeToggle() {
   window.updateControlThemeIcon = () => {
     const isDark = document.body.getAttribute('data-theme') === 'dark';
-    const svgOff = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A6 6 0 1 0 7.5 11.5c.76.76 1.23 1.52 1.41 2.5Z"/></svg>`;
-    const svgOn  = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="currentColor" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; color: #f59e0b;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A6 6 0 1 0 7.5 11.5c.76.76 1.23 1.52 1.41 2.5Z"/></svg>`;
-    btnThemeToggle.innerHTML = isDark ? svgOff : svgOn;
-    btnThemeToggle.title = isDark ? '어두운 테마 (클릭하여 켜기)' : '밝은 테마 (클릭하여 끄기)';
+    const sunIcon = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+    const moonIcon = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+    btnThemeToggle.innerHTML = isDark ? sunIcon : moonIcon;
+    btnThemeToggle.title = isDark ? '밝은 테마로 전환' : '어두운 테마로 전환';
   };
   window.updateControlThemeIcon();
 
@@ -520,12 +646,7 @@ function setupThemeToggle() {
     document.body.setAttribute('data-theme', newTheme);
     window.updateControlThemeIcon();
     try {
-      await provider.setPresentationState({
-        massId: currentMassId,
-        slideId: currentSlideId,
-        theme: newTheme,
-        displayMode: currentDisplayMode,
-      });
+      await broadcastState();
     } catch (err) {
       console.error('Failed to update theme state', err);
     }
@@ -587,7 +708,12 @@ function renderList() {
     li.addEventListener('click', async () => {
       currentSlideId = slide.id;
       renderList();
-      await updatePreviewAndState();
+      updatePreviewUI();
+      await broadcastState();
+      // 모바일 화면에서는 항목 선택 시 진행 제어 탭으로 자동 복귀
+      if (typeof window.switchToMobileControlTab === 'function') {
+        window.switchToMobileControlTab();
+      }
     });
     domSlideList.appendChild(li);
   });
@@ -600,38 +726,51 @@ function renderList() {
   }
 }
 
-function selectSlide(id) {
+async function selectSlide(id, shouldBroadcast = true) {
   if (currentSlideId === id) return;
   currentSlideId = id;
   renderList();
-  updatePreviewAndState();
+  updatePreviewUI();
+  if (shouldBroadcast) {
+    await broadcastState();
+  }
 }
 
 function nextSlide() {
   const currentIndex = slides.findIndex(s => s.id === currentSlideId);
   if (currentIndex >= 0 && currentIndex < slides.length - 1) {
-    selectSlide(slides[currentIndex + 1].id);
+    selectSlide(slides[currentIndex + 1].id, true);
   }
 }
 
 function prevSlide() {
   const currentIndex = slides.findIndex(s => s.id === currentSlideId);
   if (currentIndex > 0) {
-    selectSlide(slides[currentIndex - 1].id);
+    selectSlide(slides[currentIndex - 1].id, true);
   }
 }
 
 function setupKeyboardControls() {
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
-    if (e.key === 'ArrowRight') { e.preventDefault(); nextSlide(); }
-    else if (e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
-    else if (e.key === 'Home') { e.preventDefault(); if (slides.length > 0) selectSlide(slides[0].id); }
-    else if (e.key === 'End')  { e.preventDefault(); if (slides.length > 0) selectSlide(slides[slides.length - 1].id); }
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+      e.preventDefault();
+      nextSlide();
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      prevSlide();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      if (slides.length > 0) selectSlide(slides[0].id, true);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      if (slides.length > 0) selectSlide(slides[slides.length - 1].id, true);
+    }
   });
 }
 
-async function updatePreviewAndState() {
+// 순수 UI 렌더링 (Firestore 쓰기 없음)
+function updatePreviewUI() {
   const currentIndex = slides.findIndex(s => s.id === currentSlideId);
   if (currentIndex === -1) return;
 
@@ -690,7 +829,11 @@ async function updatePreviewAndState() {
 
   const activeLi = domSlideList.querySelector('.active');
   if (activeLi) activeLi.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
 
+// Firestore 상태 전송 함수 (명시적 사용자 액션 시에만 호출)
+async function broadcastState() {
+  if (!currentMassId) return;
   try {
     await provider.setPresentationState({
       massId: currentMassId,
@@ -699,8 +842,14 @@ async function updatePreviewAndState() {
       displayMode: currentDisplayMode,
     });
   } catch (err) {
-    console.error('Failed to update state', err);
+    console.error('Failed to broadcast presentation state', err);
   }
+}
+
+// 하위 호환용 래퍼
+async function updatePreviewAndState() {
+  updatePreviewUI();
+  await broadcastState();
 }
 
 // ─────────────────────────────────────────────────

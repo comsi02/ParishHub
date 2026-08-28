@@ -34,27 +34,15 @@ export class LocalProvider extends DataProvider {
     
     // Apply local overrides
     slides = slides.map(s => overrides[s.id] ? { ...s, ...overrides[s.id] } : s);
-    
-    // Handle pagination (---PAGE---)
-    const paginatedSlides = [];
-    slides.forEach(slide => {
-      const content = slide.content || '';
-      if (content.includes('---PAGE---')) {
-        const parts = content.split('---PAGE---');
-        parts.forEach((part, index) => {
-          paginatedSlides.push({
-            ...slide,
-            id: `${slide.id}_p${index + 1}`,
-            title: `${slide.title} ${index + 1}/${parts.length}`,
-            content: part.trim()
-          });
-        });
-      } else {
-        paginatedSlides.push(slide);
-      }
-    });
-    
-    return paginatedSlides;
+    return slides;
+  }
+
+  async updateMass(massId, updates) {
+    const updatedMassesJSON = localStorage.getItem('liturgy_updated_masses');
+    const updatedMasses = updatedMassesJSON ? JSON.parse(updatedMassesJSON) : {};
+    updatedMasses[massId] = { ...(updatedMasses[massId] || {}), ...updates };
+    localStorage.setItem('liturgy_updated_masses', JSON.stringify(updatedMasses));
+    return true;
   }
 
   async getPresentationState() {

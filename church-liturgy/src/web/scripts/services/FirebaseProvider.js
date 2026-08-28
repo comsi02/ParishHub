@@ -94,6 +94,15 @@ export class FirebaseProvider extends DataProvider {
     };
   }
 
+  async updateMass(massId, updates) {
+    const massRef = doc(db, 'masses', massId);
+    await updateDoc(massRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+    return true;
+  }
+
   async deleteMass(massId) {
     await updateDoc(doc(db, 'masses', massId), { status: 'Archived' });
     return true;
@@ -110,31 +119,7 @@ export class FirebaseProvider extends DataProvider {
     );
     const snap = await getDocs(q);
     const slides = snap.docs.map(docToObj);
-    slides.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
-
-    // ---PAGE--- 분할 처리 (기존 로직 유지)
-    return this._paginateSlides(slides);
-  }
-
-  _paginateSlides(slides) {
-    const result = [];
-    slides.forEach((slide) => {
-      const content = String(slide.content || '');
-      if (content.indexOf('---PAGE---') !== -1) {
-        const parts = content.split('---PAGE---');
-        parts.forEach((part, index) => {
-          result.push({
-            ...slide,
-            id:      `${slide.id}_p${index + 1}`,
-            title:   `${slide.title} ${index + 1}/${parts.length}`,
-            content: part.trim(),
-          });
-        });
-      } else {
-        result.push(slide);
-      }
-    });
-    return result;
+    return slides.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
   }
 
   async addSlide(massId, slideData) {
@@ -155,16 +140,13 @@ export class FirebaseProvider extends DataProvider {
   }
 
   async updateSlide(massId, slideId, updates) {
-    // 페이지네이션된 ID 처리 (예: "abc123_p1" → "abc123")
-    const baseSlideId = String(slideId).split('_p')[0];
-    const ref = doc(db, 'masses', massId, 'slides', baseSlideId);
+    const ref = doc(db, 'masses', massId, 'slides', slideId);
     await updateDoc(ref, { ...updates, updatedAt: serverTimestamp() });
     return true;
   }
 
   async deleteSlide(massId, slideId) {
-    const baseSlideId = String(slideId).split('_p')[0];
-    const ref = doc(db, 'masses', massId, 'slides', baseSlideId);
+    const ref = doc(db, 'masses', massId, 'slides', slideId);
     await updateDoc(ref, { enabled: false, updatedAt: serverTimestamp() });
     return true;
   }
@@ -172,8 +154,7 @@ export class FirebaseProvider extends DataProvider {
   async reorderSlides(massId, orderedSlideIds) {
     const batch = writeBatch(db);
     orderedSlideIds.forEach((slideId, index) => {
-      const baseSlideId = String(slideId).split('_p')[0];
-      const ref = doc(db, 'masses', massId, 'slides', baseSlideId);
+      const ref = doc(db, 'masses', massId, 'slides', slideId);
       batch.update(ref, { sequence: index + 1 });
     });
     await batch.commit();
@@ -231,7 +212,7 @@ export class FirebaseProvider extends DataProvider {
       (snap) => {
         const slides = snap.docs.map(docToObj)
           .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
-        callback(this._paginateSlides(slides));
+        callback(slides);
       },
       (error) => {
         console.error('[FirebaseProvider] slides 구독 오류:', error);
