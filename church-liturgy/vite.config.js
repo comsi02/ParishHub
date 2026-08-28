@@ -1,10 +1,10 @@
 import { defineConfig } from 'vite';
-import { viteSingleFile } from 'vite-plugin-singlefile';
 import { resolve } from 'path';
 
 export default defineConfig({
-  plugins: [viteSingleFile()],
+  // viteSingleFile 제거: Firebase Hosting은 별도 JS/CSS 파일 지원
   build: {
+    outDir: 'dist',
     rollupOptions: {
       input: {
         display: resolve(__dirname, 'display.html'),

@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "slides",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "enabled", "order": "ASCENDING" },
+        { "fieldPath": "sequence", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

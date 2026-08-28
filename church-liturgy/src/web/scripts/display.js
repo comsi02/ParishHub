@@ -1,13 +1,19 @@
+// display.js
+// 비인증 접근 허용 (편집 기능 없음)
+// presentation_state → Firestore onSnapshot 실시간 구독
+
 import { getProvider } from './services/index.js';
 
 const provider = getProvider();
-const POLLING_INTERVAL = 1000;
 
 let currentMassId = null;
 let currentSlideId = null;
 let slidesCache = [];
-let pollingIntervalId = null;
 let currentDisplayMode = 'normal'; // 'normal' | 'blackout' | 'freeze'
+
+// onSnapshot 구독 해제 함수
+let unsubscribeState = null;
+let unsubscribeSlides = null;
 
 const domSlideContent = document.getElementById('slide-content');
 const domLoading = document.getElementById('loading');
@@ -16,67 +22,103 @@ const domSlideTitle = document.getElementById('slide-title');
 async function init() {
   setupThemeToggle();
   setupKeyboardControls();
-  setupInlineEditing();
   setupDisplayControls();
-  await pollState();
-  pollingIntervalId = setInterval(pollState, POLLING_INTERVAL);
+  subscribeToState();
 }
 
-async function pollState() {
-  try {
-    const state = await provider.getPresentationState();
-    if (!state || !state.massId) {
-      showLoading("미사가 선택되지 않았습니다.");
-      return;
-    }
+// ─────────────────────────────────────────────────
+// Firestore 실시간 구독
+// ─────────────────────────────────────────────────
 
-    if (state.massId !== currentMassId) {
-      currentMassId = state.massId;
-      showLoading("미사 준비 중...");
-      slidesCache = await provider.getSlides(currentMassId);
-      slidesCache.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
-      // Cache locally
-      localStorage.setItem(`slides_${currentMassId}`, JSON.stringify(slidesCache));
-    }
+function subscribeToState() {
+  // 기존 구독 해제
+  if (unsubscribeState) unsubscribeState();
 
-    // Handle displayMode
-    const newMode = state.displayMode || 'normal';
-    if (newMode !== currentDisplayMode) {
-      currentDisplayMode = newMode;
-      applyDisplayMode();
-    }
-
-    // Only update slide if not frozen/blacked out
-    if (currentDisplayMode === 'normal') {
-      const newLastUpdated = state.lastUpdated || 0;
-      const slideChanged = state.slideId !== currentSlideId;
-      const contentUpdated = newLastUpdated > (window._lastRenderedAt || 0);
-
-      if (slideChanged || contentUpdated) {
-        currentSlideId = state.slideId;
-        window._lastRenderedAt = newLastUpdated;
-        // Refresh slides cache to pick up any edits saved via updateSlide
-        slidesCache = await provider.getSlides(currentMassId);
-        slidesCache.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
-        renderCurrentSlide();
+  // FirebaseProvider의 onSnapshot 메서드로 실시간 구독
+  if (typeof provider.onPresentationStateChange === 'function') {
+    unsubscribeState = provider.onPresentationStateChange(handleStateChange);
+  } else {
+    // LocalProvider 폴백: 1초 polling
+    showLoading('로딩 중...');
+    const poll = async () => {
+      try {
+        const state = await provider.getPresentationState();
+        await handleStateChange(state);
+      } catch (e) {
+        console.error('Polling error:', e);
       }
-    }
-    
-    // Sync theme
-    if (state.theme) {
-      const currentTheme = document.body.getAttribute('data-theme');
-      if (state.theme !== currentTheme) {
-        document.body.setAttribute('data-theme', state.theme);
-        if (typeof window.updateDisplayThemeIcon === 'function') {
-          window.updateDisplayThemeIcon();
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Polling error:", error);
-    // Keep showing current slide on temporary error
+    };
+    poll();
+    setInterval(poll, 1000);
   }
 }
+
+async function handleStateChange(state) {
+  if (!state || !state.massId) {
+    showLoading('미사가 선택되지 않았습니다.');
+    return;
+  }
+
+  // 미사가 바뀐 경우 슬라이드 구독 갱신
+  if (state.massId !== currentMassId) {
+    currentMassId = state.massId;
+    showLoading('미사 준비 중...');
+    subscribeToSlides(currentMassId);
+  }
+
+  // displayMode 처리
+  const newMode = state.displayMode || 'normal';
+  if (newMode !== currentDisplayMode) {
+    currentDisplayMode = newMode;
+    applyDisplayMode();
+  }
+
+  // 슬라이드 변경 처리 (freeze/blackout 중에는 화면 변경 안 함)
+  if (currentDisplayMode === 'normal') {
+    const slideChanged = state.slideId !== currentSlideId;
+    const contentUpdated = (state.lastUpdated || 0) > (window._lastRenderedAt || 0);
+
+    if (slideChanged || contentUpdated) {
+      currentSlideId = state.slideId;
+      window._lastRenderedAt = state.lastUpdated || 0;
+      renderCurrentSlide();
+    }
+  }
+
+  // 테마 동기화
+  if (state.theme) {
+    const currentTheme = document.body.getAttribute('data-theme');
+    if (state.theme !== currentTheme) {
+      document.body.setAttribute('data-theme', state.theme);
+      if (typeof window.updateDisplayThemeIcon === 'function') {
+        window.updateDisplayThemeIcon();
+      }
+    }
+  }
+}
+
+function subscribeToSlides(massId) {
+  // 기존 슬라이드 구독 해제
+  if (unsubscribeSlides) unsubscribeSlides();
+
+  if (typeof provider.onSlidesChange === 'function') {
+    unsubscribeSlides = provider.onSlidesChange(massId, (newSlides) => {
+      slidesCache = newSlides.slice().sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+      localStorage.setItem(`slides_${massId}`, JSON.stringify(slidesCache));
+      renderCurrentSlide();
+    });
+  } else {
+    // LocalProvider 폴백
+    provider.getSlides(massId).then((slides) => {
+      slidesCache = slides.slice().sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+      renderCurrentSlide();
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────
+// 렌더링
+// ─────────────────────────────────────────────────
 
 function applyDisplayMode() {
   const overlay = document.getElementById('display-mode-overlay');
@@ -89,15 +131,13 @@ function applyDisplayMode() {
     overlay.style.display = 'flex';
     overlay.style.backgroundColor = '#000000';
     overlay.innerHTML = '';
-  } else if (currentDisplayMode === 'freeze') {
-    overlay.style.display = 'none';
   } else {
     overlay.style.display = 'none';
-    // Resume: render latest slide
-    renderCurrentSlide();
+    if (currentDisplayMode === 'normal') {
+      renderCurrentSlide();
+    }
   }
 
-  // Always sync button visuals
   updateDisplayCtrlButtons();
 }
 
@@ -116,7 +156,7 @@ function renderCurrentSlide() {
 
   domSlideTitle.textContent = slide.title;
   domSlideTitle.style.display = slide.hideTitle ? 'none' : '';
-  
+
   const contentBlocks = document.querySelectorAll('.slide-text');
   contentBlocks.forEach((p, idx) => {
     const cData = slide.contents[idx];
@@ -139,42 +179,39 @@ function showLoading(msg) {
   domLoading.textContent = msg;
 }
 
+// ─────────────────────────────────────────────────
+// 테마 토글 (읽기 전용: 현재 state 테마 표시)
+// ─────────────────────────────────────────────────
+
 function setupThemeToggle() {
   const btnThemeToggle = document.getElementById('theme-toggle');
   if (!btnThemeToggle) return;
-  
+
   window.updateDisplayThemeIcon = () => {
     const isDark = document.body.getAttribute('data-theme') === 'dark';
     const svgOff = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A6 6 0 1 0 7.5 11.5c.76.76 1.23 1.52 1.41 2.5Z"/></svg>`;
-    const svgOn = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="currentColor" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; color: #f59e0b;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A6 6 0 1 0 7.5 11.5c.76.76 1.23 1.52 1.41 2.5Z"/></svg>`;
-    
+    const svgOn  = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="currentColor" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; color: #f59e0b;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A6 6 0 1 0 7.5 11.5c.76.76 1.23 1.52 1.41 2.5Z"/></svg>`;
     btnThemeToggle.innerHTML = isDark ? svgOff : svgOn;
     btnThemeToggle.title = isDark ? '어두운 테마 (클릭하여 켜기)' : '밝은 테마 (클릭하여 끄기)';
   };
   window.updateDisplayThemeIcon();
 
-  btnThemeToggle.addEventListener('click', async () => {
+  // display는 비인증이므로 setPresentationState를 직접 호출하지 않음
+  // 테마 변경은 control에서만 가능
+  btnThemeToggle.addEventListener('click', () => {
     const isDark = document.body.getAttribute('data-theme') === 'dark';
-    const newTheme = isDark ? 'light' : 'dark';
-    document.body.setAttribute('data-theme', newTheme);
+    document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
     window.updateDisplayThemeIcon();
-    
-    try {
-      await provider.setPresentationState({
-        massId: currentMassId,
-        slideId: currentSlideId,
-        theme: newTheme
-      });
-    } catch (err) {
-      console.error("Failed to update theme state from display", err);
-    }
   });
 }
 
+// ─────────────────────────────────────────────────
+// 키보드 컨트롤 (읽기 전용 탐색)
+// ─────────────────────────────────────────────────
+
 function setupKeyboardControls() {
-  document.addEventListener('keydown', async (e) => {
+  document.addEventListener('keydown', (e) => {
     if (!slidesCache.length) return;
-    
     const currentIndex = slidesCache.findIndex(s => s.id === currentSlideId);
     let newIndex = currentIndex;
 
@@ -186,109 +223,41 @@ function setupKeyboardControls() {
       if (currentIndex > 0) newIndex = currentIndex - 1;
     }
 
+    // display는 읽기 전용: state 업데이트 없이 로컬 렌더만
     if (newIndex !== currentIndex && newIndex >= 0) {
       currentSlideId = slidesCache[newIndex].id;
       renderCurrentSlide();
-      
-      try {
-        await provider.setPresentationState({
-          massId: currentMassId,
-          slideId: currentSlideId
-        });
-      } catch (err) {
-        console.error("Failed to update state from display", err);
-      }
     }
   });
 }
 
-function setupInlineEditing() {
-  const handleEdit = async (e) => {
-    if (!currentSlideId) return;
-    const target = e.target;
-    
-    const currentIndex = slidesCache.findIndex(s => s.id === currentSlideId);
-    if (currentIndex === -1) return;
-    const slide = slidesCache[currentIndex];
-    const newText = target.innerText;
-    
-    let changed = false;
-    const updates = {};
-    
-    if (target.id === 'slide-title') {
-      if (slide.title !== newText) {
-        slide.title = newText;
-        updates.title = newText;
-        changed = true;
-      }
-    } else if (target.classList.contains('slide-text')) {
-      const idx = parseInt(target.getAttribute('data-index'), 10);
-      if (!slide.contents) slide.contents = [];
-      while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none' });
-      
-      if (slide.contents[idx].text !== newText) {
-        slide.contents[idx].text = newText;
-        updates.contents = slide.contents;
-        changed = true;
-      }
-    }
-    
-    if (changed) {
-      try {
-        await provider.updateSlide(currentMassId, currentSlideId, updates);
-      } catch (err) {
-        console.error("Failed to save slide edit", err);
-      }
-    }
-  };
-
-  domSlideTitle.addEventListener('blur', handleEdit);
-  
-  const contentBlocks = document.querySelectorAll('.slide-text');
-  contentBlocks.forEach(p => p.addEventListener('blur', handleEdit));
-}
+// ─────────────────────────────────────────────────
+// Blackout 버튼 (display 로컬 전용)
+// ─────────────────────────────────────────────────
 
 function updateDisplayCtrlButtons() {
   const btnBlackout = document.getElementById('display-btn-blackout');
   if (!btnBlackout) return;
 
   const isBlackout = currentDisplayMode === 'blackout';
-
-  // Blackout button: crossed-out monitor when off, normal monitor when on (active = blackout engaged)
   btnBlackout.classList.toggle('active', isBlackout);
   btnBlackout.title = isBlackout ? 'Display 켜기 (현재: 꺼짐)' : 'Display 끄기';
   btnBlackout.innerHTML = isBlackout
-    ? `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>`
-    : `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/><line x1="2" y1="3" x2="22" y2="17"/></svg>`;
-}
-
-async function setDisplayModeFromDisplay(mode) {
-  currentDisplayMode = mode;
-  applyDisplayMode();
-  updateDisplayCtrlButtons();
-  try {
-    await provider.setPresentationState({
-      massId: currentMassId,
-      slideId: currentSlideId,
-      theme: document.body.getAttribute('data-theme') || 'dark',
-      displayMode: mode
-    });
-  } catch (err) {
-    console.error("Failed to set display mode from display", err);
-  }
+    ? `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>`
+    : `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/><line x1="2" y1="3" x2="22" y2="17"/></svg>`;
 }
 
 function setupDisplayControls() {
   const btnBlackout = document.getElementById('display-btn-blackout');
-
   if (btnBlackout) {
     btnBlackout.addEventListener('click', (e) => {
       e.stopPropagation();
+      // display 페이지의 blackout은 로컬 전용 (state 저장 없음, 비인증이므로)
       const newMode = currentDisplayMode === 'blackout' ? 'normal' : 'blackout';
-      setDisplayModeFromDisplay(newMode);
+      currentDisplayMode = newMode;
+      applyDisplayMode();
     });
   }
-
   updateDisplayCtrlButtons();
 }
 

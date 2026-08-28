@@ -1,9 +1,11 @@
 import { LocalProvider } from './LocalProvider.js';
-import { GasProvider } from './GasProvider.js';
+import { FirebaseProvider } from './FirebaseProvider.js';
 
 export function getProvider() {
-  if (typeof google !== 'undefined' && typeof google.script !== 'undefined') {
-    return new GasProvider();
+  // 로컬 Mock 모드 강제 지정 시
+  if (import.meta.env.VITE_PROVIDER === 'local') {
+    return new LocalProvider();
   }
-  return new LocalProvider();
+  // 기본: Firebase 사용
+  return new FirebaseProvider();
 }
