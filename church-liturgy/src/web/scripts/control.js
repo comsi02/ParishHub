@@ -335,22 +335,30 @@ function setAppMode(mode) {
 
   // 편집 가능 여부 업데이트
   updateContentEditable();
+
+  // 모바일 메뉴 모드 표시 동기화
+  if (typeof window.syncMobileMenuMode === 'function') {
+    window.syncMobileMenuMode();
+  }
+
+  // 프리젠테이션 모드로 전환 시 모바일은 진행 제어 탭으로 이동
+  if (mode === 'presentation' && typeof window.switchToMobileControlTab === 'function') {
+    window.switchToMobileControlTab();
+  }
 }
 
 function updateContentEditable() {
-  const isTitleEditable = currentAppMode === 'admin';
+  const editable = currentAppMode === 'admin';
 
   if (domPreviewTitle) {
-    domPreviewTitle.setAttribute('contenteditable', isTitleEditable ? 'true' : 'false');
+    domPreviewTitle.setAttribute('contenteditable', editable ? 'true' : 'false');
   }
   if (domPreviewListTitle) {
-    domPreviewListTitle.setAttribute('contenteditable', isTitleEditable ? 'true' : 'false');
+    domPreviewListTitle.setAttribute('contenteditable', editable ? 'true' : 'false');
   }
 
-  // 본문 내용은 프리젠테이션 모드 및 관리자 모드 모두에서 수정 가능
-  const pElements = document.querySelectorAll('.preview-text');
-  pElements.forEach(p => {
-    p.setAttribute('contenteditable', 'true');
+  document.querySelectorAll('.preview-text').forEach(p => {
+    p.setAttribute('contenteditable', editable ? 'true' : 'false');
   });
 }
 
@@ -362,6 +370,8 @@ async function initApp() {
   setupModeSwitcher();
   setupMassCombobox();
   setupMobileTabs();
+  setupMobileMenu();
+  setupSwipeGestures();
   setupThemeToggle();
   setupKeyboardControls();
   setupInlineEditing();
@@ -459,6 +469,8 @@ async function initApp() {
 // 모바일 탭 제어 (진행 제어 vs 목록/편집)
 // ─────────────────────────────────────────────────
 
+let currentMobileTab = 'control';
+
 function setupMobileTabs() {
   const tabBtnControl = document.getElementById('tab-btn-control');
   const tabBtnList    = document.getElementById('tab-btn-list');
@@ -467,6 +479,7 @@ function setupMobileTabs() {
   if (!tabBtnControl || !tabBtnList || !appContainer) return;
 
   const setMobileTab = (tab) => {
+    currentMobileTab = tab;
     if (tab === 'control') {
       tabBtnControl.classList.add('active');
       tabBtnList.classList.remove('active');
@@ -483,9 +496,175 @@ function setupMobileTabs() {
   tabBtnControl.addEventListener('click', () => setMobileTab('control'));
   tabBtnList.addEventListener('click', () => setMobileTab('list'));
 
-  // 기본 상태: 진행 제어 모드
   setMobileTab('control');
   window.switchToMobileControlTab = () => setMobileTab('control');
+  window.switchToMobileListTab = () => setMobileTab('list');
+  window.setMobileTab = setMobileTab;
+}
+
+// ─────────────────────────────────────────────────
+// 모바일 햄버거 메뉴
+// ─────────────────────────────────────────────────
+
+function setupMobileMenu() {
+  const drawer = document.getElementById('mobile-menu-drawer');
+  const btnOpen = document.getElementById('btn-mobile-menu');
+  const btnClose = document.getElementById('btn-close-mobile-menu');
+  const backdrop = document.getElementById('mobile-menu-backdrop');
+  if (!drawer || !btnOpen) return;
+
+  const openMenu = () => {
+    syncMobileMenuUser();
+    syncMobileMenuTheme();
+    syncMobileMenuMode();
+    drawer.classList.remove('hidden');
+  };
+  const closeMenu = () => drawer.classList.add('hidden');
+
+  btnOpen.addEventListener('click', openMenu);
+  btnClose?.addEventListener('click', closeMenu);
+  backdrop?.addEventListener('click', closeMenu);
+
+  const wire = (id, action) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', () => {
+      closeMenu();
+      action();
+    });
+  };
+
+  wire('mobile-btn-mode-presentation', () => setAppMode('presentation'));
+  wire('mobile-btn-mode-admin', () => {
+    setAppMode('admin');
+    if (typeof window.switchToMobileListTab === 'function') {
+      window.switchToMobileListTab();
+    }
+  });
+  wire('mobile-btn-new-mass', () => openNewMassModal());
+  wire('mobile-btn-edit-mass', () => openEditMassModal());
+  wire('mobile-btn-delete-mass', () => handleDeleteMass());
+  wire('mobile-btn-logout', () => btnLogout?.click());
+
+  const mobileThemeBtn = document.getElementById('mobile-btn-theme-toggle');
+  if (mobileThemeBtn) {
+    mobileThemeBtn.addEventListener('click', () => {
+      btnThemeToggle?.click();
+      syncMobileMenuTheme();
+    });
+  }
+
+  window.syncMobileMenuMode = syncMobileMenuMode;
+}
+
+function syncMobileMenuUser() {
+  const desktopName = document.getElementById('user-name');
+  const mobileName = document.getElementById('mobile-user-name');
+  if (mobileName && desktopName) {
+    mobileName.textContent = desktopName.textContent || '관리자';
+  }
+}
+
+function syncMobileMenuTheme() {
+  const isDark = document.body.getAttribute('data-theme') === 'dark';
+  const icon = document.getElementById('mobile-theme-icon');
+  const text = document.getElementById('mobile-theme-text');
+  if (icon) icon.textContent = isDark ? '☀️' : '🌙';
+  if (text) text.textContent = isDark ? '밝은 테마로 전환' : '어두운 테마로 전환';
+}
+
+function syncMobileMenuMode() {
+  const btnPres = document.getElementById('mobile-btn-mode-presentation');
+  const btnAdmin = document.getElementById('mobile-btn-mode-admin');
+  btnPres?.classList.toggle('active-mode', currentAppMode === 'presentation');
+  btnAdmin?.classList.toggle('active-mode', currentAppMode === 'admin');
+}
+
+// ─────────────────────────────────────────────────
+// 스와이프 제스처 (슬라이드 넘기기 + 탭 전환)
+// ─────────────────────────────────────────────────
+
+function setupSwipeGestures() {
+  const previewBox = document.getElementById('preview-box');
+  const controlMain = document.querySelector('.control-main');
+
+  // 미리보기: 좌/우 스와이프로 슬라이드 이동
+  if (previewBox) {
+    attachHorizontalSwipe(previewBox, {
+      threshold: 48,
+      onSwipeLeft: () => {
+        flashSwipe(previewBox);
+        nextSlide();
+      },
+      onSwipeRight: () => {
+        flashSwipe(previewBox);
+        prevSlide();
+      },
+    });
+  }
+
+  // 메인 영역: 넓은 스와이프로 모바일 탭(진행 제어 ↔ 목록) 전환
+  // 미리보기 안에서의 제스처는 위 핸들러가 우선 처리
+  if (controlMain) {
+    attachHorizontalSwipe(controlMain, {
+      threshold: 80,
+      ignoreSelector: '#preview-box, .slide-list, input, textarea, select, button, [contenteditable="true"]',
+      onSwipeLeft: () => {
+        if (window.innerWidth > 768) return;
+        if (currentMobileTab === 'control' && typeof window.switchToMobileListTab === 'function') {
+          window.switchToMobileListTab();
+        }
+      },
+      onSwipeRight: () => {
+        if (window.innerWidth > 768) return;
+        if (currentMobileTab === 'list' && typeof window.switchToMobileControlTab === 'function') {
+          window.switchToMobileControlTab();
+        }
+      },
+    });
+  }
+}
+
+function flashSwipe(el) {
+  if (!el) return;
+  el.classList.remove('swipe-flash');
+  // force reflow
+  void el.offsetWidth;
+  el.classList.add('swipe-flash');
+}
+
+function attachHorizontalSwipe(el, { threshold = 50, onSwipeLeft, onSwipeRight, ignoreSelector } = {}) {
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+
+  el.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    if (ignoreSelector && e.target.closest?.(ignoreSelector)) return;
+    // contenteditable / 입력 중에는 스와이프 무시
+    if (e.target.closest?.('[contenteditable="true"], input, textarea, select')) return;
+    const t = e.touches[0];
+    startX = t.clientX;
+    startY = t.clientY;
+    tracking = true;
+  }, { passive: true });
+
+  el.addEventListener('touchend', (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    if (Math.abs(dx) < threshold) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.2) return; // 세로 스크롤 우선
+    if (dx < 0) onSwipeLeft?.();
+    else onSwipeRight?.();
+  }, { passive: true });
+
+  el.addEventListener('touchcancel', () => {
+    tracking = false;
+  }, { passive: true });
 }
 
 // ─────────────────────────────────────────────────
@@ -792,10 +971,15 @@ function setupThemeToggle() {
     const isDark = document.body.getAttribute('data-theme') === 'dark';
     const sunIcon = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
     const moonIcon = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
-    btnThemeToggle.innerHTML = isDark ? sunIcon : moonIcon;
-    btnThemeToggle.title = isDark ? '밝은 테마로 전환' : '어두운 테마로 전환';
+    if (btnThemeToggle) {
+      btnThemeToggle.innerHTML = isDark ? sunIcon : moonIcon;
+      btnThemeToggle.title = isDark ? '밝은 테마로 전환' : '어두운 테마로 전환';
+    }
+    syncMobileMenuTheme();
   };
   window.updateControlThemeIcon();
+
+  if (!btnThemeToggle) return;
 
   btnThemeToggle.addEventListener('click', async () => {
     const isDark = document.body.getAttribute('data-theme') === 'dark';
@@ -1083,9 +1267,8 @@ function setupInlineEditing() {
       showSaveStatus('saving', '저장 중...');
       await provider.updateSlide(currentMassId, currentSlideId, updates);
       if (updates.title !== undefined || updates.listTitle !== undefined) renderList();
-      if (currentAppMode === 'presentation') {
-        await broadcastState();
-      }
+      // contents(글씨 크기 등) 변경도 display가 즉시 반영하도록 state 갱신
+      await broadcastState();
       showSaveStatus('success', '✅ 저장됨');
     } catch (err) {
       console.error('Failed to save slide edit', err);

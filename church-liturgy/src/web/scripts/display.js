@@ -176,9 +176,13 @@ function renderCurrentSlide() {
       p.setAttribute('data-bold', cData.bold ? 'true' : 'false');
       p.setAttribute('data-size', cData.size || 'normal');
       p.style.color = cData.color || '';
+      // inline font-size 제거 → CSS data-size 규칙이 적용되도록
+      p.style.fontSize = '';
     } else {
       p.style.display = 'none';
       p.textContent = '';
+      p.removeAttribute('data-size');
+      p.style.fontSize = '';
     }
   });
 }

@@ -288,7 +288,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────
-   프리젠테이션 모드 전용 스타일
+   프리젠테이션 모드 전용 스타일 (송출 집중 뷰)
    ───────────────────────────────────────────────── */
 
 #app-main.mode-presentation .btn-edit-mass,
@@ -297,13 +297,22 @@ body {
 #app-main.mode-presentation .list-actions,
 #app-main.mode-presentation .slide-drag-handle,
 #app-main.mode-presentation .content-drag-handle,
+#app-main.mode-presentation .content-toolbar,
+#app-main.mode-presentation .content-actions,
 #app-main.mode-presentation .title-field-label,
 #app-main.mode-presentation .list-title-row,
 #app-main.mode-presentation .btn-hide-title,
-#app-main.mode-presentation .content-actions,
 #app-main.mode-presentation #btn-add-content,
 #app-main.mode-presentation .admin-mode-badge {
   display: none !important;
+}
+
+#app-main.mode-presentation .content-block {
+  border: none !important;
+  background: transparent !important;
+  padding: 0.15rem 0 !important;
+  margin-bottom: 0.35rem !important;
+  box-shadow: none !important;
 }
 
 #app-main.mode-presentation .preview-list-title-input,
@@ -314,14 +323,9 @@ body {
 }
 
 #app-main.mode-presentation .preview-text {
-  cursor: text;
-  border-bottom: 1px dashed transparent;
-  transition: border-color 0.2s ease;
-}
-
-#app-main.mode-presentation .preview-text:hover,
-#app-main.mode-presentation .preview-text:focus {
-  border-bottom-color: var(--accent-color);
+  cursor: default;
+  user-select: none;
+  border: 1px solid transparent !important;
 }
 
 /* ─────────────────────────────────────────────────
@@ -1037,42 +1041,7 @@ p[data-role="cong"]::before { content: "●  "; font-weight: bold; }
   cursor: pointer;
 }
 
-/* Mobile Responsive UI */
-@media (max-width: 768px) {
-  .control-main {
-    flex-direction: column;
-    height: auto;
-    padding: 0.5rem;
-  }
-  
-  .left-panel {
-    border-right: none;
-    border-bottom: 1px solid var(--border-color);
-    padding-right: 0;
-    padding-bottom: 1rem;
-    max-height: 40vh; /* Keep list scrollable on mobile */
-  }
-  
-  .right-panel {
-    padding-top: 1rem;
-  }
 
-  .preview-box {
-    padding: 1rem;
-    --title-size: 1.5rem;
-    --content-size: 1.2rem;
-  }
-
-  .control-btn {
-    padding: 0.75rem;
-    font-size: 1rem;
-  }
-  
-  .mass-select {
-    font-size: 1.1rem;
-    max-width: 65vw;
-  }
-}
 
 /* Custom Dialog Modals */
 .custom-modal-overlay {
@@ -1251,8 +1220,19 @@ p[data-role="cong"]::before { content: "●  "; font-weight: bold; }
     font-size: 0.7rem;
   }
 
+  body, #app-main {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
   .control-main {
-    padding: 0.5rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0.4rem 0.5rem 0.4rem;
     gap: 0;
   }
 
@@ -1264,13 +1244,19 @@ p[data-role="cong"]::before { content: "●  "; font-weight: bold; }
   #app-main.mobile-view-control .right-panel {
     display: flex !important;
     flex: 1;
+    flex-direction: column;
     width: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   #app-main.mobile-view-list .left-panel {
     display: flex !important;
     flex: 1;
+    flex-direction: column;
     width: 100%;
+    min-height: 0;
+    overflow: hidden;
     border-right: none;
     padding-right: 0;
   }
@@ -1279,13 +1265,24 @@ p[data-role="cong"]::before { content: "●  "; font-weight: bold; }
     display: none !important;
   }
 
+  .preview-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   /* Preview & Action Buttons on Mobile */
   .preview-box {
-    padding: 0.85rem 1rem;
-    margin-top: 0.25rem;
-    --title-size: 1.35rem;
-    --content-size: 1.05rem;
-    --spacing: 0.4rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.6rem 0.8rem;
+    margin-top: 0.2rem;
+    --title-size: 1.25rem;
+    --content-size: 1.0rem;
+    --spacing: 0.35rem;
   }
 
   .title-row,
@@ -1316,26 +1313,287 @@ p[data-role="cong"]::before { content: "●  "; font-weight: bold; }
 
   /* Big Thumb-friendly Next / Prev buttons on Mobile */
   .controls {
+    display: flex;
     gap: 0.5rem;
-    margin-top: 0.25rem;
+    margin-top: 0.3rem;
+    flex-shrink: 0;
   }
 
   .control-btn {
-    padding: 1rem 0.5rem;
-    font-size: 1.2rem;
+    flex: 1;
+    padding: 0.75rem 0.5rem;
+    font-size: 1.1rem;
     font-weight: bold;
-    min-height: 52px;
+    min-height: 46px;
     border-radius: 8px;
   }
 
   .display-controls {
+    display: flex !important;
     gap: 0.4rem;
-    margin-top: 0.25rem;
+    margin-top: 0.3rem;
+    margin-bottom: 0.2rem;
+    flex-shrink: 0;
   }
 
   .display-control-btn {
-    padding: 0.6rem 0.4rem;
+    flex: 1;
+    padding: 0.55rem 0.4rem;
     font-size: 0.85rem;
-    min-height: 40px;
+    min-height: 38px;
   }
+
+  /* 모바일 헤더: 액션/유저/모드 스위치 → 햄버거로 이동 */
+  .mobile-menu-btn {
+    display: inline-flex;
+  }
+
+  .control-header .btn-edit-mass,
+  .control-header .btn-new-mass,
+  .control-header .btn-delete-mass,
+  .control-header .user-info-bar,
+  .control-header .mode-switcher,
+  .preview-header-right .header-icon-btn {
+    display: none !important;
+  }
+
+  .control-header {
+    padding: 0.4rem 0.6rem;
+    flex-wrap: nowrap;
+    gap: 0.4rem;
+  }
+
+  .mass-selector-group {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mass-combobox {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .mass-combobox-trigger {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.85rem;
+    padding: 4px 8px;
+  }
+
+  .mass-selected-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header-right-controls {
+    gap: 0.35rem;
+    flex-shrink: 0;
+  }
+
+  /* 프리젠테이션 모드: 미리보기 영역 최대화 + 스와이프 힌트 */
+  #app-main.mode-presentation.mobile-view-control .preview-header-row h2 {
+    font-size: 0.85rem;
+  }
+
+  #app-main.mode-presentation.mobile-view-control .preview-box {
+    touch-action: pan-y;
+  }
+
+  #app-main.mode-presentation.mobile-view-control .preview-box::after {
+    content: '← 스와이프로 슬라이드 이동 →';
+    display: block;
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--text-muted, #94a3b8);
+    margin-top: 0.5rem;
+    opacity: 0.85;
+    pointer-events: none;
+  }
+
+  #app-main.mode-presentation.mobile-view-control .control-btn {
+    min-height: 52px;
+    font-size: 1.15rem;
+  }
+
+  .swipe-flash {
+    animation: swipe-flash 0.28s ease;
+  }
+
+  @keyframes swipe-flash {
+    0% { opacity: 1; }
+    40% { opacity: 0.55; }
+    100% { opacity: 1; }
+  }
+}
+
+/* ─────────────────────────────────────────────────
+   모바일 햄버거 메뉴 버튼 및 드로어 (Drawer)
+   ───────────────────────────────────────────────── */
+
+.mobile-menu-btn {
+  display: none; /* desktop에서는 숨김, 위 mobile media에서 표시 */
+  background: var(--bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+
+.mobile-menu-btn:hover {
+  border-color: var(--accent-color);
+  background-color: var(--hover-bg);
+}
+
+.mobile-menu-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 3000;
+  display: flex;
+}
+
+.mobile-menu-drawer.hidden {
+  display: none;
+}
+
+.mobile-menu-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.mobile-menu-content {
+  position: relative;
+  width: 280px;
+  max-width: 82vw;
+  height: 100%;
+  margin-left: auto;
+  background-color: var(--bg-color);
+  border-left: 1px solid var(--border-color);
+  box-shadow: -5px 0 25px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  animation: slide-in-right 0.22s ease-out;
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.mobile-menu-header {
+  padding: 1rem 1.2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.mobile-menu-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text-color);
+}
+
+.btn-close-menu {
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  color: var(--text-color);
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.mobile-menu-body {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.mobile-menu-user-section {
+  padding: 0.6rem 0.8rem;
+  background-color: var(--hover-bg);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.mobile-menu-section-title {
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: var(--accent-color);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0.8rem 0 0.2rem 0.3rem;
+}
+
+.mobile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-color);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.mobile-menu-item:hover,
+.mobile-menu-item:active {
+  background-color: var(--hover-bg);
+  border-color: var(--border-color);
+}
+
+.mobile-menu-item.active-mode {
+  background-color: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  font-weight: 700;
+}
+
+.mobile-menu-danger {
+  color: #ef4444;
+}
+
+.mobile-menu-danger:hover {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.mobile-menu-logout {
+  margin-top: auto;
+  border-top: 1px solid var(--border-color);
+  padding-top: 0.85rem;
+  border-radius: 0 0 8px 8px;
 }
