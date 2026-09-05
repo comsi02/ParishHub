@@ -95,6 +95,11 @@ function hideLoginOverlay(user) {
   if (appMain) appMain.style.display = '';
   if (userInfoEl) userInfoEl.style.display = 'flex';
   if (userNameEl) userNameEl.textContent = user.displayName || user.email;
+  const popupName = document.getElementById('popup-user-name');
+  const popupEmail = document.getElementById('popup-user-email');
+  if (popupName) popupName.textContent = user.displayName || '관리자';
+  if (popupEmail) popupEmail.textContent = user.email || '';
+  if (typeof syncMobileMenuUser === 'function') syncMobileMenuUser();
 }
 
 // ─────────────────────────────────────────────────
@@ -105,6 +110,28 @@ document.addEventListener('DOMContentLoaded', () => {
   // 앱 영역 숨기고 로그인 체크 시작
   if (appMain) appMain.style.display = 'none';
   if (loginOverlay) loginOverlay.style.display = 'flex';
+
+  // 모바일 사용자 프로필 팝업 제어
+  const btnUserProfile   = document.getElementById('btn-user-profile');
+  const userProfilePopup = document.getElementById('user-profile-popup');
+  const btnPopupLogout   = document.getElementById('btn-popup-logout');
+
+  if (btnUserProfile && userProfilePopup) {
+    btnUserProfile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userProfilePopup.classList.toggle('hidden');
+      btnUserProfile.setAttribute('aria-expanded', !userProfilePopup.classList.contains('hidden'));
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!userProfilePopup.classList.contains('hidden')) {
+        if (!userProfilePopup.contains(e.target) && !btnUserProfile.contains(e.target)) {
+          userProfilePopup.classList.add('hidden');
+          btnUserProfile.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
+  }
 
   // 로그인 버튼
   if (loginBtn) {
@@ -124,8 +151,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 로그아웃 버튼 (상단 및 권한없음 화면)
+  // 로그아웃 버튼 (상단, 팝업, 권한없음 화면)
   const handleLogout = async () => {
+    if (userProfilePopup) userProfilePopup.classList.add('hidden');
     try {
       if (btnNoAccessLogout) {
         btnNoAccessLogout.disabled = true;
@@ -133,6 +161,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (btnLogout) {
         btnLogout.disabled = true;
+      }
+      if (btnPopupLogout) {
+        btnPopupLogout.disabled = true;
       }
       await signOut();
     } catch (e) {
@@ -145,12 +176,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btnLogout) {
         btnLogout.disabled = false;
       }
+      if (btnPopupLogout) {
+        btnPopupLogout.disabled = false;
+      }
       if (userInfoEl) userInfoEl.style.display = 'none';
       showLoginOverlay(false);
     }
   };
 
   if (btnLogout) btnLogout.addEventListener('click', handleLogout);
+  if (btnPopupLogout) btnPopupLogout.addEventListener('click', handleLogout);
   if (btnNoAccessLogout) btnNoAccessLogout.addEventListener('click', handleLogout);
 
   // 명령어 복사 버튼
@@ -588,19 +623,9 @@ function setupSwipeGestures() {
   const previewBox = document.getElementById('preview-box');
   const controlMain = document.querySelector('.control-main');
 
-  // 미리보기: 좌/우 스와이프로 슬라이드 이동
+  // 미리보기: 스마트폰처럼 인터랙티브 슬라이드 스와이프
   if (previewBox) {
-    attachHorizontalSwipe(previewBox, {
-      threshold: 48,
-      onSwipeLeft: () => {
-        flashSwipe(previewBox);
-        nextSlide();
-      },
-      onSwipeRight: () => {
-        flashSwipe(previewBox);
-        prevSlide();
-      },
-    });
+    attachPreviewInteractiveSwipe(previewBox);
   }
 
   // 메인 영역: 넓은 스와이프로 모바일 탭(진행 제어 ↔ 목록) 전환
@@ -623,6 +648,168 @@ function setupSwipeGestures() {
       },
     });
   }
+}
+
+function attachPreviewInteractiveSwipe(el) {
+  if (!el) return;
+
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+  let isHorizontal = null;
+  let isAnimating = false;
+
+  const canGoNext = () => {
+    const idx = slides.findIndex(s => s.id === currentSlideId);
+    return idx >= 0 && idx < slides.length - 1;
+  };
+
+  const canGoPrev = () => {
+    const idx = slides.findIndex(s => s.id === currentSlideId);
+    return idx > 0;
+  };
+
+  el.addEventListener('touchstart', (e) => {
+    if (isAnimating || e.touches.length !== 1) return;
+    // contenteditable 편집 중이거나 폼 요소 입력 중에는 스와이프 무시
+    if (e.target.closest?.('[contenteditable="true"], input, textarea, select, button')) return;
+
+    const t = e.touches[0];
+    startX = t.clientX;
+    startY = t.clientY;
+    tracking = true;
+    isHorizontal = null;
+    el.style.transition = 'none';
+  }, { passive: true });
+
+  el.addEventListener('touchmove', (e) => {
+    if (!tracking || isAnimating) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+
+    // 초기 방향 결정 (8px 이상 이동 시)
+    if (isHorizontal === null) {
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+        if (Math.abs(dy) >= Math.abs(dx)) {
+          // 세로 스크롤로 판정 → 가로 제스처 취소
+          isHorizontal = false;
+          tracking = false;
+          return;
+        } else {
+          isHorizontal = true;
+        }
+      }
+    }
+
+    if (isHorizontal === true) {
+      if (e.cancelable) e.preventDefault();
+
+      // 경계(더 이상 넘어갈 수 없는 방향)에서는 강한 저항감 적용
+      let dragX = dx;
+      if ((dx < 0 && !canGoNext()) || (dx > 0 && !canGoPrev())) {
+        dragX = dx * 0.22;
+      } else {
+        dragX = dx * 0.85;
+      }
+
+      el.style.transform = `translateX(${dragX}px)`;
+      const opacity = Math.max(0.65, 1 - Math.abs(dragX) / 400);
+      el.style.opacity = String(opacity);
+    }
+  }, { passive: false });
+
+  const resetPosition = (duration = 200) => {
+    isAnimating = true;
+    el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 1, 0.5, 1), opacity ${duration}ms ease`;
+    el.style.transform = 'translateX(0)';
+    el.style.opacity = '1';
+    setTimeout(() => {
+      el.style.transition = '';
+      el.style.transform = '';
+      el.style.opacity = '';
+      isAnimating = false;
+    }, duration);
+  };
+
+  el.addEventListener('touchend', (e) => {
+    if (!tracking || isAnimating) {
+      tracking = false;
+      return;
+    }
+    tracking = false;
+    if (isHorizontal !== true) return;
+
+    const t = e.changedTouches[0];
+    const dx = t ? t.clientX - startX : 0;
+    const threshold = 45;
+
+    // 다음 슬라이드로 스와이프 (왼쪽으로 밀기)
+    if (dx < -threshold && canGoNext()) {
+      isAnimating = true;
+      el.style.transition = 'transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease';
+      el.style.transform = 'translateX(-100%)';
+      el.style.opacity = '0';
+
+      setTimeout(() => {
+        nextSlide();
+        // 새 슬라이드가 오른쪽에서 진입
+        el.style.transition = 'none';
+        el.style.transform = 'translateX(60px)';
+        el.style.opacity = '0';
+        void el.offsetWidth; // reflow
+
+        el.style.transition = 'transform 220ms cubic-bezier(0.25, 1, 0.5, 1), opacity 220ms ease';
+        el.style.transform = 'translateX(0)';
+        el.style.opacity = '1';
+
+        setTimeout(() => {
+          el.style.transition = '';
+          el.style.transform = '';
+          el.style.opacity = '';
+          isAnimating = false;
+        }, 220);
+      }, 180);
+
+    // 이전 슬라이드로 스와이프 (오른쪽으로 밀기)
+    } else if (dx > threshold && canGoPrev()) {
+      isAnimating = true;
+      el.style.transition = 'transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease';
+      el.style.transform = 'translateX(100%)';
+      el.style.opacity = '0';
+
+      setTimeout(() => {
+        prevSlide();
+        // 새 슬라이드가 왼쪽에서 진입
+        el.style.transition = 'none';
+        el.style.transform = 'translateX(-60px)';
+        el.style.opacity = '0';
+        void el.offsetWidth; // reflow
+
+        el.style.transition = 'transform 220ms cubic-bezier(0.25, 1, 0.5, 1), opacity 220ms ease';
+        el.style.transform = 'translateX(0)';
+        el.style.opacity = '1';
+
+        setTimeout(() => {
+          el.style.transition = '';
+          el.style.transform = '';
+          el.style.opacity = '';
+          isAnimating = false;
+        }, 220);
+      }, 180);
+
+    } else {
+      // 덜 밀었거나 더 이상 갈 수 없는 경우 바운스 복귀
+      resetPosition(220);
+    }
+  }, { passive: true });
+
+  el.addEventListener('touchcancel', () => {
+    if (tracking) {
+      tracking = false;
+      resetPosition(200);
+    }
+  }, { passive: true });
 }
 
 function flashSwipe(el) {

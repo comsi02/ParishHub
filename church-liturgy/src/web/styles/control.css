@@ -1380,10 +1380,174 @@ p[data-role="cong"]::before { content: "●  "; font-weight: bold; }
   .control-header .btn-edit-mass,
   .control-header .btn-new-mass,
   .control-header .btn-delete-mass,
-  .control-header .user-info-bar,
-  .control-header .mode-switcher,
-  .preview-header-right .header-icon-btn {
+  .control-header .mode-switcher {
     display: none !important;
+  }
+
+  /* 모바일 미리보기 헤더: 테마 토글 버튼 표시 */
+  .preview-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .preview-header-right .header-icon-btn {
+    display: inline-flex !important;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 0;
+    background: var(--bg-color, #f1f5f9);
+    border: 1px solid var(--border-color, #cbd5e1);
+    color: var(--text-color, #334155);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+
+  .preview-header-right .header-icon-btn:active {
+    transform: scale(0.92);
+  }
+
+  /* 모바일 헤더: 로그인 상태 바 (아이콘 버튼만 표시 → 탭하면 이름 확인 및 로그아웃 팝오버) */
+  .control-header .user-info-bar {
+    position: relative;
+    padding: 0;
+    background: transparent;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .control-header .user-profile-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--bg-color, #f1f5f9);
+    border: 1px solid var(--border-color, #cbd5e1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+
+  .control-header .user-profile-btn:active {
+    transform: scale(0.95);
+    background: var(--border-color, #e2e8f0);
+  }
+
+  .control-header .user-profile-btn .user-badge-icon {
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .control-header .user-profile-btn .user-name-text {
+    display: none !important;
+  }
+
+  .control-header .desktop-only-logout {
+    display: none !important;
+  }
+
+  /* 모바일 프로필 드롭다운 팝오버 */
+  .control-header .user-profile-popup {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 1000;
+    min-width: 200px;
+    background: var(--card-bg, #ffffff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    animation: popupFadeIn 0.15s ease-out;
+  }
+
+  .control-header .user-profile-popup.hidden {
+    display: none !important;
+  }
+
+  @keyframes popupFadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .user-profile-popup-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .popup-avatar {
+    font-size: 1.3rem;
+    background: var(--bg-color, #f1f5f9);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 1px solid var(--border-color, #e2e8f0);
+  }
+
+  .popup-user-details {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .popup-user-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-color, #1e293b);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .popup-user-email {
+    font-size: 0.72rem;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .popup-divider {
+    height: 1px;
+    background: var(--border-color, #e2e8f0);
+    margin: 0;
+  }
+
+  .btn-popup-logout {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #ef4444;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .btn-popup-logout:active {
+    background: #fee2e2;
   }
 
   .control-header {
@@ -1428,6 +1592,9 @@ p[data-role="cong"]::before { content: "●  "; font-weight: bold; }
 
   #app-main.mode-presentation.mobile-view-control .preview-box {
     touch-action: pan-y;
+    will-change: transform, opacity;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   #app-main.mode-presentation.mobile-view-control .preview-box::after {

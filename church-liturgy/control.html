@@ -124,6 +124,22 @@
       border-color: #fca5a5;
       color: #b91c1c;
     }
+
+    .user-profile-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: none;
+      border: none;
+      padding: 0;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .user-profile-popup {
+      display: none;
+    }
   </style>
 </head>
 
@@ -183,7 +199,7 @@
   </div>
 
   <!-- 메인 앱 컨테이너 (로그인 성공 시 표시) -->
-  <div id="app-main" class="mode-presentation">
+  <div id="app-main" class="mode-presentation" style="display: none;">
     <header class="control-header">
       <div class="mass-selector-group">
         <!-- Searchable Mass Combobox -->
@@ -261,9 +277,31 @@
           </button>
         </div>
         <div id="user-info" class="user-info-bar">
-          <span class="user-badge-icon">👤</span>
-          <span id="user-name" class="user-name-text"></span>
-          <button id="btn-logout" class="btn-logout" title="로그아웃">로그아웃</button>
+          <button type="button" id="btn-user-profile" class="user-profile-btn" aria-label="사용자 프로필" aria-expanded="false" title="사용자 메뉴">
+            <span class="user-badge-icon">👤</span>
+            <span id="user-name" class="user-name-text"></span>
+          </button>
+          <button id="btn-logout" class="btn-logout desktop-only-logout" title="로그아웃">로그아웃</button>
+
+          <!-- 사용자 프로필 드롭다운 팝업 (모바일 전용) -->
+          <div id="user-profile-popup" class="user-profile-popup hidden">
+            <div class="user-profile-popup-header">
+              <span class="popup-avatar">👤</span>
+              <div class="popup-user-details">
+                <span id="popup-user-name" class="popup-user-name">관리자</span>
+                <span id="popup-user-email" class="popup-user-email"></span>
+              </div>
+            </div>
+            <div class="popup-divider"></div>
+            <button id="btn-popup-logout" class="btn-popup-logout" type="button">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              로그아웃
+            </button>
+          </div>
         </div>
         <!-- 모바일 햄버거 메뉴 버튼 -->
         <button id="btn-mobile-menu" class="mobile-menu-btn" type="button" aria-label="메뉴 열기" title="전체 메뉴">
