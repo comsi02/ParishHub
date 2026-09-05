@@ -67,8 +67,16 @@ async function handleStateChange(state) {
   if (state.massId !== currentMassId) {
     currentMassId    = state.massId;
     currentMassTitle = state.massTitle || '';
+    if (!currentMassTitle && typeof provider.getMasses === 'function') {
+      provider.getMasses().then(masses => {
+        const found = (masses || []).find(m => String(m.id) === String(currentMassId));
+        if (found && found.title) currentMassTitle = found.title;
+      }).catch(() => {});
+    }
     showLoading('미사 준비 중...');
     subscribeToSlides(currentMassId);
+  } else if (!currentMassTitle && state.massTitle) {
+    currentMassTitle = state.massTitle;
   }
 
   // displayMode 처리
@@ -472,6 +480,17 @@ async function downloadAsPptx() {
     btn.title = 'PPT 생성 중…';
   }
 
+  // 미사 제목이 비어있으면 현재 massId로 조회 시도
+  if (!currentMassTitle && currentMassId && typeof provider.getMasses === 'function') {
+    try {
+      const masses = await provider.getMasses();
+      const found = (masses || []).find(m => String(m.id) === String(currentMassId));
+      if (found && found.title) currentMassTitle = found.title;
+    } catch (e) {
+      console.warn('Failed to fetch mass title for PPT filename:', e);
+    }
+  }
+
   try {
     const pptx = new window.PptxGenJS();
     pptx.layout = 'LAYOUT_WIDE'; // 16:9 — 10" × 5.625"
@@ -631,9 +650,13 @@ async function downloadAsPptx() {
     }
 
     // ── 파일 저장 및 역할 구분 문자 들여쓰기(Hanging Indent) 후처리 ──
-    const safeName = (currentMassTitle || '미사').replace(/[/\\?%*:|"<>]/g, '_');
     const dateStr  = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const fileName = `${safeName}_${dateStr}.pptx`;
+    const safeName = (currentMassTitle || '미사')
+      .trim()
+      .replace(/[/\\?%*:|"<>]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_');
+    const fileName = `전례_${dateStr}_${safeName}.pptx`;
 
     if (window.JSZip) {
       const blob = await pptx.write({ outputType: 'blob' });

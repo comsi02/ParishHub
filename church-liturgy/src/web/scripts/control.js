@@ -733,12 +733,18 @@ function updateDisplayControlButtons() {
     : `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align:middle;margin-right:6px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="12" x2="16" y2="14"/></svg> Display 멈추기`;
 }
 
+function getCurrentMassTitle() {
+  const m = cachedMasses.find(mass => String(mass.id) === String(currentMassId));
+  return m ? (m.title || '') : '';
+}
+
 async function setDisplayMode(mode) {
   currentDisplayMode = mode;
   updateDisplayControlButtons();
   try {
     await provider.setPresentationState({
       massId: currentMassId,
+      massTitle: getCurrentMassTitle(),
       slideId: currentSlideId,
       theme: document.body.getAttribute('data-theme') || 'dark',
       displayMode: mode,
@@ -899,6 +905,7 @@ async function handleUpdateMass() {
     // 프레젠테이션 상태 갱신
     await provider.setPresentationState({
       massId: currentMassId,
+      massTitle: getCurrentMassTitle(),
       slideId: currentSlideId,
       theme: document.body.getAttribute('data-theme') || 'dark',
       displayMode: currentDisplayMode,
@@ -1198,6 +1205,7 @@ async function broadcastState() {
   try {
     await provider.setPresentationState({
       massId: currentMassId,
+      massTitle: getCurrentMassTitle(),
       slideId: currentSlideId,
       theme: document.body.getAttribute('data-theme') || 'dark',
       displayMode: currentDisplayMode,
