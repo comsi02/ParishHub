@@ -85,14 +85,15 @@
 
     .user-info-bar {
       display: none;
+      position: relative;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0;
       font-size: 0.875rem;
       color: var(--text-color, #334155);
-      background: var(--bg-color, #f1f5f9);
-      padding: 4px 10px;
-      border-radius: 20px;
-      border: 1px solid var(--border-color, #cbd5e1);
+      background: transparent;
+      padding: 0;
+      border: none;
+      border-radius: 0;
     }
 
     .user-badge-icon {
@@ -107,38 +108,161 @@
       white-space: nowrap;
     }
 
-    .btn-logout {
-      padding: 3px 8px;
-      font-size: 0.75rem;
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      border-radius: 12px;
-      cursor: pointer;
-      color: #ef4444;
-      font-weight: 600;
-      transition: all 0.2s ease;
-    }
-
-    .btn-logout:hover {
-      background: #fee2e2;
-      border-color: #fca5a5;
-      color: #b91c1c;
+    .btn-logout,
+    .desktop-only-logout {
+      display: none !important;
     }
 
     .user-profile-btn {
       display: inline-flex;
       align-items: center;
       gap: 0.4rem;
-      background: none;
-      border: none;
-      padding: 0;
+      background: var(--bg-color, #f1f5f9);
+      border: 1px solid var(--border-color, #cbd5e1);
+      padding: 4px 10px;
+      border-radius: 20px;
       color: inherit;
       font: inherit;
       cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .user-profile-btn:hover {
+      background: var(--hover-bg, #e2e8f0);
+      border-color: var(--accent-color, #4a90e2);
     }
 
     .user-profile-popup {
-      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      z-index: 1000;
+      min-width: 220px;
+      background: var(--header-bg, #ffffff);
+      border: 1px solid var(--border-color, #e2e8f0);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      color: var(--text-color, #1e293b);
+      animation: popupFadeIn 0.15s ease-out;
+    }
+
+    .user-profile-popup.hidden {
+      display: none !important;
+    }
+
+    @keyframes popupFadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .user-profile-popup-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .popup-avatar {
+      font-size: 1.3rem;
+      background: var(--bg-color, #f1f5f9);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 1px solid var(--border-color, #e2e8f0);
+    }
+
+    .popup-user-details {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .popup-user-name {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--text-color, #0f172a);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .popup-user-email {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #475569;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    [data-theme="dark"] .user-profile-popup {
+      background: #1e293b;
+      border-color: #64748b;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+    }
+
+    [data-theme="dark"] .popup-avatar {
+      background: #0f172a;
+      border-color: #64748b;
+    }
+
+    [data-theme="dark"] .popup-user-name {
+      color: #f8fafc;
+    }
+
+    [data-theme="dark"] .popup-user-email {
+      color: #cbd5e1;
+    }
+
+    [data-theme="dark"] .popup-divider {
+      background: #475569;
+    }
+
+    [data-theme="dark"] .btn-popup-logout {
+      background: rgba(239, 68, 68, 0.16);
+      border-color: #f87171;
+      color: #fecaca;
+    }
+
+    [data-theme="dark"] .btn-popup-logout:hover,
+    [data-theme="dark"] .btn-popup-logout:active {
+      background: rgba(239, 68, 68, 0.28);
+    }
+
+    .popup-divider {
+      height: 1px;
+      background: var(--border-color, #e2e8f0);
+      margin: 0;
+    }
+
+    .btn-popup-logout {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #ef4444;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-popup-logout:hover,
+    .btn-popup-logout:active {
+      background: #fee2e2;
     }
   </style>
 </head>
@@ -283,7 +407,7 @@
           </button>
           <button id="btn-logout" class="btn-logout desktop-only-logout" title="로그아웃">로그아웃</button>
 
-          <!-- 사용자 프로필 드롭다운 팝업 (모바일 전용) -->
+          <!-- 사용자 프로필 드롭다운 (클릭 시 로그아웃) -->
           <div id="user-profile-popup" class="user-profile-popup hidden">
             <div class="user-profile-popup-header">
               <span class="popup-avatar">👤</span>
@@ -404,18 +528,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">
@@ -444,18 +589,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">
@@ -484,18 +650,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">
@@ -524,18 +711,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">
@@ -564,18 +772,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">
@@ -604,18 +833,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">
@@ -644,18 +894,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">
@@ -684,18 +955,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">
@@ -724,18 +1016,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">
@@ -764,18 +1077,39 @@
                       <option value="cong">신자 (●)</option>
                     </select>
                   </div>
-                  <div class="align-group">
+                  <div class="align-group format-group">
                     <select class="size-select" title="글자 크기">
                       <option value="normal" selected>보통</option>
                       <option value="large">크게</option>
                       <option value="small">작게</option>
                     </select>
-                    <button class="bold-btn" title="본문 텍스트 굵게"><b>B</b></button>
-                    <button class="align-btn" data-align="left" title="좌측 정렬">⫷</button>
-                    <button class="align-btn" data-align="center" title="가운데 정렬">⫸⫷</button>
-                    <button class="align-btn" data-align="right" title="우측 정렬">⫸</button>
-                    <input class="color-picker" type="color" value="#ffffff" title="글자색 변경" /><button class="color-clear-btn" title="색상 제거 (테마 기본색 사용)">✕</button>
-                    <button class="delete-block-btn" title="이 본문 삭제">✖</button>
+                    <div class="format-btn-group" role="group" aria-label="글꼴 스타일">
+                      <button type="button" class="format-btn bold-btn" title="굵게"><b>B</b></button>
+                      <button type="button" class="format-btn italic-btn" title="기울임"><i>I</i></button>
+                      <button type="button" class="format-btn underline-btn" title="밑줄"><u>U</u></button>
+                    </div>
+                    <select class="align-select" title="정렬">
+                      <option value="left">왼쪽 정렬</option>
+                      <option value="center">가운데 정렬</option>
+                      <option value="right">오른쪽 정렬</option>
+                    </select>
+                    <div class="color-tools">
+                      <label class="color-picker-wrap" title="글자색 변경">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                        </svg>
+                        <input class="color-picker" type="color" value="#ffffff" aria-label="글자색 변경" />
+                      </label>
+                      <button type="button" class="color-clear-btn" title="색상 초기화 (테마 기본색)">
+                        <svg class="color-tool-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 20h16"></path>
+                          <path d="M9 4h6l1 7H8L9 4z"></path>
+                          <path d="M8 11l-2 9h12l-2-9"></path>
+                          <line x1="5" y1="5" x2="19" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    <button type="button" class="delete-block-btn" title="이 본문 삭제">✖</button>
                   </div>
                 </div>
                 <p class="preview-text" contenteditable="true" spellcheck="false" data-role="none" data-align="left">

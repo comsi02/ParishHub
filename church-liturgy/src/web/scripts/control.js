@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (appMain) appMain.style.display = 'none';
   if (loginOverlay) loginOverlay.style.display = 'flex';
 
-  // 모바일 사용자 프로필 팝업 제어
+  // 사용자 프로필 팝업 제어 (PC/모바일 공통: 클릭 시 로그아웃 표시)
   const btnUserProfile   = document.getElementById('btn-user-profile');
   const userProfilePopup = document.getElementById('user-profile-popup');
   const btnPopupLogout   = document.getElementById('btn-popup-logout');
@@ -119,8 +119,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnUserProfile && userProfilePopup) {
     btnUserProfile.addEventListener('click', (e) => {
       e.stopPropagation();
-      userProfilePopup.classList.toggle('hidden');
-      btnUserProfile.setAttribute('aria-expanded', !userProfilePopup.classList.contains('hidden'));
+      const willOpen = userProfilePopup.classList.contains('hidden');
+      userProfilePopup.classList.toggle('hidden', !willOpen);
+      btnUserProfile.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     });
 
     document.addEventListener('click', (e) => {
@@ -129,6 +130,13 @@ document.addEventListener('DOMContentLoaded', () => {
           userProfilePopup.classList.add('hidden');
           btnUserProfile.setAttribute('aria-expanded', 'false');
         }
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !userProfilePopup.classList.contains('hidden')) {
+        userProfilePopup.classList.add('hidden');
+        btnUserProfile.setAttribute('aria-expanded', 'false');
       }
     });
   }
@@ -1335,17 +1343,24 @@ function updatePreviewUI() {
 
     const p = block.querySelector('.preview-text');
     p.textContent = cData.text;
-    p.setAttribute('data-align', cData.align);
-    p.setAttribute('data-role', cData.role);
+    p.setAttribute('data-align', cData.align || 'left');
+    p.setAttribute('data-role', cData.role || 'none');
     p.setAttribute('data-bold', cData.bold ? 'true' : 'false');
+    p.setAttribute('data-italic', cData.italic ? 'true' : 'false');
+    p.setAttribute('data-underline', cData.underline ? 'true' : 'false');
     p.setAttribute('data-size', cData.size || 'normal');
 
     const roleSelect = block.querySelector('.role-select');
-    roleSelect.value = cData.role;
+    roleSelect.value = cData.role || 'none';
 
     const sizeSelect = block.querySelector('.size-select');
     if (sizeSelect) {
       sizeSelect.value = cData.size || 'normal';
+    }
+
+    const alignSelect = block.querySelector('.align-select');
+    if (alignSelect) {
+      alignSelect.value = cData.align || 'left';
     }
 
     const colorPicker = block.querySelector('.color-picker');
@@ -1358,13 +1373,12 @@ function updatePreviewUI() {
       colorClearBtn.classList.toggle('has-color', !!cData.color);
     }
 
-    const alignBtns = block.querySelectorAll('.align-btn');
-    alignBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-align') === cData.align);
-    });
-
     const boldBtn = block.querySelector('.bold-btn');
     if (boldBtn) boldBtn.classList.toggle('active', !!cData.bold);
+    const italicBtn = block.querySelector('.italic-btn');
+    if (italicBtn) italicBtn.classList.toggle('active', !!cData.italic);
+    const underlineBtn = block.querySelector('.underline-btn');
+    if (underlineBtn) underlineBtn.classList.toggle('active', !!cData.underline);
   });
 
   const btnAddContent = document.getElementById('btn-add-content');
@@ -1589,10 +1603,32 @@ function setupInlineEditing() {
     const idx        = parseInt(block.getAttribute('data-index'), 10);
     const p          = block.querySelector('.preview-text');
     const roleSelect = block.querySelector('.role-select');
-    const alignBtns  = block.querySelectorAll('.align-btn');
     const boldBtn    = block.querySelector('.bold-btn');
+    const italicBtn  = block.querySelector('.italic-btn');
+    const underlineBtn = block.querySelector('.underline-btn');
     const delBtn     = block.querySelector('.delete-block-btn');
     const dragHandle = block.querySelector('.content-drag-handle');
+
+    const ensureContentSlot = (slide) => {
+      if (!slide.contents) slide.contents = [];
+      while (slide.contents.length <= idx) {
+        slide.contents.push({ text: '', align: 'left', role: 'none', bold: false, italic: false, underline: false });
+      }
+      return slide.contents[idx];
+    };
+
+    const toggleFormatFlag = (flag, attrName, btn) => {
+      if (!currentSlideId) return;
+      const ci = slides.findIndex(s => s.id === currentSlideId);
+      if (ci === -1) return;
+      const slide = slides[ci];
+      const slot = ensureContentSlot(slide);
+      slot[flag] = !slot[flag];
+      const enabled = !!slot[flag];
+      p.setAttribute(attrName, enabled ? 'true' : 'false');
+      if (btn) btn.classList.toggle('active', enabled);
+      saveSlideUpdates(slide, { contents: slide.contents });
+    };
 
     p.addEventListener('blur', handleEdit);
     p.addEventListener('input', handleInput);
@@ -1668,19 +1704,13 @@ function setupInlineEditing() {
     });
 
     if (boldBtn) {
-      boldBtn.addEventListener('click', () => {
-        if (!currentSlideId) return;
-        const ci = slides.findIndex(s => s.id === currentSlideId);
-        if (ci === -1) return;
-        const slide = slides[ci];
-        if (!slide.contents) slide.contents = [];
-        while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none', bold: false });
-        slide.contents[idx].bold = !slide.contents[idx].bold;
-        const isBold = !!slide.contents[idx].bold;
-        p.setAttribute('data-bold', isBold ? 'true' : 'false');
-        boldBtn.classList.toggle('active', isBold);
-        saveSlideUpdates(slide, { contents: slide.contents });
-      });
+      boldBtn.addEventListener('click', () => toggleFormatFlag('bold', 'data-bold', boldBtn));
+    }
+    if (italicBtn) {
+      italicBtn.addEventListener('click', () => toggleFormatFlag('italic', 'data-italic', italicBtn));
+    }
+    if (underlineBtn) {
+      underlineBtn.addEventListener('click', () => toggleFormatFlag('underline', 'data-underline', underlineBtn));
     }
 
     if (delBtn) {
@@ -1718,29 +1748,26 @@ function setupInlineEditing() {
         const ci = slides.findIndex(s => s.id === currentSlideId);
         if (ci === -1) return;
         const slide = slides[ci];
-        if (!slide.contents) slide.contents = [];
-        while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none' });
-        slide.contents[idx].size = e.target.value;
+        const slot = ensureContentSlot(slide);
+        slot.size = e.target.value;
         p.setAttribute('data-size', e.target.value);
         saveSlideUpdates(slide, { contents: slide.contents });
       });
     }
 
-    alignBtns.forEach(btn => {
-      btn.addEventListener('click', (e) => {
+    const alignSelect = block.querySelector('.align-select');
+    if (alignSelect) {
+      alignSelect.addEventListener('change', (e) => {
         if (!currentSlideId) return;
-        const align = e.currentTarget.getAttribute('data-align');
-        const ci    = slides.findIndex(s => s.id === currentSlideId);
+        const ci = slides.findIndex(s => s.id === currentSlideId);
         if (ci === -1) return;
         const slide = slides[ci];
-        if (!slide.contents) slide.contents = [];
-        while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none' });
-        slide.contents[idx].align = align;
-        p.setAttribute('data-align', align);
-        alignBtns.forEach(b => b.classList.toggle('active', b === btn));
+        const slot = ensureContentSlot(slide);
+        slot.align = e.target.value;
+        p.setAttribute('data-align', e.target.value);
         saveSlideUpdates(slide, { contents: slide.contents });
       });
-    });
+    }
 
     const colorPicker = block.querySelector('.color-picker');
     if (colorPicker) {
@@ -1749,15 +1776,15 @@ function setupInlineEditing() {
         const ci = slides.findIndex(s => s.id === currentSlideId);
         if (ci === -1) return;
         const slide = slides[ci];
-        if (!slide.contents) slide.contents = [];
-        while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none' });
-        
+        const slot = ensureContentSlot(slide);
         const newColor = e.target.value;
-        slide.contents[idx].color = newColor;
+        slot.color = newColor;
         p.style.color = newColor;
+        const colorClearBtn = block.querySelector('.color-clear-btn');
+        if (colorClearBtn) colorClearBtn.classList.add('has-color');
         saveSlideUpdates(slide, { contents: slide.contents });
       };
-      
+
       colorPicker.addEventListener('input', handleColorChange);
       colorPicker.addEventListener('change', handleColorChange);
     }
@@ -1769,10 +1796,8 @@ function setupInlineEditing() {
         const ci = slides.findIndex(s => s.id === currentSlideId);
         if (ci === -1) return;
         const slide = slides[ci];
-        if (!slide.contents) slide.contents = [];
-        while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none' });
-        // 색상 제거: null 로 설정하면 테마 기본색(Dark/Light 자동) 적용
-        slide.contents[idx].color = null;
+        const slot = ensureContentSlot(slide);
+        slot.color = null;
         p.style.color = '';
         colorClearBtn.classList.remove('has-color');
         saveSlideUpdates(slide, { contents: slide.contents });

@@ -60,9 +60,13 @@
   font-size: calc(var(--content-size) * var(--content-scale, 1));
 }
 
-/* Text bold attribute */
+/* Text style attributes */
 .slide-text[data-bold="true"] { font-weight: bold; }
 .slide-text[data-bold="false"] { font-weight: normal; }
+.slide-text[data-italic="true"] { font-style: italic; }
+.slide-text[data-italic="false"] { font-style: normal; }
+.slide-text[data-underline="true"] { text-decoration: underline; }
+.slide-text[data-underline="false"] { text-decoration: none; }
 
 /* Role prefixes in Display */
 .slide-text[data-role="priest"]::before { content: "✚ "; font-weight: bold; }

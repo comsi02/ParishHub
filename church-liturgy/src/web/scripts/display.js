@@ -189,15 +189,25 @@ function renderCurrentSlide() {
       p.setAttribute('data-align', cData.align || 'left');
       p.setAttribute('data-role', cData.role || 'none');
       p.setAttribute('data-bold', cData.bold ? 'true' : 'false');
+      p.setAttribute('data-italic', cData.italic ? 'true' : 'false');
+      p.setAttribute('data-underline', cData.underline ? 'true' : 'false');
       p.setAttribute('data-size', cData.size || 'normal');
       p.style.color = cData.color || '';
-      // inline font-size 제거 → CSS data-size 규칙이 적용되도록
       p.style.fontSize = '';
+      p.style.fontWeight = cData.bold ? 'bold' : '';
+      p.style.fontStyle = cData.italic ? 'italic' : '';
+      p.style.textDecoration = cData.underline ? 'underline' : '';
     } else {
       p.style.display = 'none';
       p.textContent = '';
       p.removeAttribute('data-size');
+      p.removeAttribute('data-bold');
+      p.removeAttribute('data-italic');
+      p.removeAttribute('data-underline');
       p.style.fontSize = '';
+      p.style.fontWeight = '';
+      p.style.fontStyle = '';
+      p.style.textDecoration = '';
     }
   });
 
@@ -626,8 +636,10 @@ async function downloadAsPptx() {
             fontSize,
             fontFace: 'Malgun Gothic',
             color,
-            bold:     !!content.bold,
-            align:    pptAlign,
+            bold:      !!content.bold,
+            italic:    !!content.italic,
+            underline: !!content.underline,
+            align:     pptAlign,
             breakLine: !isLast,
             paraSpaceAfter: isLast ? 0 : Math.round(10 * fontScale),
             lineSpacingMultiple: 1.3,
@@ -654,8 +666,8 @@ async function downloadAsPptx() {
     const safeName = (currentMassTitle || '미사')
       .trim()
       .replace(/[/\\?%*:|"<>]/g, '_')
-      .replace(/\s+/g, '_')
-      .replace(/_+/g, '_');
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '');
     const fileName = `전례_${dateStr}_${safeName}.pptx`;
 
     if (window.JSZip) {
