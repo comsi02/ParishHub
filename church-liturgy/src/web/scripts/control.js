@@ -1155,9 +1155,13 @@ function updatePreviewUI() {
     }
 
     const colorPicker = block.querySelector('.color-picker');
+    const colorClearBtn = block.querySelector('.color-clear-btn');
     if (colorPicker) {
       colorPicker.value = cData.color || '#ffffff';
-      p.style.color = cData.color || 'inherit';
+      p.style.color = cData.color || '';
+    }
+    if (colorClearBtn) {
+      colorClearBtn.classList.toggle('has-color', !!cData.color);
     }
 
     const alignBtns = block.querySelectorAll('.align-btn');
@@ -1561,6 +1565,23 @@ function setupInlineEditing() {
       
       colorPicker.addEventListener('input', handleColorChange);
       colorPicker.addEventListener('change', handleColorChange);
+    }
+
+    const colorClearBtn = block.querySelector('.color-clear-btn');
+    if (colorClearBtn) {
+      colorClearBtn.addEventListener('click', () => {
+        if (!currentSlideId) return;
+        const ci = slides.findIndex(s => s.id === currentSlideId);
+        if (ci === -1) return;
+        const slide = slides[ci];
+        if (!slide.contents) slide.contents = [];
+        while (slide.contents.length <= idx) slide.contents.push({ text: '', align: 'left', role: 'none' });
+        // 색상 제거: null 로 설정하면 테마 기본색(Dark/Light 자동) 적용
+        slide.contents[idx].color = null;
+        p.style.color = '';
+        colorClearBtn.classList.remove('has-color');
+        saveSlideUpdates(slide, { contents: slide.contents });
+      });
     }
   });
 

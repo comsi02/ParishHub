@@ -745,6 +745,35 @@ body {
   border-radius: 3px;
 }
 
+/* 색상 제거 버튼 */
+.color-clear-btn {
+  width: 20px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted, #999);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.color-clear-btn:hover {
+  background: rgba(255, 100, 100, 0.15);
+  color: #e55;
+  border-color: #e55;
+}
+/* 색상이 설정되어 있을 때: 강조 표시 */
+.color-clear-btn.has-color {
+  color: #f90;
+  border-color: #f90;
+}
+
 .preview-text {
   margin: 0;
   padding: 0.2rem 0.4rem;
@@ -792,7 +821,7 @@ p[data-size="normal"] { font-size: 1.05rem; }
 
 /* Role prefixes in Controller */
 .preview-text[data-role="priest"]::before,
-p[data-role="priest"]::before { content: "➕  "; font-weight: bold; }
+p[data-role="priest"]::before { content: "✚  "; font-weight: bold; }
 
 .preview-text[data-role="leader_cong"]::before,
 p[data-role="leader_cong"]::before { content: "◎  "; font-weight: bold; }
