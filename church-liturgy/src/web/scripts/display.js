@@ -505,11 +505,13 @@ async function downloadAsPptx() {
     };
 
     // ── 레이아웃 상수 (인치) ───────────────────────
-    const SLIDE_W    = 10;
-    const SLIDE_H    = 5.625;
-    // 비대칭 여백: 왼쪽 여백을 넓게 두어 가운데로 보이도록 하면서, 오른쪽은 최소화하여 텍스트 너비 최대화
-    const CONTENT_X  = 0.9;              // 왼쪽 여백 0.9인치 (가운데처럼 보이도록)
-    const CONTENT_W  = SLIDE_W - CONTENT_X - 0.15;  // = 8.95인치 (오른쪽 여백 0.15인치, 줄바꿈 최소화)
+    // PptxGenJS LAYOUT_WIDE: 16:9 와이드스크린 (13.333" × 7.5", 현대 PowerPoint 16:9 표준)
+    const SLIDE_W    = 13.333;
+    const SLIDE_H    = 7.5;
+    // 텍스트 박스를 기존(8.65")보다 1.85인치 더 넓혀 10.5인치로 설정 (한글 약 4~4.5글자 더 수용)
+    // 좌우 여백을 약 1.4인치로 균형 배치하여 시각적 정중앙 정렬 및 이전 위치보다 살짝 오른쪽 이동
+    const CONTENT_X  = 1.4;              // 왼쪽 시작 위치 (1.4인치)
+    const CONTENT_W  = 10.5;             // 텍스트 박스 너비 (10.5인치, 오른쪽 여백 약 1.43인치)
 
     for (const slide of slidesCache) {
       const pSlide = pptx.addSlide();
@@ -522,16 +524,16 @@ async function downloadAsPptx() {
       const validContents = contents.filter(c => c && c.text && c.text.trim() !== '');
 
       // ── Step 1: 폰트 스케일 계산 ──
-      const maxHeightPt = (SLIDE_H - 0.8) * 72;
+      const maxHeightPt = (SLIDE_H - 1.2) * 72;
 
       const estimateLines = (text, charsPerLine) =>
         (text || '').split('\n').reduce((acc, line) =>
           acc + Math.max(1, Math.ceil((line.trim().length + 2) / charsPerLine)), 0);
 
-      const titleLines = hasTitle ? estimateLines(slide.title.trim(), 22) : 0;
+      const titleLines = hasTitle ? estimateLines(slide.title.trim(), 26) : 0;
       let totalContentLines = 0;
       validContents.forEach(c => {
-        totalContentLines += estimateLines(c.text, 26);
+        totalContentLines += estimateLines(c.text, 30); // 너비 확장 반영 (한 줄당 30자 수용)
       });
 
       const titleHeightPt   = titleLines * TITLE_PT * 1.25;
@@ -552,9 +554,9 @@ async function downloadAsPptx() {
       const actualGapsH    = contentGapsPt * fontScale / 72;
       const textBlockH     = actualTitleH + actualTitleGap + actualContentH + actualGapsH;
 
-      const boxH = Math.min(textBlockH * 1.1 + 0.1, SLIDE_H - 0.4);
-      // 텍스트 상자 y: 슬라이드 세로 중앙, 단 최소 0.55인치 상단 여백 확보 (가운데로 보이도록)
-      const boxY = Math.max(0.55, (SLIDE_H - boxH) / 2);
+      const boxH = Math.min(textBlockH * 1.1 + 0.1, SLIDE_H - 0.6);
+      // 텍스트 상자 y: 슬라이드 세로 중앙 (7.5인치 기준), 최소 0.6인치 상단 여백 확보
+      const boxY = Math.max(0.6, (SLIDE_H - boxH) / 2);
 
       // ── Step 3: 텍스트 객체 빌드 ──
       // · 슬라이드 제목: center (텍스트 상자 너비 기준 가운데)
