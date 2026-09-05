@@ -6,11 +6,17 @@ import { getProvider } from './services/index.js';
 
 const provider = getProvider();
 
+const DISPLAY_VIEW_COOKIE = 'display_view';
+const DISPLAY_VIEW_MAX_AGE_SEC = 60 * 60 * 24; // 1일
+
 let currentMassId    = null;
 let currentMassTitle = '';
 let currentSlideId   = null;
 let slidesCache      = [];
 let currentDisplayMode = 'normal'; // 'normal' | 'blackout' | 'freeze'
+
+// 재접속 시 Cookie 화면을 우선 보여주기 위해, 최초 remote state의 미사/슬라이드는 한 번 무시
+let skipRemoteViewOnce = false;
 
 // onSnapshot 구독 해제 함수
 let unsubscribeState  = null;
@@ -20,6 +26,66 @@ const domSlideContent = document.getElementById('slide-content');
 const domLoading      = document.getElementById('loading');
 const domSlideTitle   = document.getElementById('slide-title');
 
+// ─────────────────────────────────────────────────
+// Display 자체 사용: 미사/페이지 Cookie 저장·복원
+// ─────────────────────────────────────────────────
+
+function setCookie(name, value, maxAgeSec) {
+  const secure = location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSec}; SameSite=Lax${secure}`;
+}
+
+function getCookie(name) {
+  const prefix = `${name}=`;
+  const parts = document.cookie.split(';');
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(prefix)) {
+      return decodeURIComponent(trimmed.slice(prefix.length));
+    }
+  }
+  return null;
+}
+
+function readDisplayViewCookie() {
+  try {
+    const raw = getCookie(DISPLAY_VIEW_COOKIE);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !data.massId) return null;
+    return {
+      massId: String(data.massId),
+      slideId: data.slideId != null ? String(data.slideId) : null,
+      massTitle: data.massTitle || ''
+    };
+  } catch (e) {
+    console.warn('Failed to parse display_view cookie', e);
+    return null;
+  }
+}
+
+function persistDisplayView() {
+  if (!currentMassId || !currentSlideId) return;
+  setCookie(DISPLAY_VIEW_COOKIE, JSON.stringify({
+    massId: currentMassId,
+    slideId: currentSlideId,
+    massTitle: currentMassTitle || ''
+  }), DISPLAY_VIEW_MAX_AGE_SEC);
+}
+
+function restoreDisplayViewFromCookie() {
+  const saved = readDisplayViewCookie();
+  if (!saved) return false;
+
+  currentMassId    = saved.massId;
+  currentSlideId   = saved.slideId;
+  currentMassTitle = saved.massTitle || '';
+  skipRemoteViewOnce = true;
+  showLoading('이전 화면 불러오는 중…');
+  subscribeToSlides(currentMassId);
+  return true;
+}
+
 async function init() {
   setupThemeToggle();
   setupKeyboardControls();
@@ -27,6 +93,7 @@ async function init() {
   setupMassSelector();
   setupPptDownload();
   setupResizeObserver();
+  restoreDisplayViewFromCookie();
   subscribeToState();
 }
 
@@ -58,13 +125,21 @@ function subscribeToState() {
 }
 
 async function handleStateChange(state) {
+  // Cookie로 복원한 직후 1회: 원격 미사/슬라이드는 무시하고 테마·모드만 반영
+  if (skipRemoteViewOnce) {
+    skipRemoteViewOnce = false;
+    applyRemoteThemeAndMode(state);
+    if (currentMassId) return;
+  }
+
   if (!state || !state.massId) {
+    if (currentMassId) return; // Cookie 복원 화면 유지
     showLoading('미사가 선택되지 않았습니다.');
     return;
   }
 
   // 미사가 바뀐 경우 슬라이드 구독 갱신
-  if (state.massId !== currentMassId) {
+  if (String(state.massId) !== String(currentMassId)) {
     currentMassId    = state.massId;
     currentMassTitle = state.massTitle || '';
     if (!currentMassTitle && typeof provider.getMasses === 'function') {
@@ -79,16 +154,11 @@ async function handleStateChange(state) {
     currentMassTitle = state.massTitle;
   }
 
-  // displayMode 처리
-  const newMode = state.displayMode || 'normal';
-  if (newMode !== currentDisplayMode) {
-    currentDisplayMode = newMode;
-    applyDisplayMode();
-  }
+  applyRemoteThemeAndMode(state);
 
   // 슬라이드 변경 처리 (freeze/blackout 중에는 화면 변경 안 함)
   if (currentDisplayMode === 'normal') {
-    const slideChanged    = state.slideId !== currentSlideId;
+    const slideChanged    = String(state.slideId) !== String(currentSlideId);
     const contentUpdated  = (state.lastUpdated || 0) > (window._lastRenderedAt || 0);
 
     if (slideChanged || contentUpdated) {
@@ -105,8 +175,17 @@ async function handleStateChange(state) {
       renderCurrentSlide();
     }
   }
+}
 
-  // 테마 동기화
+function applyRemoteThemeAndMode(state) {
+  if (!state) return;
+
+  const newMode = state.displayMode || 'normal';
+  if (newMode !== currentDisplayMode) {
+    currentDisplayMode = newMode;
+    applyDisplayMode();
+  }
+
   if (state.theme) {
     const currentTheme = document.body.getAttribute('data-theme');
     if (state.theme !== currentTheme) {
@@ -167,7 +246,8 @@ function applyDisplayMode() {
 function renderCurrentSlide() {
   if (!slidesCache.length) return;
 
-  const slide = slidesCache.find(s => s.id === currentSlideId) || slidesCache[0];
+  const slide = slidesCache.find(s => String(s.id) === String(currentSlideId)) || slidesCache[0];
+  currentSlideId = slide.id;
 
   domLoading.style.display = 'none';
   domSlideContent.style.display = 'flex';
@@ -213,6 +293,7 @@ function renderCurrentSlide() {
 
   // 라인 수가 많아 아래가 잘리지 않도록 폰트 크기 비례 자동 축소
   adjustSlideScale();
+  persistDisplayView();
 }
 
 /**
@@ -300,7 +381,7 @@ function setupKeyboardControls() {
     const modal = document.getElementById('mass-select-modal');
     if (modal && !modal.classList.contains('mass-modal-hidden')) return;
 
-    const currentIndex = slidesCache.findIndex(s => s.id === currentSlideId);
+    const currentIndex = slidesCache.findIndex(s => String(s.id) === String(currentSlideId));
     let newIndex = currentIndex;
 
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
@@ -314,7 +395,7 @@ function setupKeyboardControls() {
       return;
     }
 
-    // display는 읽기 전용: state 업데이트 없이 로컬 렌더만
+    // display는 읽기 전용: state 업데이트 없이 로컬 렌더만 (Cookie에 위치 저장)
     if (newIndex !== currentIndex && newIndex >= 0) {
       currentSlideId = slidesCache[newIndex].id;
       renderCurrentSlide();
@@ -420,7 +501,7 @@ function renderMassList(masses) {
 
   masses.forEach(mass => {
     const li = document.createElement('li');
-    li.className = 'mass-list-item' + (mass.id === currentMassId ? ' mass-list-item--active' : '');
+    li.className = 'mass-list-item' + (String(mass.id) === String(currentMassId) ? ' mass-list-item--active' : '');
     li.dataset.massId = mass.id;
 
     const dateParts = (mass.date || '').split(/[-./]/);
@@ -432,7 +513,7 @@ function renderMassList(masses) {
       <div class="mass-list-item-inner">
         <span class="mass-date-chip">${dateLabel}</span>
         <span class="mass-title-text">${mass.title || '(제목 없음)'}</span>
-        ${mass.id === currentMassId
+        ${String(mass.id) === String(currentMassId)
           ? `<span class="mass-active-badge">표시 중</span>`
           : `<svg class="mass-arrow" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"/></svg>`
         }
