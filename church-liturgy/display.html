@@ -17,21 +17,30 @@
 <body data-theme="dark">
   <!-- Display control icon buttons (top-right) -->
   <div class="display-icon-bar">
-    <!-- Mass selector -->
-    <button id="display-btn-mass-select" class="display-ctrl-btn" title="미사 선택">
-      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-        <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-      </svg>
-    </button>
-    <!-- PPT download (disabled until a mass is loaded) -->
-    <button id="display-btn-ppt" class="display-ctrl-btn display-ctrl-ppt" title="PPT 다운로드" disabled>
-      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="7 10 12 15 17 10"/>
-        <line x1="12" y1="15" x2="12" y2="3"/>
-      </svg>
-    </button>
+    <div class="display-more-wrap">
+      <button id="display-btn-more" class="display-ctrl-btn display-ctrl-more" type="button" title="더보기" aria-haspopup="menu" aria-expanded="false" aria-controls="display-more-menu">
+        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>
+        </svg>
+      </button>
+      <div id="display-more-menu" class="display-more-menu" role="menu" hidden>
+        <button id="display-btn-mass-select" class="display-more-item" type="button" role="menuitem">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          <span>미사 선택</span>
+        </button>
+        <button id="display-btn-ppt" class="display-more-item display-ctrl-ppt" type="button" role="menuitem" disabled>
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span>PPT 다운로드</span>
+        </button>
+      </div>
+    </div>
     <button id="theme-toggle" class="display-ctrl-btn display-ctrl-theme" title="테마 전환">
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
@@ -44,7 +53,10 @@
   <div id="display-mode-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:9999;"></div>
 
   <div id="slide-container" class="slide-container">
-    <div id="loading" class="loading">로딩 중...</div>
+    <div id="loading" class="loading" role="status" aria-live="polite" aria-busy="true">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <p class="loading-message" hidden></p>
+    </div>
     <div id="slide-content" class="slide" style="display: none;">
       <h1 id="slide-title"></h1>
       <div id="slide-contents-container">

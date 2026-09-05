@@ -56,7 +56,8 @@ function readDisplayViewCookie() {
     return {
       massId: String(data.massId),
       slideId: data.slideId != null ? String(data.slideId) : null,
-      massTitle: data.massTitle || ''
+      massTitle: data.massTitle || '',
+      theme: data.theme === 'light' || data.theme === 'dark' ? data.theme : null
     };
   } catch (e) {
     console.warn('Failed to parse display_view cookie', e);
@@ -69,7 +70,8 @@ function persistDisplayView() {
   setCookie(DISPLAY_VIEW_COOKIE, JSON.stringify({
     massId: currentMassId,
     slideId: currentSlideId,
-    massTitle: currentMassTitle || ''
+    massTitle: currentMassTitle || '',
+    theme: document.body.getAttribute('data-theme') || 'dark'
   }), DISPLAY_VIEW_MAX_AGE_SEC);
 }
 
@@ -77,11 +79,18 @@ function restoreDisplayViewFromCookie() {
   const saved = readDisplayViewCookie();
   if (!saved) return false;
 
+  if (saved.theme) {
+    document.body.setAttribute('data-theme', saved.theme);
+    if (typeof window.updateDisplayThemeIcon === 'function') {
+      window.updateDisplayThemeIcon();
+    }
+  }
+
   currentMassId    = saved.massId;
   currentSlideId   = saved.slideId;
   currentMassTitle = saved.massTitle || '';
   skipRemoteViewOnce = true;
-  showLoading('이전 화면 불러오는 중…');
+  showLoading(); // 스피너만 (문구 없음)
   subscribeToSlides(currentMassId);
   return true;
 }
@@ -90,6 +99,7 @@ async function init() {
   setupThemeToggle();
   setupKeyboardControls();
   setupDisplayControls();
+  setupDisplayMoreMenu();
   setupMassSelector();
   setupPptDownload();
   setupResizeObserver();
@@ -110,7 +120,6 @@ function subscribeToState() {
     unsubscribeState = provider.onPresentationStateChange(handleStateChange);
   } else {
     // LocalProvider 폴백: 1초 polling
-    showLoading('로딩 중...');
     const poll = async () => {
       try {
         const state = await provider.getPresentationState();
@@ -119,6 +128,7 @@ function subscribeToState() {
         console.error('Polling error:', e);
       }
     };
+    if (!currentMassId) showLoading();
     poll();
     setInterval(poll, 1000);
   }
@@ -134,7 +144,7 @@ async function handleStateChange(state) {
 
   if (!state || !state.massId) {
     if (currentMassId) return; // Cookie 복원 화면 유지
-    showLoading('미사가 선택되지 않았습니다.');
+    showLoading('미사가 선택되지 않았습니다.', { spinner: false });
     return;
   }
 
@@ -148,7 +158,7 @@ async function handleStateChange(state) {
         if (found && found.title) currentMassTitle = found.title;
       }).catch(() => {});
     }
-    showLoading('미사 준비 중...');
+    showLoading();
     subscribeToSlides(currentMassId);
   } else if (!currentMassTitle && state.massTitle) {
     currentMassTitle = state.massTitle;
@@ -193,6 +203,7 @@ function applyRemoteThemeAndMode(state) {
       if (typeof window.updateDisplayThemeIcon === 'function') {
         window.updateDisplayThemeIcon();
       }
+      persistDisplayView();
     }
   }
 }
@@ -337,10 +348,20 @@ function setupResizeObserver() {
   document.addEventListener('fullscreenchange', adjustSlideScale);
 }
 
-function showLoading(msg) {
+function showLoading(msg = '', { spinner = true } = {}) {
   domSlideContent.style.display = 'none';
-  domLoading.style.display = 'block';
-  domLoading.textContent = msg;
+  domLoading.style.display = 'flex';
+  domLoading.setAttribute('aria-busy', spinner ? 'true' : 'false');
+
+  const spinnerEl = domLoading.querySelector('.loading-spinner');
+  const messageEl = domLoading.querySelector('.loading-message');
+
+  if (spinnerEl) spinnerEl.hidden = !spinner;
+  if (messageEl) {
+    const text = msg || '';
+    messageEl.textContent = text;
+    messageEl.hidden = !text;
+  }
 }
 
 // ─────────────────────────────────────────────────
@@ -364,9 +385,11 @@ function setupThemeToggle() {
   // display는 비인증이므로 setPresentationState를 직접 호출하지 않음
   // 테마 변경은 control에서만 가능 (display 로컬 토글만 수행)
   btnThemeToggle.addEventListener('click', () => {
+    closeDisplayMoreMenu();
     const isDark = document.body.getAttribute('data-theme') === 'dark';
     document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
     window.updateDisplayThemeIcon();
+    persistDisplayView();
   });
 }
 
@@ -376,10 +399,18 @@ function setupThemeToggle() {
 
 function setupKeyboardControls() {
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeDisplayMoreMenu();
+      closeMassModal();
+      if (!slidesCache.length) return;
+    }
+
     if (!slidesCache.length) return;
     // 모달이 열린 경우 무시
     const modal = document.getElementById('mass-select-modal');
     if (modal && !modal.classList.contains('mass-modal-hidden')) return;
+    const moreMenu = document.getElementById('display-more-menu');
+    if (moreMenu && !moreMenu.hidden) return;
 
     const currentIndex = slidesCache.findIndex(s => String(s.id) === String(currentSlideId));
     let newIndex = currentIndex;
@@ -390,8 +421,7 @@ function setupKeyboardControls() {
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (currentIndex > 0) newIndex = currentIndex - 1;
-    } else if (e.key === 'Escape') {
-      closeMassModal();
+    } else {
       return;
     }
 
@@ -424,6 +454,7 @@ function setupDisplayControls() {
   if (btnBlackout) {
     btnBlackout.addEventListener('click', (e) => {
       e.stopPropagation();
+      closeDisplayMoreMenu();
       // display 페이지의 blackout은 로컬 전용 (state 저장 없음, 비인증이므로)
       const newMode = currentDisplayMode === 'blackout' ? 'normal' : 'blackout';
       currentDisplayMode = newMode;
@@ -431,6 +462,45 @@ function setupDisplayControls() {
     });
   }
   updateDisplayCtrlButtons();
+}
+
+// ─────────────────────────────────────────────────
+// 더보기 메뉴 (미사 선택 / PPT)
+// ─────────────────────────────────────────────────
+
+function setupDisplayMoreMenu() {
+  const btnMore = document.getElementById('display-btn-more');
+  const menu = document.getElementById('display-more-menu');
+  if (!btnMore || !menu) return;
+
+  btnMore.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = menu.hidden;
+    if (open) openDisplayMoreMenu();
+    else closeDisplayMoreMenu();
+  });
+
+  document.addEventListener('click', (e) => {
+    const wrap = document.querySelector('.display-more-wrap');
+    if (!wrap || wrap.contains(e.target)) return;
+    closeDisplayMoreMenu();
+  });
+}
+
+function openDisplayMoreMenu() {
+  const btnMore = document.getElementById('display-btn-more');
+  const menu = document.getElementById('display-more-menu');
+  if (!btnMore || !menu) return;
+  menu.hidden = false;
+  btnMore.setAttribute('aria-expanded', 'true');
+}
+
+function closeDisplayMoreMenu() {
+  const btnMore = document.getElementById('display-btn-more');
+  const menu = document.getElementById('display-more-menu');
+  if (!btnMore || !menu) return;
+  menu.hidden = true;
+  btnMore.setAttribute('aria-expanded', 'false');
 }
 
 // ─────────────────────────────────────────────────
@@ -451,6 +521,8 @@ async function openMassModal() {
   const modal = document.getElementById('mass-select-modal');
   const body  = document.getElementById('mass-modal-body');
   if (!modal) return;
+
+  closeDisplayMoreMenu();
 
   // 모달 열기
   modal.classList.remove('mass-modal-hidden');
@@ -533,7 +605,7 @@ async function selectMass(mass) {
   currentSlideId   = null;
 
   closeMassModal();
-  showLoading('미사 준비 중…');
+  showLoading();
   subscribeToSlides(mass.id);
 }
 
@@ -552,7 +624,10 @@ function updatePptButton() {
 function setupPptDownload() {
   const btn = document.getElementById('display-btn-ppt');
   if (btn) {
-    btn.addEventListener('click', downloadAsPptx);
+    btn.addEventListener('click', () => {
+      closeDisplayMoreMenu();
+      downloadAsPptx();
+    });
   }
   updatePptButton();
 }

@@ -84,8 +84,45 @@
 }
 
 .loading {
-  font-size: var(--title-size);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  color: var(--text-color);
+}
+
+.loading[hidden],
+.loading[style*="display: none"] {
+  display: none !important;
+}
+
+.loading-spinner {
+  width: clamp(36px, 5vw, 56px);
+  height: clamp(36px, 5vw, 56px);
+  border: 3px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+  border-top-color: var(--text-color);
+  border-radius: 50%;
+  animation: display-loading-spin 0.75s linear infinite;
+}
+
+.loading-spinner[hidden] {
+  display: none !important;
+}
+
+.loading-message {
+  margin: 0;
+  font-size: clamp(1rem, 2.8vw, 1.6rem);
   opacity: 0.7;
+  text-align: center;
+}
+
+.loading-message[hidden] {
+  display: none !important;
+}
+
+@keyframes display-loading-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Display control icon bar - top-right corner */
@@ -105,31 +142,96 @@ body.blackout-mode #theme-toggle {
 }
 
 .display-ctrl-btn {
-  background: rgba(128, 128, 128, 0.15);
-  border: 1px solid rgba(128, 128, 128, 0.25);
+  background: rgba(128, 128, 128, 0.12);
+  border: 1px solid rgba(128, 128, 128, 0.2);
   border-radius: 6px;
   cursor: pointer;
   width: 32px;
   height: 32px;
   padding: 0;
-  opacity: 0.4;
-  transition: opacity 0.2s, background-color 0.2s, color 0.2s;
+  opacity: 0.28; /* 미사 중에도 살짝만 보이도록 */
+  transition: opacity 0.2s, background-color 0.2s, color 0.2s, border-color 0.2s;
   color: currentColor;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.display-ctrl-btn:hover {
-  opacity: 1;
+.display-ctrl-btn:hover,
+.display-ctrl-btn:focus-visible {
+  opacity: 0.95;
   background: rgba(128, 128, 128, 0.3);
+  border-color: rgba(128, 128, 128, 0.35);
 }
 
 .display-ctrl-blackout.active {
-  opacity: 1;
+  opacity: 0.85;
   color: #ef4444;
   background: rgba(239, 68, 68, 0.2);
   border-color: rgba(239, 68, 68, 0.4);
+}
+
+.display-ctrl-blackout.active:hover,
+.display-ctrl-blackout.active:focus-visible {
+  opacity: 1;
+}
+
+.display-more-wrap {
+  position: relative;
+}
+
+.display-ctrl-more[aria-expanded="true"] {
+  opacity: 0.85;
+  background: rgba(128, 128, 128, 0.3);
+}
+
+.display-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 168px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-color);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  z-index: 10001;
+}
+
+.display-more-menu[hidden] {
+  display: none !important;
+}
+
+.display-more-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+}
+
+.display-more-item:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.display-more-item:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.display-more-item svg {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 /* ─────────────────────────────────────────────────
@@ -184,7 +286,7 @@ body.blackout-mode #theme-toggle {
   .display-ctrl-btn {
     width: 36px;
     height: 36px;
-    opacity: 0.6;
+    opacity: 0.4;
   }
 }
 
@@ -229,7 +331,7 @@ body.blackout-mode #theme-toggle {
    ───────────────────────────────────────────────── */
 
 .display-ctrl-ppt:disabled {
-  opacity: 0.2;
+  opacity: 0.35;
   cursor: not-allowed;
   pointer-events: none;
 }
