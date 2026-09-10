@@ -1,14 +1,5 @@
 {
   "projects": {
-    "default": "parish-hub-liturgy"
-  },
-  "targets": {
-    "parish-hub-liturgy": {
-      "hosting": {
-        "catechesis": [
-          "parish-hub-catechesis"
-        ]
-      }
-    }
+    "default": "parish-hub-catechesis"
   }
 }
