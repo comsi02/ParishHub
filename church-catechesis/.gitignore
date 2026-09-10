@@ -1,0 +1,32 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Node / Build
+node_modules
+dist
+dist-ssr
+
+# Environment & Secret files (Firebase 정보 및 환경변수 완벽 제외)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local
+
+# Firebase
+.firebase/
+*-debug.log*
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# OS & Editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea

@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────
+    // 헬퍼 함수
+    // ─────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isTeacher() {
+      return isAuthenticated() &&
+        (isAdmin() || exists(/databases/$(database)/documents/catechesis_teachers/$(request.auth.uid)));
+    }
+
+    // ─────────────────────────────────────────
+    // catechesis_* 주일학교 컬렉션
+    // ─────────────────────────────────────────
+    match /catechesis_students/{studentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_parents/{parentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_teachers/{teacherId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /catechesis_attendance/{attendanceId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_activities/{activityId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_grace_ledger/{ledgerId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}
