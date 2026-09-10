@@ -5,14 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>church-catechesis | 가톨릭 주일학교 & 은총표 관리</title>
   <link rel="stylesheet" href="./src/styles/main.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%2232%22%20height=%2232%22><text y=%2226%22 font-size=%2226%22>⛪</text></svg>">
+  <link rel="icon" type="image/png" href="/favicon.png" />
 </head>
 <body>
   <!-- Header -->
   <header class="app-header">
     <div class="header-inner">
       <a href="#" class="brand">
-        <div class="brand-symbol">✝</div>
+        <div class="brand-symbol" style="background: white; border: 1px solid var(--border); padding: 2px; overflow: hidden;">
+          <img src="/favicon.png" alt="St. Andrew Kim Parish Logo" style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;" />
+        </div>
         <div class="brand-info">
           <h1>church-catechesis</h1>
           <span class="sub-tag">가톨릭 주일학교 교리교육 & 은총표 시스템</span>
@@ -69,14 +71,14 @@
         <div class="summary-card">
           <div class="summary-icon icon-green">📅</div>
           <div>
-            <div class="summary-title">오늘 출석 현황</div>
+            <div class="summary-title">이번 주 출석 현황 (토)</div>
             <div class="summary-value" id="statTodayAttendance">0명</div>
           </div>
         </div>
         <div class="summary-card">
           <div class="summary-icon icon-purple">🕊️</div>
           <div>
-            <div class="summary-title">오늘 활동 봉사자</div>
+            <div class="summary-title">이번 주 활동 봉사자</div>
             <div class="summary-value" id="statTodayActivities">0건</div>
           </div>
         </div>
@@ -86,6 +88,29 @@
             <div class="summary-title">총 누적 은총표</div>
             <div class="summary-value" id="statTotalGrace">0 P</div>
           </div>
+        </div>
+      </div>
+
+      <!-- Feast Day Celebration Banner -->
+      <div class="feast-celebration-card" id="feastCelebrationCard">
+        <div class="feast-header">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span style="font-size: 1.6rem;">🎂</span>
+            <div>
+              <h3 style="font-size: 1.05rem; font-weight: 700; color: #92400e;" id="feastHeaderTitle">
+                이번 달 축일을 맞이한 친구들
+              </h3>
+              <p style="font-size: 0.82rem; color: #b45309; margin-top: 0.1rem;" id="feastCongratsMessage">
+                🎉 주님의 은총 속에서 영명축일을 맞이한 모든 친구들을 진심으로 축하합니다! 주님의 축복과 사랑이 늘 함께하시길 기도합니다. ✝️
+              </p>
+            </div>
+          </div>
+          <span class="badge" style="background: #ffffff; color: #b45309; border: 1px solid #fcd34d; font-weight: 700; padding: 0.25rem 0.65rem;" id="feastCountBadge">
+            0명
+          </span>
+        </div>
+        <div class="feast-students-grid" id="feastStudentsGrid">
+          <!-- Dynamically populated -->
         </div>
       </div>
 
@@ -117,10 +142,10 @@
             <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 0.75rem;">📋 은총표 적립 기준 안내</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; font-size: 0.85rem;">
               <div style="background: var(--surface-subtle); padding: 0.75rem; border-radius: 8px;">
-                <strong>주일 학교 출석</strong>: +10 P (지각 +5 P)
+                <strong>토요 주일학교 출석</strong>: +10 P (지각 +5 P)
               </div>
               <div style="background: var(--surface-subtle); padding: 0.75rem; border-radius: 8px;">
-                <strong>주일 미사 참례</strong>: +5 P 추가
+                <strong>미사 참례</strong>: +5 P 추가
               </div>
               <div style="background: var(--surface-subtle); padding: 0.75rem; border-radius: 8px;">
                 <strong>복사단 봉사</strong>: +15 P
@@ -148,7 +173,7 @@
     <section class="tab-panel" id="panel-attendance">
       <div class="toolbar">
         <div class="toolbar-group">
-          <span style="font-weight: 600; font-size: 0.88rem;">출석 일자:</span>
+          <span style="font-weight: 600; font-size: 0.88rem;">출석 일자 (매주 토):</span>
           <input type="date" id="attDatePicker" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" />
         </div>
         <div class="toolbar-group">
@@ -281,17 +306,19 @@
       </div>
     </section>
 
-    <!-- TAB 5: Students & Parents Directory -->
+    <!-- TAB 5: Directory (Students / Parents / Teachers) -->
     <section class="tab-panel" id="panel-students">
       <div class="toolbar">
         <div class="toolbar-group">
           <div class="pill-group" id="directoryTabSwitch">
-            <button class="pill-btn active" data-dir="students">학생 명부</button>
-            <button class="pill-btn" data-dir="parents">학부모 명부</button>
+            <button class="pill-btn active" data-dir="students">👨‍👩‍👧 학생 명부</button>
+            <button class="pill-btn" data-dir="parents">👨‍👩 학부모 명부</button>
+            <button class="pill-btn" data-dir="teachers">✝️ 교사 명부</button>
+            <button class="pill-btn" data-dir="classes">🏫 반 구성</button>
           </div>
           <input type="text" id="directorySearchInput" class="search-input" placeholder="이름, 세례명, 전화번호 검색..." />
         </div>
-        <div class="toolbar-group">
+        <div class="toolbar-group" id="directoryActionBtns">
           <button class="btn btn-primary btn-sm" id="btnOpenAddStudentModal">
             + 새 학생 등록
           </button>
@@ -307,7 +334,7 @@
           <thead>
             <tr>
               <th>이름 (세례명)</th>
-              <th>학년</th>
+              <th>학년 / 반</th>
               <th>성별</th>
               <th>축일</th>
               <th>성사 (첫영성체/견진)</th>
@@ -328,8 +355,8 @@
         <table class="data-table" id="parentsTable">
           <thead>
             <tr>
-              <th>부모 이름 (세례명)</th>
-              <th>구분</th>
+              <th>학부모 1 (세례명)</th>
+              <th>학부모 2 / Spouse (세례명)</th>
               <th>전화번호</th>
               <th>주소</th>
               <th>자녀 학생</th>
@@ -341,11 +368,93 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Teachers Table View -->
+      <div class="data-table-container" id="teachersContainer" style="display: none;">
+        <table class="data-table" id="teachersTable">
+          <thead>
+            <tr>
+              <th>이름 (세례명)</th>
+              <th>역할</th>
+              <th>담당 반</th>
+              <th>전화번호</th>
+              <th>겸임</th>
+              <th>관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Teachers injected -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Classes (반 구성) View -->
+      <div id="classesContainer" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-dark);">🏫 현재 반 구성</h3>
+          <button class="btn btn-primary btn-sm" id="btnOpenAddClassModal">+ 새 반 추가</button>
+        </div>
+        <div id="classesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+          <!-- Classes injected -->
+        </div>
+      </div>
     </section>
 
   </main>
 
   <!-- MODALS -->
+
+  <!-- Modal: Add / Edit Class (반 구성) -->
+  <div class="modal-backdrop" id="modalAddClass">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3 id="addClassModalTitle">🏫 새 반 추가</h3>
+        <button class="modal-close-btn" data-close="modalAddClass">&times;</button>
+      </div>
+      <form id="addClassForm">
+        <div class="modal-body">
+          <input type="hidden" id="editClassId" value="" />
+          <div class="form-group">
+            <label class="form-label">반 이름 *</label>
+            <input type="text" id="newClassName" class="form-control" placeholder="예: 유치부, 초등 저학년 (G1-G3), 중학부" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">포함 학년 (복수 선택 가능 - 합반 자유 조합)</label>
+            <div class="checkbox-group" id="classGradeCheckboxes" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem;">
+              <label class="checkbox-item"><input type="checkbox" value="JK" /> JK</label>
+              <label class="checkbox-item"><input type="checkbox" value="SK" /> SK</label>
+              <label class="checkbox-item"><input type="checkbox" value="G1" /> G1</label>
+              <label class="checkbox-item"><input type="checkbox" value="G2" /> G2</label>
+              <label class="checkbox-item"><input type="checkbox" value="G3" /> G3</label>
+              <label class="checkbox-item"><input type="checkbox" value="G4" /> G4</label>
+              <label class="checkbox-item"><input type="checkbox" value="G5" /> G5</label>
+              <label class="checkbox-item"><input type="checkbox" value="G6" /> G6</label>
+              <label class="checkbox-item"><input type="checkbox" value="G7" /> G7</label>
+              <label class="checkbox-item"><input type="checkbox" value="G8" /> G8</label>
+              <label class="checkbox-item"><input type="checkbox" value="G9" /> G9</label>
+              <label class="checkbox-item"><input type="checkbox" value="G10" /> G10</label>
+              <label class="checkbox-item"><input type="checkbox" value="G11" /> G11</label>
+              <label class="checkbox-item"><input type="checkbox" value="G12" /> G12</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">담당 교사 (복수 선택 가능)</label>
+            <div class="checkbox-group" id="classTeacherCheckboxes" style="display: flex; flex-direction: column; gap: 0.35rem;">
+              <!-- Dynamically populated from teacher list -->
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">메모</label>
+            <input type="text" id="newClassNotes" class="form-control" placeholder="예: 합반 (G1+G2), 인원 제한 없음 등" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modalAddClass">취소</button>
+          <button type="submit" class="btn btn-primary" id="addClassSubmitBtn">반 추가</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- Modal 1: Bonus Points Modal -->
   <div class="modal-backdrop" id="modalBonusPoints">
@@ -533,37 +642,68 @@
       </div>
       <form id="addParentForm">
         <div class="modal-body">
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label class="form-label">부모 이름 *</label>
-              <input type="text" id="newParentName" class="form-control" placeholder="예: 김철수" required />
+          <div style="background: var(--surface-subtle); padding: 0.85rem; border-radius: 8px; margin-bottom: 0.85rem; border: 1px solid var(--border);">
+            <div style="font-weight: 700; font-size: 0.9rem; color: var(--primary); margin-bottom: 0.5rem;">
+              👤 학부모 1 (필수)
             </div>
-            <div class="form-group">
-              <label class="form-label">세례명 (선택)</label>
-              <input type="text" id="newParentBaptismal" class="form-control" placeholder="예: 요셉" />
+            <div class="form-grid-2">
+              <div class="form-group" style="margin-bottom: 0.5rem;">
+                <label class="form-label">이름 *</label>
+                <input type="text" id="newParentName" class="form-control" placeholder="예: 김민호" required />
+              </div>
+              <div class="form-group" style="margin-bottom: 0.5rem;">
+                <label class="form-label">세례명</label>
+                <input type="text" id="newParentBaptismal" class="form-control" placeholder="예: 미카엘" />
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group" style="margin-bottom: 0.35rem;">
+                <label class="form-label">전화번호 *</label>
+                <input type="tel" id="newParentPhone" class="form-control" placeholder="예: 416-555-0101" required />
+              </div>
+              <div class="form-group" style="margin-bottom: 0.35rem; display: flex; align-items: flex-end;">
+                <label class="checkbox-item" style="width: 100%; height: 38px; justify-content: center; background: white; border: 1px solid var(--border);">
+                  <input type="checkbox" id="newParentIsTeacher" />
+                  ✝ 본당 주일학교 교사 겸임
+                </label>
+              </div>
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">전화번호 *</label>
-            <input type="tel" id="newParentPhone" class="form-control" placeholder="예: 416-555-1234" required />
+          <div style="background: var(--surface-subtle); padding: 0.85rem; border-radius: 8px; margin-bottom: 0.85rem; border: 1px solid var(--border);">
+            <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-main); margin-bottom: 0.2rem;">
+              👤 학부모 2 (선택)
+            </div>
+            <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-bottom: 0.5rem;">
+              * 한 분만 등록하시는 경우 비워두시면 됩니다.
+            </small>
+            <div class="form-grid-2">
+              <div class="form-group" style="margin-bottom: 0.5rem;">
+                <label class="form-label">이름</label>
+                <input type="text" id="newParent2Name" class="form-control" placeholder="예: 한지혜" />
+              </div>
+              <div class="form-group" style="margin-bottom: 0.5rem;">
+                <label class="form-label">세례명</label>
+                <input type="text" id="newParent2Baptismal" class="form-control" placeholder="예: 마리아" />
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group" style="margin-bottom: 0.35rem;">
+                <label class="form-label">전화번호</label>
+                <input type="tel" id="newParent2Phone" class="form-control" placeholder="예: 416-555-2111" />
+              </div>
+              <div class="form-group" style="margin-bottom: 0.35rem; display: flex; align-items: flex-end;">
+                <label class="checkbox-item" style="width: 100%; height: 38px; justify-content: center; background: white; border: 1px solid var(--border);">
+                  <input type="checkbox" id="newParent2IsTeacher" />
+                  ✝ 본당 주일학교 교사 겸임
+                </label>
+              </div>
+            </div>
           </div>
 
           <div class="form-group">
             <label class="form-label">자택 주소</label>
             <input type="text" id="newParentAddress" class="form-control" placeholder="예: 100 Steeles Ave, North York, ON" />
-          </div>
-
-          <div class="form-group">
-            <label class="checkbox-item" style="background: none; padding: 0;">
-              <input type="checkbox" id="newParentIsSingle" />
-              한부모 가정 (단독 보호자)
-            </label>
-          </div>
-
-          <div class="form-group" id="spouseNameGroup">
-            <label class="form-label">배우자 이름 / 세례명 (선택)</label>
-            <input type="text" id="newParentSpouse" class="form-control" placeholder="예: 이영희 (마리아)" />
           </div>
         </div>
         <div class="modal-footer">
@@ -571,6 +711,35 @@
           <button type="submit" class="btn btn-primary">학부모 등록</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal 5: User Detail Modal (Teacher / Student / Parent) -->
+  <div class="modal-backdrop" id="modalUserDetail">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3 id="userDetailTitle">👤 상세 정보</h3>
+        <button class="modal-close-btn" data-close="modalUserDetail">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: var(--surface-subtle); padding: 1.1rem; border-radius: var(--radius-md); display: flex; align-items: center; gap: 1rem; border: 1px solid var(--border);">
+          <div class="avatar" id="userDetailAvatar" style="width: 52px; height: 52px; font-size: 1.3rem;">?</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span id="userDetailName" style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">-</span>
+              <span id="userDetailBadge" class="badge badge-grade">-</span>
+            </div>
+            <div id="userDetailSub" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">-</div>
+          </div>
+        </div>
+
+        <div class="detail-info-grid" id="userDetailGrid">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close="modalUserDetail">닫기</button>
+      </div>
     </div>
   </div>
 

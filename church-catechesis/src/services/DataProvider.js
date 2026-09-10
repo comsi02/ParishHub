@@ -1,14 +1,15 @@
 // DataProvider.js
-// church-catechesis 통합 데이터 서비스 (LocalStorage Mock & Firestore 연결 지원)
+// church-catechesis 통합 데이터 서비스 v2
+// 통합 Person 모델 + 자유 합반(Class) 구조
 
 import {
   DEFAULT_SETTINGS,
-  INITIAL_TEACHERS,
-  INITIAL_PARENTS,
-  INITIAL_STUDENTS,
+  INITIAL_PERSONS,
+  INITIAL_CLASSES,
   INITIAL_ATTENDANCE,
   INITIAL_ACTIVITIES,
   INITIAL_GRACE_LEDGER,
+  PERSON_ROLES,
 } from '../mock/sampleData.js';
 
 class DataProvider {
@@ -17,21 +18,26 @@ class DataProvider {
     this.initLocalStorage();
   }
 
+  // ============================================================
+  //  초기화
+  // ============================================================
   initLocalStorage() {
-    if (!localStorage.getItem('catechesis_initialized')) {
+    const DATA_VERSION = '2026_09_v4_person';
+    if (localStorage.getItem('catechesis_data_version') !== DATA_VERSION) {
       this.resetToDefaults();
+      localStorage.setItem('catechesis_data_version', DATA_VERSION);
     }
   }
 
   resetToDefaults() {
     localStorage.setItem('catechesis_settings', JSON.stringify(DEFAULT_SETTINGS));
-    localStorage.setItem('catechesis_teachers', JSON.stringify(INITIAL_TEACHERS));
-    localStorage.setItem('catechesis_parents', JSON.stringify(INITIAL_PARENTS));
-    localStorage.setItem('catechesis_students', JSON.stringify(INITIAL_STUDENTS));
+    localStorage.setItem('catechesis_persons', JSON.stringify(INITIAL_PERSONS));
+    localStorage.setItem('catechesis_classes', JSON.stringify(INITIAL_CLASSES));
     localStorage.setItem('catechesis_attendance', JSON.stringify(INITIAL_ATTENDANCE));
     localStorage.setItem('catechesis_activities', JSON.stringify(INITIAL_ACTIVITIES));
     localStorage.setItem('catechesis_grace_ledger', JSON.stringify(INITIAL_GRACE_LEDGER));
     localStorage.setItem('catechesis_initialized', 'true');
+    localStorage.setItem('catechesis_data_version', '2026_09_v4_person');
   }
 
   _getItem(key) {
@@ -43,112 +49,247 @@ class DataProvider {
     localStorage.setItem(key, JSON.stringify(data));
   }
 
-  // --- 설정 (Settings) ---
+  // ============================================================
+  //  설정 (Settings)
+  // ============================================================
   getSettings() {
     const raw = localStorage.getItem('catechesis_settings');
     return raw ? JSON.parse(raw) : DEFAULT_SETTINGS;
   }
 
-  // --- 교사 (Teachers) ---
-  getTeachers() {
-    return this._getItem('catechesis_teachers');
+  // ============================================================
+  //  반 (Classes)
+  // ============================================================
+  getClasses() {
+    return this._getItem('catechesis_classes');
   }
 
-  // --- 학부모 (Parents) ---
-  getParents() {
-    return this._getItem('catechesis_parents');
+  getClassById(id) {
+    return this.getClasses().find(c => c.id === id) || null;
   }
 
-  getParentById(id) {
-    const parents = this.getParents();
-    return parents.find(p => p.id === id) || null;
-  }
-
-  addParent(parentData) {
-    const parents = this.getParents();
-    const newId = 'p-' + Date.now();
-    const newParent = {
-      id: newId,
-      name: parentData.name,
-      baptismalName: parentData.baptismalName || '',
-      phone: parentData.phone || '',
-      address: parentData.address || '',
-      studentIds: parentData.studentIds || [],
-      isSingleParent: !!parentData.isSingleParent,
-      spouseName: parentData.spouseName || null,
+  addClass(classData) {
+    const classes = this.getClasses();
+    const newClass = {
+      id: 'class-' + Date.now(),
+      name: classData.name || '새 반',
+      grades: classData.grades || [],
+      teacherPersonIds: classData.teacherPersonIds || [],
+      notes: classData.notes || '',
     };
-    parents.push(newParent);
-    this._setItem('catechesis_parents', parents);
-    return newParent;
+    classes.push(newClass);
+    this._setItem('catechesis_classes', classes);
+    return newClass;
   }
 
-  // --- 학생 (Students) ---
-  getStudents() {
-    const students = this._getItem('catechesis_students');
-    const ledger = this._getItem('catechesis_grace_ledger');
-
-    // 학생별 실시간 은총표 계산
-    return students.map(st => {
-      const studentEntries = ledger.filter(l => l.studentId === st.id);
-      const totalGrace = studentEntries.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-      return {
-        ...st,
-        totalGracePoints: totalGrace,
-      };
-    });
-  }
-
-  getStudentById(id) {
-    const students = this.getStudents();
-    return students.find(s => s.id === id) || null;
-  }
-
-  addStudent(studentData) {
-    const students = this._getItem('catechesis_students');
-    const newId = 's-' + Date.now();
-    const newStudent = {
-      id: newId,
-      name: studentData.name,
-      baptismalName: studentData.baptismalName || '',
-      grade: studentData.grade || 'G1',
-      gender: studentData.gender || '남',
-      feastDay: studentData.feastDay || '',
-      firstCommunion: !!studentData.firstCommunion,
-      confirmation: !!studentData.confirmation,
-      departments: studentData.departments || [],
-      parentId: studentData.parentId || '',
-      notes: studentData.notes || '',
-    };
-    students.push(newStudent);
-    this._setItem('catechesis_students', students);
-
-    // 부모 객체에도 자녀 ID 추가
-    if (newStudent.parentId) {
-      const parents = this.getParents();
-      const parent = parents.find(p => p.id === newStudent.parentId);
-      if (parent) {
-        if (!parent.studentIds) parent.studentIds = [];
-        if (!parent.studentIds.includes(newId)) {
-          parent.studentIds.push(newId);
-          this._setItem('catechesis_parents', parents);
-        }
-      }
-    }
-    return newStudent;
-  }
-
-  updateStudent(id, studentData) {
-    const students = this._getItem('catechesis_students');
-    const idx = students.findIndex(s => s.id === id);
+  updateClass(id, classData) {
+    const classes = this.getClasses();
+    const idx = classes.findIndex(c => c.id === id);
     if (idx !== -1) {
-      students[idx] = { ...students[idx], ...studentData };
-      this._setItem('catechesis_students', students);
-      return students[idx];
+      classes[idx] = { ...classes[idx], ...classData };
+      this._setItem('catechesis_classes', classes);
+      return classes[idx];
     }
     return null;
   }
 
-  // --- 출석 기록 (Attendance) ---
+  deleteClass(id) {
+    const classes = this.getClasses().filter(c => c.id !== id);
+    this._setItem('catechesis_classes', classes);
+  }
+
+  // ============================================================
+  //  통합 Person CRUD
+  // ============================================================
+  getPersons() {
+    return this._getItem('catechesis_persons');
+  }
+
+  getPersonById(id) {
+    return this.getPersons().find(p => p.id === id) || null;
+  }
+
+  /** role이 roles 배열에 포함된 사람들 필터링 */
+  getPersonsByRole(role) {
+    return this.getPersons().filter(p => p.roles && p.roles.includes(role));
+  }
+
+  addPerson(personData) {
+    const persons = this.getPersons();
+    const newPerson = {
+      id: 'person-' + Date.now(),
+      name: personData.name || '',
+      baptismalName: personData.baptismalName || '',
+      phone: personData.phone || '',
+      email: personData.email || '',
+      address: personData.address || '',
+      roles: personData.roles || [],
+      teacherInfo: personData.teacherInfo || null,
+      parentInfo: personData.parentInfo || null,
+      studentInfo: personData.studentInfo || null,
+      notes: personData.notes || '',
+    };
+    persons.push(newPerson);
+    this._setItem('catechesis_persons', persons);
+    return newPerson;
+  }
+
+  updatePerson(id, updates) {
+    const persons = this.getPersons();
+    const idx = persons.findIndex(p => p.id === id);
+    if (idx !== -1) {
+      persons[idx] = { ...persons[idx], ...updates };
+      this._setItem('catechesis_persons', persons);
+      return persons[idx];
+    }
+    return null;
+  }
+
+  // ============================================================
+  //  편의 헬퍼 - 학생(Student) 목록 (은총표 자동 계산 포함)
+  // ============================================================
+  getStudents() {
+    const ledger = this._getItem('catechesis_grace_ledger');
+    return this.getPersonsByRole('student').map(p => {
+      const entries = ledger.filter(l => l.studentPersonId === p.id);
+      const totalGracePoints = entries.reduce((sum, l) => sum + Number(l.amount || 0), 0);
+      return { ...p, totalGracePoints };
+    });
+  }
+
+  getStudentById(id) {
+    return this.getStudents().find(s => s.id === id) || null;
+  }
+
+  /** 학생 추가 (편의 메서드) */
+  addStudent(studentData) {
+    const newPerson = this.addPerson({
+      name: studentData.name,
+      baptismalName: studentData.baptismalName || '',
+      phone: '',
+      email: '',
+      address: '',
+      roles: ['student'],
+      teacherInfo: null,
+      parentInfo: null,
+      studentInfo: {
+        grade: studentData.grade || 'G1',
+        gender: studentData.gender || '남',
+        feastDay: studentData.feastDay || '',
+        firstCommunion: !!studentData.firstCommunion,
+        confirmation: !!studentData.confirmation,
+        departments: studentData.departments || [],
+        parentPersonIds: studentData.parentPersonIds || [],
+      },
+      notes: studentData.notes || '',
+    });
+
+    // 연결된 학부모 parentInfo에 자녀 ID 추가
+    (studentData.parentPersonIds || []).forEach(pid => {
+      const parent = this.getPersonById(pid);
+      if (parent && parent.parentInfo) {
+        const cids = parent.parentInfo.childPersonIds || [];
+        if (!cids.includes(newPerson.id)) {
+          cids.push(newPerson.id);
+          this.updatePerson(pid, {
+            parentInfo: { ...parent.parentInfo, childPersonIds: cids }
+          });
+        }
+      }
+    });
+
+    return newPerson;
+  }
+
+  updateStudent(id, studentData) {
+    const person = this.getPersonById(id);
+    if (!person) return null;
+    return this.updatePerson(id, {
+      ...studentData,
+      studentInfo: { ...person.studentInfo, ...(studentData.studentInfo || {}) },
+    });
+  }
+
+  // ============================================================
+  //  편의 헬퍼 - 학부모(Parent) 목록
+  // ============================================================
+  getParents() {
+    return this.getPersonsByRole('parent');
+  }
+
+  getParentById(id) {
+    return this.getParents().find(p => p.id === id) || null;
+  }
+
+  /** 학부모 추가 (편의 메서드) */
+  addParent(parentData) {
+    return this.addPerson({
+      name: parentData.name,
+      baptismalName: parentData.baptismalName || '',
+      phone: parentData.phone || '',
+      email: parentData.email || '',
+      address: parentData.address || '',
+      roles: parentData.isTeacher ? ['parent', 'teacher'] : ['parent'],
+      teacherInfo: parentData.isTeacher ? {
+        assignedClassIds: [],
+        specialRole: parentData.teacherSpecialRole || null,
+      } : null,
+      parentInfo: {
+        childPersonIds: parentData.childPersonIds || [],
+        spousePersonId: parentData.spousePersonId || null,
+      },
+      studentInfo: null,
+      notes: parentData.notes || '',
+    });
+  }
+
+  // ============================================================
+  //  편의 헬퍼 - 교사진 (역할이 teacher/principal/vice_principal/liturgy_teacher/acolyte_teacher 중 하나인 사람)
+  // ============================================================
+  getTeacherRoles() {
+    return ['principal', 'vice_principal', 'teacher', 'liturgy_teacher', 'acolyte_teacher'];
+  }
+
+  getTeachers() {
+    const teacherRoles = this.getTeacherRoles();
+    return this.getPersons().filter(p =>
+      p.roles && p.roles.some(r => teacherRoles.includes(r))
+    );
+  }
+
+  /** 사람의 가장 높은(표시용) 교사 역할 반환 */
+  getPrimaryTeacherRole(person) {
+    const priority = ['principal', 'vice_principal', 'liturgy_teacher', 'acolyte_teacher', 'teacher'];
+    for (const r of priority) {
+      if (person.roles && person.roles.includes(r)) {
+        return { role: r, label: PERSON_ROLES[r]?.label || r };
+      }
+    }
+    return null;
+  }
+
+  /** 학부모이면서 교사인 사람들 */
+  getTeacherParents() {
+    return this.getPersons().filter(p =>
+      p.roles && p.roles.includes('parent') &&
+      p.roles.some(r => this.getTeacherRoles().includes(r))
+    );
+  }
+
+  // ============================================================
+  //  편의 헬퍼 - 학생의 부모 목록 조회
+  // ============================================================
+  getParentsOfStudent(studentId) {
+    const student = this.getPersonById(studentId);
+    if (!student || !student.studentInfo) return [];
+    return (student.studentInfo.parentPersonIds || [])
+      .map(pid => this.getPersonById(pid))
+      .filter(Boolean);
+  }
+
+  // ============================================================
+  //  출석 기록 (Attendance) - studentPersonId 사용
+  // ============================================================
   getAttendance(date) {
     const all = this._getItem('catechesis_attendance');
     if (!date) return all;
@@ -160,57 +301,57 @@ class DataProvider {
     let ledger = this._getItem('catechesis_grace_ledger');
     const settings = this.getSettings();
 
-    // 점수 계산: 출석 여부에 따른 점수
     let points = 0;
-    if (status === '출석') {
-      points += settings.attendancePoints || 10;
-    } else if (status === '지각') {
-      points += Math.floor((settings.attendancePoints || 10) / 2);
-    }
-    if (massAttended) {
-      points += settings.massAttendancePoints || 5;
-    }
+    if (status === '출석') points += settings.attendancePoints || 10;
+    else if (status === '지각') points += settings.latePoints || 5;
+    if (massAttended) points += settings.massAttendancePoints || 5;
 
-    // 기존 당일 출석 체크 확인
-    const existIdx = attendance.findIndex(a => a.date === date && a.studentId === studentId);
+    const existIdx = attendance.findIndex(
+      a => a.date === date && (a.studentPersonId === studentId || a.studentId === studentId)
+    );
     const attId = existIdx !== -1 ? attendance[existIdx].id : 'att-' + Date.now();
 
     const record = {
       id: attId,
       date,
-      studentId,
+      studentPersonId: studentId,  // v2 key
+      studentId: studentId,         // 하위 호환
       status,
       massAttended: !!massAttended,
       pointsEarned: points,
-      recordedBy
+      recordedBy,
     };
 
-    if (existIdx !== -1) {
-      attendance[existIdx] = record;
-    } else {
-      attendance.push(record);
-    }
+    if (existIdx !== -1) attendance[existIdx] = record;
+    else attendance.push(record);
     this._setItem('catechesis_attendance', attendance);
 
-    // 은총표 원장(Ledger) 동기화 (기존 당일 출석 점수 항목 대체 또는 추가)
-    ledger = ledger.filter(l => !(l.studentId === studentId && l.date === date && l.type === '출석'));
+    // 은총표 원장 동기화
+    ledger = ledger.filter(
+      l => !(
+        (l.studentPersonId === studentId || l.studentId === studentId) &&
+        l.date === date && l.type === '출석'
+      )
+    );
     if (points > 0) {
       ledger.push({
         id: 'gl-att-' + Date.now(),
-        studentId,
+        studentPersonId: studentId,
+        studentId: studentId,
         date,
         type: '출석',
         amount: points,
         reason: `주일 출석 (${status}${massAttended ? ' + 미사참례' : ''})`,
-        issuedBy: recordedBy
+        issuedBy: recordedBy,
       });
     }
     this._setItem('catechesis_grace_ledger', ledger);
-
     return record;
   }
 
-  // --- 활동 기록 (Activities) ---
+  // ============================================================
+  //  활동 기록 (Activities)
+  // ============================================================
   getActivities(date) {
     const all = this._getItem('catechesis_activities');
     if (!date) return all;
@@ -225,52 +366,45 @@ class DataProvider {
     const points = pointsEarned !== null ? Number(pointsEarned) : (settings.activityPoints[department] || 10);
     const newId = 'act-' + Date.now();
 
-    const record = {
-      id: newId,
-      date,
-      studentId,
-      department,
-      roleDetail,
-      pointsEarned: points,
-      recordedBy
-    };
+    const record = { id: newId, date, studentPersonId: studentId, studentId, department, roleDetail, pointsEarned: points, recordedBy };
     activities.push(record);
     this._setItem('catechesis_activities', activities);
 
-    // 은총표 원장에 기록
     ledger.push({
       id: 'gl-act-' + Date.now(),
+      studentPersonId: studentId,
       studentId,
       date,
       type: '활동',
       amount: points,
       reason: `${department} 봉사 활동 (${roleDetail || '활동 참례'})`,
-      issuedBy: recordedBy
+      issuedBy: recordedBy,
     });
     this._setItem('catechesis_grace_ledger', ledger);
-
     return record;
   }
 
-  // --- 은총표 원장 (Grace Ledger) & 보너스 점수 ---
+  // ============================================================
+  //  은총표 원장 (Grace Ledger)
+  // ============================================================
   getGraceLedger(studentId = null) {
     const ledger = this._getItem('catechesis_grace_ledger');
     if (!studentId) return ledger;
-    return ledger.filter(l => l.studentId === studentId);
+    return ledger.filter(l => l.studentPersonId === studentId || l.studentId === studentId);
   }
 
   addBonusPoints({ studentId, amount, reason, issuedBy = '교감 선생님' }) {
     const ledger = this._getItem('catechesis_grace_ledger');
     const today = new Date().toISOString().split('T')[0];
-
     const entry = {
       id: 'gl-bonus-' + Date.now(),
+      studentPersonId: studentId,
       studentId,
       date: today,
       type: Number(amount) >= 0 ? '추가점수' : '사용/차감',
       amount: Number(amount),
       reason,
-      issuedBy
+      issuedBy,
     };
     ledger.push(entry);
     this._setItem('catechesis_grace_ledger', ledger);
