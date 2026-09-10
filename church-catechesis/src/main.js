@@ -327,9 +327,146 @@ function showUserDetail(type, id) {
 }
 
 // ============================================================
+//  Theme Management (Dark / Light Mode)
+// ============================================================
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('catechesis_theme', theme);
+  const btnThemeToggle = document.getElementById('btnThemeToggle');
+  if (btnThemeToggle) {
+    const icon = btnThemeToggle.querySelector('.theme-toggle-icon');
+    const text = btnThemeToggle.querySelector('.theme-toggle-text');
+    if (theme === 'dark') {
+      if (icon) icon.textContent = '☀️';
+      if (text) text.textContent = '라이트 모드';
+      btnThemeToggle.setAttribute('title', '라이트 모드로 전환');
+    } else {
+      if (icon) icon.textContent = '🌙';
+      if (text) text.textContent = '다크 모드';
+      btnThemeToggle.setAttribute('title', '다크 모드로 전환');
+    }
+  }
+}
+
+function initTheme() {
+  const savedTheme = localStorage.getItem('catechesis_theme');
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+  applyTheme(initialTheme);
+
+  const btnThemeToggle = document.getElementById('btnThemeToggle');
+  if (btnThemeToggle) {
+    btnThemeToggle.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      applyTheme(nextTheme);
+    });
+  }
+}
+
+// ============================================================
+//  Sunday School D-Day & Progress Calculation
+// ============================================================
+function renderDDayProgress() {
+  const now = new Date();
+  const daysOfWeek = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+  const dayNamesShort = ['일', '월', '화', '수', '목', '금', '토'];
+  const currentDayIndex = now.getDay(); // 0 (Sun) ~ 6 (Sat)
+
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const date = now.getDate();
+  const dayFullName = daysOfWeek[currentDayIndex];
+
+  // D-Day calculation to upcoming Saturday (day index 6)
+  const daysUntilSaturday = (6 - currentDayIndex + 7) % 7;
+
+  // Next Saturday Date
+  const nextSat = new Date(now);
+  nextSat.setDate(now.getDate() + daysUntilSaturday);
+  const nextSatYear = nextSat.getFullYear();
+  const nextSatMonth = nextSat.getMonth() + 1;
+  const nextSatDate = nextSat.getDate();
+
+  // Progress % (Sun=14%, Mon=28%, Tue=43%, Wed=57%, Thu=71%, Fri=86%, Sat=100%)
+  const progressPercent = currentDayIndex === 6 ? 100 : Math.round(((currentDayIndex + 1) / 7) * 100);
+
+  // DOM Elements
+  const todayBadge = document.getElementById('ddayTodayDateBadge');
+  const highlightBadge = document.getElementById('ddayHighlightBadge');
+  const headline = document.getElementById('ddayHeadline');
+  const subquote = document.getElementById('ddaySubquote');
+  const stepsRow = document.getElementById('ddayStepsRow');
+  const progressBarFill = document.getElementById('ddayProgressBarFill');
+  const nextSatText = document.getElementById('ddayNextSatText');
+  const progressPercentText = document.getElementById('ddayProgressPercentText');
+
+  if (todayBadge) {
+    todayBadge.textContent = `📅 오늘: ${year}년 ${month}월 ${date}일 (${dayFullName})`;
+  }
+
+  if (highlightBadge && headline && subquote) {
+    if (daysUntilSaturday === 0) {
+      highlightBadge.textContent = '🔥 D-Day 오늘';
+      highlightBadge.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+      headline.textContent = '🎉 오늘은 신나는 토요 주일학교 날이에요!';
+      subquote.textContent = '친구들과 선생님을 만나는 기쁜 날! 즐겁게 미사와 교리에 참여해요 ✝️';
+    } else if (daysUntilSaturday === 1) {
+      highlightBadge.textContent = '🏃 D-1';
+      highlightBadge.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+      headline.textContent = '🏃 주일학교까지 딱 하루 남았어요! (D-1)';
+      subquote.textContent = '내일은 토요 주일학교! 교리 책과 성경을 미리 챙겨두어요 🎒';
+    } else {
+      highlightBadge.textContent = `🏃 D-${daysUntilSaturday}`;
+      highlightBadge.style.background = 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)';
+      headline.textContent = `토요 주일학교까지 D-${daysUntilSaturday}일 남았어요!`;
+      subquote.textContent = '평일에도 예수님 사랑 실천하며 즐거운 마음으로 성당 갈 준비를 해요 ✨';
+    }
+  }
+
+  if (stepsRow) {
+    stepsRow.innerHTML = dayNamesShort.map((name, idx) => {
+      const isCompleted = idx < currentDayIndex;
+      const isActive = idx === currentDayIndex;
+      const isTarget = idx === 6;
+
+      let classes = ['dday-step-node'];
+      if (isCompleted) classes.push('completed');
+      if (isActive) classes.push('active');
+      if (isTarget) classes.push('target');
+
+      let circleContent = name;
+      if (isCompleted) circleContent = '✓';
+      else if (isTarget) circleContent = '⛪';
+
+      return `
+        <div class="${classes.join(' ')}">
+          <div class="dday-node-circle">${circleContent}</div>
+          <span class="dday-node-label">${name}${isTarget ? ' (성당)' : ''}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  if (progressBarFill) {
+    progressBarFill.style.width = `${progressPercent}%`;
+  }
+
+  if (nextSatText) {
+    nextSatText.textContent = `⛪ 다가오는 토요 주일학교: ${nextSatYear}년 ${nextSatMonth}월 ${nextSatDate}일 (토)`;
+  }
+
+  if (progressPercentText) {
+    progressPercentText.textContent = `진행률 ${progressPercent}%`;
+  }
+}
+
+// ============================================================
 //  TAB 1: Dashboard
 // ============================================================
 function renderDashboard() {
+  renderDDayProgress();
+
   const students = dataProvider.getStudents();
   const teachers = dataProvider.getTeachers();
   const today = document.getElementById('attDatePicker')?.value || getTodayDateString();
@@ -1279,6 +1416,7 @@ window.showUserDetailGlobal = (type, id) => showUserDetail(type, id);
 //  Initial Boot
 // ============================================================
 function initApp() {
+  initTheme();
   renderDashboard();
   renderAttendance();
   renderActivities();
