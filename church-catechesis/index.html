@@ -25,10 +25,53 @@
         </div>
       </a>
       <div class="header-actions">
+        <!-- Auth Container -->
+        <div class="auth-container" id="authContainer">
+          <button class="btn-google-login" id="btnGoogleLogin">
+            <svg class="google-icon" viewBox="0 0 24 24" width="16" height="16">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            <span>Google 로그인</span>
+          </button>
+          <div class="user-profile-chip" id="userProfileChip" style="display: none;">
+            <img class="user-avatar-img" id="userAvatarImg" src="" alt="User Avatar" style="display: none;" />
+            <div class="user-avatar-fallback" id="userAvatarFallback">G</div>
+            <div class="user-meta">
+              <div style="display: flex; align-items: center; gap: 0.35rem;">
+                <span class="user-name" id="userNameText">-</span>
+                <span class="role-badge-tag role-badge-teacher" id="userRoleBadge">교사</span>
+              </div>
+              <span class="user-email" id="userEmailText">-</span>
+            </div>
+            <button class="btn-logout" id="btnSignOut" title="로그아웃">
+              로그아웃
+            </button>
+          </div>
+        </div>
+
+        <button class="btn-admin-manage" id="btnOpenAdminUsersModal" style="display: none;" title="가입 신청 승인 관리">
+          🛡️ 가입 승인 관리
+          <span class="badge" id="pendingUsersBadge" style="background: #ef4444; color: white; padding: 0.1rem 0.4rem; font-size: 0.65rem; border-radius: 99px; display: none;">0</span>
+        </button>
+
         <button class="theme-toggle-btn" id="btnThemeToggle" title="다크/라이트 모드 전환" aria-label="테마 전환">
           <span class="theme-toggle-icon">🌙</span>
           <span class="theme-toggle-text">다크 모드</span>
         </button>
+
+        <!-- Demo Mode Persona Switcher (Local Demo only) -->
+        <div id="demoPersonaWrapper" style="display: inline-flex; align-items: center; gap: 0.3rem;">
+          <select id="demoRoleSelect" class="filter-select" style="padding: 0.3rem 0.55rem; font-size: 0.76rem; border-radius: var(--radius-full); font-weight: 600;" title="데모 권한 전환">
+            <option value="none">🔒 비로그인 (일반 모드)</option>
+            <option value="pending">⏳ 승인 대기 회원</option>
+            <option value="teacher" selected>✅ 교사 계정 (승인)</option>
+            <option value="admin">🛡️ 관리자 (신부님/교감)</option>
+          </select>
+        </div>
+
         <span class="env-badge" id="envBadge">
           <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
           로컬 데모 모드
@@ -235,35 +278,39 @@
 
     <!-- TAB 2: Attendance -->
     <section class="tab-panel" id="panel-attendance">
-      <div class="toolbar">
-        <div class="toolbar-group">
-          <span style="font-weight: 600; font-size: 0.88rem;">출석 일자 (매주 토):</span>
-          <input type="date" id="attDatePicker" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" />
-        </div>
-        <div class="toolbar-group">
-          <div class="pill-group" id="attGradeFilterGroup">
-            <button class="pill-btn active" data-filter="all">전체</button>
-            <button class="pill-btn" data-filter="kinder">유치부(JK,SK)</button>
-            <button class="pill-btn" data-filter="elementary">초등부(G1~G6)</button>
-            <button class="pill-btn" data-filter="youth">중고등부(G7~G12)</button>
+      <div id="attendanceLockedNotice" style="display: none;"></div>
+      <div id="attendanceProtectedContent">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <span style="font-weight: 600; font-size: 0.88rem;">출석 일자 (매주 토):</span>
+            <input type="date" id="attDatePicker" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" />
+          </div>
+          <div class="toolbar-group">
+            <div class="pill-group" id="attGradeFilterGroup">
+              <button class="pill-btn active" data-filter="all">전체</button>
+              <button class="pill-btn" data-filter="kinder">유치부(JK,SK)</button>
+              <button class="pill-btn" data-filter="elementary">초등부(G1~G6)</button>
+              <button class="pill-btn" data-filter="youth">중고등부(G7~G12)</button>
+            </div>
+          </div>
+          <div class="toolbar-group">
+            <button class="btn btn-secondary btn-sm" id="btnMarkAllPresent">
+              ✨ 전원 출석 완료
+            </button>
           </div>
         </div>
-        <div class="toolbar-group">
-          <button class="btn btn-secondary btn-sm" id="btnMarkAllPresent">
-            ✨ 전원 출석 완료
-          </button>
-        </div>
-      </div>
 
-      <!-- Quick Attendance Cards Grid -->
-      <div class="attendance-grid" id="attendanceGrid">
-        <!-- Rendered by JS -->
+        <!-- Quick Attendance Cards Grid -->
+        <div class="attendance-grid" id="attendanceGrid">
+          <!-- Rendered by JS -->
+        </div>
       </div>
     </section>
 
     <!-- TAB 3: Activities -->
     <section class="tab-panel" id="panel-activities">
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.25rem;">
+      <div id="activitiesLockedNotice" style="display: none;"></div>
+      <div id="activitiesProtectedContent" style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.25rem;">
         <!-- Left: Activity Recording Form -->
         <div class="data-table-container" style="padding: 1.25rem; height: fit-content;">
           <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 1rem;">
@@ -333,135 +380,141 @@
 
     <!-- TAB 4: Grace Bank -->
     <section class="tab-panel" id="panel-grace">
-      <div class="toolbar">
-        <div class="toolbar-group">
-          <input type="text" id="graceSearchInput" class="search-input" placeholder="학생 또는 세례명 검색..." />
-          <div class="pill-group" id="graceGradeFilter">
-            <button class="pill-btn active" data-filter="all">전체</button>
-            <button class="pill-btn" data-filter="kinder">유치부</button>
-            <button class="pill-btn" data-filter="elementary">초등부</button>
-            <button class="pill-btn" data-filter="youth">중고등부</button>
+      <div id="graceLockedNotice" style="display: none;"></div>
+      <div id="graceProtectedContent">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <input type="text" id="graceSearchInput" class="search-input" placeholder="학생 또는 세례명 검색..." />
+            <div class="pill-group" id="graceGradeFilter">
+              <button class="pill-btn active" data-filter="all">전체</button>
+              <button class="pill-btn" data-filter="kinder">유치부</button>
+              <button class="pill-btn" data-filter="elementary">초등부</button>
+              <button class="pill-btn" data-filter="youth">중고등부</button>
+            </div>
+          </div>
+          <div class="toolbar-group">
+            <button class="btn btn-grace" id="btnOpenBonusModal">
+              ✨ 보너스/추가 은총표 부여
+            </button>
           </div>
         </div>
-        <div class="toolbar-group">
-          <button class="btn btn-grace" id="btnOpenBonusModal">
-            ✨ 보너스/추가 은총표 부여
-          </button>
-        </div>
-      </div>
 
-      <div class="data-table-container">
-        <table class="data-table" id="graceOverviewTable">
-          <thead>
-            <tr>
-              <th>학생 (세례명)</th>
-              <th>학년</th>
-              <th>활동 부서</th>
-              <th style="text-align: center;">출석 점수</th>
-              <th style="text-align: center;">활동 점수</th>
-              <th style="text-align: center;">보너스 점수</th>
-              <th style="text-align: right;">총 은총표</th>
-              <th style="text-align: center;">관리</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Grace overview injected -->
-          </tbody>
-        </table>
+        <div class="data-table-container">
+          <table class="data-table" id="graceOverviewTable">
+            <thead>
+              <tr>
+                <th>학생 (세례명)</th>
+                <th>학년</th>
+                <th>활동 부서</th>
+                <th style="text-align: center;">출석 점수</th>
+                <th style="text-align: center;">활동 점수</th>
+                <th style="text-align: center;">보너스 점수</th>
+                <th style="text-align: right;">총 은총표</th>
+                <th style="text-align: center;">관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Grace overview injected -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
     <!-- TAB 5: Directory (Students / Parents / Teachers) -->
     <section class="tab-panel" id="panel-students">
-      <div class="toolbar">
-        <div class="toolbar-group">
-          <div class="pill-group" id="directoryTabSwitch">
-            <button class="pill-btn active" data-dir="students">👨‍👩‍👧 학생 명부</button>
-            <button class="pill-btn" data-dir="parents">👨‍👩 학부모 명부</button>
-            <button class="pill-btn" data-dir="teachers">✝️ 교사 명부</button>
-            <button class="pill-btn" data-dir="classes">🏫 반 구성</button>
+      <div id="studentsLockedNotice" style="display: none;"></div>
+      <div id="studentsProtectedContent">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <div class="pill-group" id="directoryTabSwitch">
+              <button class="pill-btn active" data-dir="students">👨‍👩‍👧 학생 명부</button>
+              <button class="pill-btn" data-dir="parents">👨‍👩 학부모 명부</button>
+              <button class="pill-btn" data-dir="teachers">✝️ 교사 명부</button>
+              <button class="pill-btn" data-dir="classes">🏫 반 구성</button>
+            </div>
+            <input type="text" id="directorySearchInput" class="search-input" placeholder="이름, 세례명, 전화번호 검색..." />
           </div>
-          <input type="text" id="directorySearchInput" class="search-input" placeholder="이름, 세례명, 전화번호 검색..." />
+          <div class="toolbar-group" id="directoryActionBtns">
+            <button class="btn btn-primary btn-sm" id="btnOpenAddStudentModal">
+              + 새 학생 등록
+            </button>
+            <button class="btn btn-secondary btn-sm" id="btnOpenAddParentModal">
+              + 새 학부모 등록
+            </button>
+          </div>
         </div>
-        <div class="toolbar-group" id="directoryActionBtns">
-          <button class="btn btn-primary btn-sm" id="btnOpenAddStudentModal">
-            + 새 학생 등록
-          </button>
-          <button class="btn btn-secondary btn-sm" id="btnOpenAddParentModal">
-            + 새 학부모 등록
-          </button>
+
+        <!-- Students Table View -->
+        <div class="data-table-container" id="studentsContainer">
+          <table class="data-table" id="studentsTable">
+            <thead>
+              <tr>
+                <th>이름 (세례명)</th>
+                <th>학년 / 반</th>
+                <th>성별</th>
+                <th>축일</th>
+                <th>성사 (첫영성체/견진)</th>
+                <th>활동 부서</th>
+                <th>학부모 (연락처)</th>
+                <th>보유 은총표</th>
+                <th>관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Students injected -->
+            </tbody>
+          </table>
         </div>
-      </div>
 
-      <!-- Students Table View -->
-      <div class="data-table-container" id="studentsContainer">
-        <table class="data-table" id="studentsTable">
-          <thead>
-            <tr>
-              <th>이름 (세례명)</th>
-              <th>학년 / 반</th>
-              <th>성별</th>
-              <th>축일</th>
-              <th>성사 (첫영성체/견진)</th>
-              <th>활동 부서</th>
-              <th>학부모 (연락처)</th>
-              <th>보유 은총표</th>
-              <th>관리</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Students injected -->
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Parents Table View -->
-      <div class="data-table-container" id="parentsContainer" style="display: none;">
-        <table class="data-table" id="parentsTable">
-          <thead>
-            <tr>
-              <th>학부모 1 (세례명)</th>
-              <th>학부모 2 / Spouse (세례명)</th>
-              <th>전화번호</th>
-              <th>주소</th>
-              <th>자녀 학생</th>
-              <th>관리</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Parents injected -->
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Teachers Table View -->
-      <div class="data-table-container" id="teachersContainer" style="display: none;">
-        <table class="data-table" id="teachersTable">
-          <thead>
-            <tr>
-              <th>이름 (세례명)</th>
-              <th>역할</th>
-              <th>담당 반</th>
-              <th>전화번호</th>
-              <th>겸임</th>
-              <th>관리</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Teachers injected -->
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Classes (반 구성) View -->
-      <div id="classesContainer" style="display: none;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-dark);">🏫 현재 반 구성</h3>
-          <button class="btn btn-primary btn-sm" id="btnOpenAddClassModal">+ 새 반 추가</button>
+        <!-- Parents Table View -->
+        <div class="data-table-container" id="parentsContainer" style="display: none;">
+          <table class="data-table" id="parentsTable">
+            <thead>
+              <tr>
+                <th>학부모 1 (세례명)</th>
+                <th>학부모 2 / Spouse (세례명)</th>
+                <th>전화번호</th>
+                <th>주소</th>
+                <th>자녀 학생</th>
+                <th>관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Parents injected -->
+            </tbody>
+          </table>
         </div>
-        <div id="classesGrid"
-          style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
-          <!-- Classes injected -->
+
+        <!-- Teachers Table View -->
+        <div class="data-table-container" id="teachersContainer" style="display: none;">
+          <table class="data-table" id="teachersTable">
+            <thead>
+              <tr>
+                <th>이름 (세례명)</th>
+                <th>역할</th>
+                <th>담당 반</th>
+                <th>전화번호</th>
+                <th>겸임</th>
+                <th>관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Teachers injected -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Classes (반 구성) View -->
+        <div id="classesContainer" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-dark);">🏫 현재 반 구성</h3>
+            <button class="btn btn-primary btn-sm" id="btnOpenAddClassModal">+ 새 반 추가</button>
+          </div>
+          <div id="classesGrid"
+            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+            <!-- Classes injected -->
+          </div>
         </div>
       </div>
     </section>
@@ -475,12 +528,20 @@
         <img src="/favicon.png" alt="St. Andrew Kim Parish Logo" class="footer-logo" />
         <div>
           <div class="footer-title">천주교 캐나다 런던 성 김대건 안드레아 한인 성당 주일학교</div>
-          <div class="footer-sub">ST. ANDREW KIM KOREAN CATHOLIC CHURCH SUNDAY SCHOOL</div>
+          <div class="footer-sub">ST. ANDREW KIM KOREAN CATHOLIC CHURCH SUNDAY SCHOOL • LONDON, ONTARIO, CANADA 🍁</div>
         </div>
       </div>
       <div class="footer-info">
+        <p class="footer-desc">
+          <span>🍁 40가족의 따뜻하고 행복한 신앙 공동체</span> • 
+          <a href="https://standrewkimlondon.ca/" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; font-weight: 600;">
+            성당 공식 홈페이지 방문 (standrewkimlondon.ca) ↗
+          </a>
+        </p>
         <p class="copyright">© 2026 St. Andrew Kim Korean Catholic Church Sunday School. All rights reserved.</p>
-        <p class="footer-desc">가톨릭 주일학교 교리교육 & 은총표 관리 시스템 | Faith • Hope • Love ✝️</p>
+        <p class="footer-sub-text" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
+          가톨릭 주일학교 교리교육 & 은총표 관리 시스템 | Faith • Hope • Love ✝️
+        </p>
       </div>
     </div>
   </footer>
@@ -834,6 +895,40 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-close="modalUserDetail">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 6: Admin User Approval Management (회원 가입 및 권한 승인 관리) -->
+  <div class="modal-backdrop" id="modalAdminUsers">
+    <div class="modal-content" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 id="adminUsersModalTitle">🛡️ 회원 가입 및 권한 승인 관리</h3>
+        <button class="modal-close-btn" data-close="modalAdminUsers">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Google 로그인으로 가입을 요청한 사용자를 승인하거나 역할을 지정할 수 있습니다. 승인된 교사/관리자만 주일학교 학생 출석, 은총표 및 명부 상세 정보에 접근할 수 있습니다.
+        </p>
+        <div class="data-table-container">
+          <table class="data-table" id="adminUsersTable">
+            <thead>
+              <tr>
+                <th>사용자</th>
+                <th>신청 일시</th>
+                <th>상태</th>
+                <th>부여 역할</th>
+                <th>관리</th>
+              </tr>
+            </thead>
+            <tbody id="adminUsersTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close="modalAdminUsers">닫기</button>
       </div>
     </div>
   </div>

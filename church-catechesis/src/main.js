@@ -1,15 +1,38 @@
 // main.js
 // church-catechesis 주일학교 & 은총표 관리 애플리케이션 진입점
-// v2 - 통합 Person 모델 + 자유 합반(Class) 구조
+// v2 - 통합 Person 모델 + 자유 합반(Class) 구조 + Google 인증 및 관리자 승인 체계
 
 import { dataProvider } from './services/DataProvider.js';
 import { GRADES, GRADE_SORT_MAP, DEPARTMENTS, PERSON_ROLES, getRecentSaturday } from './mock/sampleData.js';
+import {
+  signInWithGoogle,
+  signOut,
+  onAuthStateChanged,
+  maskKoreanName,
+  maskBaptismalName,
+  maskTeacherName,
+  maskPhoneNumber,
+  getAllUsers,
+  approveUser,
+  rejectUser,
+  setLocalDemoUserRole
+} from './services/auth.js';
 
 // --- State ---
 let currentTab = 'dashboard';
 let currentAttGradeFilter = 'all';
 let currentGraceGradeFilter = 'all';
 let currentDirectoryView = 'students'; // 'students' | 'parents' | 'teachers' | 'classes'
+let currentUser = null;
+let currentUserProfile = null;
+
+function isUserApproved() {
+  return Boolean(currentUserProfile && currentUserProfile.isApproved);
+}
+
+function isUserAdmin() {
+  return Boolean(currentUserProfile && currentUserProfile.isAdmin);
+}
 
 // --- DOM References ---
 const navTabs = document.querySelectorAll('.nav-tab-btn');
@@ -88,6 +111,11 @@ function getPrimaryRoleLabel(person) {
 //  User Detail Modal
 // ============================================================
 function showUserDetail(type, id) {
+  if (!isUserApproved()) {
+    showToast('🔒 주일학교 교사 및 승인된 회원만 상세 정보를 열람하실 수 있습니다.', '🔒');
+    return;
+  }
+
   const modal = document.getElementById('modalUserDetail');
   if (!modal) return;
 
@@ -327,6 +355,295 @@ function showUserDetail(type, id) {
 }
 
 // ============================================================
+//  Google Auth, Admin Approval & Permission Guard Helpers
+// ============================================================
+function getAccessLockedHtml(tabTitle) {
+  if (!currentUser) {
+    return `
+      <div class="access-locked-card">
+        <div class="locked-icon">🔒</div>
+        <h3>${tabTitle}은(는) 승인된 교사 전용 화면입니다</h3>
+        <p>
+          주일학교 학생들의 출석 체크, 은총표 관리 및 명부 열람은 개인정보 보호를 위해 승인된 교사 및 관리자만 이용할 수 있습니다.
+        </p>
+        <button class="btn btn-primary btn-locked-action btn-login-trigger">
+          <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          Google 계정으로 로그인하기
+        </button>
+      </div>
+    `;
+  } else {
+    const name = currentUserProfile?.displayName || currentUser.displayName || '회원';
+    const email = currentUserProfile?.email || currentUser.email || '';
+    return `
+      <div class="access-locked-card pending">
+        <div class="locked-icon">⏳</div>
+        <h3>가입 승인 심사 중입니다</h3>
+        <p>
+          <strong>${name}</strong> (${email}) 님의 가입 신청이 접수되었습니다.<br/>
+          본당 주일학교 관리자(교장/교감/교사회)의 승인 완료 후 ${tabTitle} 기능을 정상적으로 이용하실 수 있습니다.
+        </p>
+        <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+          <span class="role-badge-tag role-badge-pending">상태: 승인 대기</span>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">신청일: ${new Date(currentUserProfile?.requestedAt || Date.now()).toLocaleDateString('ko-KR')}</span>
+        </div>
+      </div>
+    `;
+  }
+}
+
+async function handleGoogleLogin() {
+  try {
+    const btn = document.getElementById('btnGoogleLogin');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span>⏳ 로그인 중...</span>`;
+    }
+    const { user, profile } = await signInWithGoogle();
+    if (profile?.isApproved) {
+      showToast(`환영합니다, ${user?.displayName || '선생님'}님!`, '✝️');
+    } else {
+      showToast(`가입 신청되었습니다. 관리자 승인 후 이용 가능합니다.`, '⏳');
+    }
+  } catch (err) {
+    console.error(err);
+    if (err.code !== 'auth/popup-closed-by-user') {
+      showToast('로그인에 실패하였습니다. 다시 시도해주세요.', '❌');
+    }
+  } finally {
+    const btn = document.getElementById('btnGoogleLogin');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `
+        <svg class="google-icon" viewBox="0 0 24 24" width="16" height="16">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+        </svg>
+        <span>Google 로그인</span>
+      `;
+    }
+  }
+}
+
+async function renderAdminUsersModal() {
+  const tbody = document.getElementById('adminUsersTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">사용자 목록을 불러오는 중...</td></tr>';
+
+  const users = await getAllUsers();
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">등록된 사용자가 없습니다.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = users.map(u => {
+    const isPending = u.status === 'pending';
+    const isApproved = u.status === 'approved';
+    const statusBadge = isPending
+      ? '<span class="role-badge-tag role-badge-pending">승인 대기</span>'
+      : isApproved
+      ? '<span class="role-badge-tag role-badge-teacher">승인 완료</span>'
+      : '<span class="role-badge-tag" style="background:#fee2e2; color:#991b1b;">거절됨</span>';
+
+    const reqDate = u.requestedAt ? new Date(u.requestedAt).toLocaleDateString('ko-KR') : '-';
+
+    let actionBtns = '';
+    if (isPending) {
+      actionBtns = `
+        <button class="btn btn-primary btn-sm btn-approve-user" data-uid="${u.uid}" data-role="teacher" style="padding: 0.25rem 0.55rem; font-size: 0.76rem;">
+          ✅ 교사 승인
+        </button>
+        <button class="btn btn-secondary btn-sm btn-approve-user" data-uid="${u.uid}" data-role="admin" style="padding: 0.25rem 0.55rem; font-size: 0.76rem; background: #fef3c7; color: #92400e; border-color: #fcd34d;">
+          🛡️ 관리자 승인
+        </button>
+        <button class="btn btn-secondary btn-sm btn-reject-user" data-uid="${u.uid}" style="padding: 0.25rem 0.55rem; font-size: 0.76rem; color: #dc2626;">
+          거절
+        </button>
+      `;
+    } else {
+      actionBtns = `
+        <span style="font-size: 0.78rem; color: var(--text-muted);">
+          ${u.role === 'admin' ? '🛡️ 관리자' : '✝️ 주일학교 교사'}
+        </span>
+      `;
+    }
+
+    return `
+      <tr>
+        <td>
+          <div style="font-weight: 700;">${u.displayName || '이름 없음'}</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">${u.email || '-'}</div>
+        </td>
+        <td style="font-size: 0.8rem;">${reqDate}</td>
+        <td>${statusBadge}</td>
+        <td>
+          <span class="badge ${u.role === 'admin' ? 'badge-sacrament' : 'badge-present'}" style="font-size: 0.74rem;">
+            ${u.role === 'admin' ? '관리자' : u.role === 'parent' ? '학부모' : '교사'}
+          </span>
+        </td>
+        <td>
+          <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+            ${actionBtns}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('.btn-approve-user').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const uid = btn.getAttribute('data-uid');
+      const role = btn.getAttribute('data-role') || 'teacher';
+      try {
+        btn.disabled = true;
+        await approveUser(uid, role);
+        showToast('사용자가 성공적으로 승인되었습니다!', '🎉');
+        renderAdminUsersModal();
+        updateAdminBadge();
+      } catch (err) {
+        console.error(err);
+        showToast('승인 처리에 실패하였습니다.', '❌');
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.btn-reject-user').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const uid = btn.getAttribute('data-uid');
+      if (confirm('해당 사용자의 가입을 거절하시겠습니까?')) {
+        try {
+          btn.disabled = true;
+          await rejectUser(uid);
+          showToast('사용자가 거절 처리되었습니다.', 'ℹ️');
+          renderAdminUsersModal();
+          updateAdminBadge();
+        } catch (err) {
+          console.error(err);
+          showToast('거절 처리에 실패하였습니다.', '❌');
+        }
+      }
+    });
+  });
+}
+
+async function updateAdminBadge() {
+  const users = await getAllUsers();
+  const pendingCount = users.filter(u => u.status === 'pending').length;
+  const badge = document.getElementById('pendingUsersBadge');
+  if (badge) {
+    badge.textContent = pendingCount;
+    badge.style.display = pendingCount > 0 ? 'inline-flex' : 'none';
+  }
+}
+
+function initAuthUI() {
+  const btnGoogleLogin = document.getElementById('btnGoogleLogin');
+  const btnSignOut = document.getElementById('btnSignOut');
+  const userProfileChip = document.getElementById('userProfileChip');
+  const userAvatarImg = document.getElementById('userAvatarImg');
+  const userAvatarFallback = document.getElementById('userAvatarFallback');
+  const userNameText = document.getElementById('userNameText');
+  const userEmailText = document.getElementById('userEmailText');
+  const userRoleBadge = document.getElementById('userRoleBadge');
+  const btnOpenAdminUsersModal = document.getElementById('btnOpenAdminUsersModal');
+  const demoRoleSelect = document.getElementById('demoRoleSelect');
+  const envBadge = document.getElementById('envBadge');
+
+  if (import.meta.env.VITE_PROVIDER === 'firebase') {
+    if (envBadge) {
+      envBadge.innerHTML = `<span style="width: 8px; height: 8px; border-radius: 50%; background: #3b82f6;"></span> Firebase 운영 모드`;
+      envBadge.style.color = '#1d4ed8';
+      envBadge.style.borderColor = '#93c5fd';
+      envBadge.style.background = '#eff6ff';
+    }
+    const demoWrapper = document.getElementById('demoPersonaWrapper');
+    if (demoWrapper) demoWrapper.style.display = 'none';
+  } else {
+    demoRoleSelect?.addEventListener('change', (e) => {
+      setLocalDemoUserRole(e.target.value);
+    });
+  }
+
+  btnGoogleLogin?.addEventListener('click', handleGoogleLogin);
+
+  btnSignOut?.addEventListener('click', async () => {
+    if (confirm('로그아웃 하시겠습니까?')) {
+      await signOut();
+      showToast('로그아웃 되었습니다.', '👋');
+    }
+  });
+
+  btnOpenAdminUsersModal?.addEventListener('click', () => {
+    openModal('modalAdminUsers');
+    renderAdminUsersModal();
+  });
+
+  onAuthStateChanged((user, profile) => {
+    currentUser = user;
+    currentUserProfile = profile;
+
+    if (user) {
+      if (btnGoogleLogin) btnGoogleLogin.style.display = 'none';
+      if (userProfileChip) userProfileChip.style.display = 'flex';
+
+      const name = profile?.displayName || user.displayName || user.email?.split('@')[0] || '선생님';
+      if (userNameText) userNameText.textContent = name;
+      if (userEmailText) userEmailText.textContent = user.email || '';
+
+      if (userRoleBadge) {
+        if (profile?.isAdmin) {
+          userRoleBadge.textContent = '🛡️ 관리자';
+          userRoleBadge.className = 'role-badge-tag role-badge-admin';
+        } else if (profile?.isApproved) {
+          userRoleBadge.textContent = '✅ 교사';
+          userRoleBadge.className = 'role-badge-tag role-badge-teacher';
+        } else {
+          userRoleBadge.textContent = '⏳ 승인 대기';
+          userRoleBadge.className = 'role-badge-tag role-badge-pending';
+        }
+      }
+
+      if (btnOpenAdminUsersModal) {
+        btnOpenAdminUsersModal.style.display = profile?.isAdmin ? 'inline-flex' : 'none';
+        if (profile?.isAdmin) updateAdminBadge();
+      }
+
+      if (user.photoURL) {
+        if (userAvatarImg) {
+          userAvatarImg.src = user.photoURL;
+          userAvatarImg.style.display = 'block';
+        }
+        if (userAvatarFallback) userAvatarFallback.style.display = 'none';
+      } else {
+        if (userAvatarImg) userAvatarImg.style.display = 'none';
+        if (userAvatarFallback) {
+          userAvatarFallback.textContent = name.charAt(0).toUpperCase();
+          userAvatarFallback.style.display = 'flex';
+        }
+      }
+    } else {
+      if (btnGoogleLogin) btnGoogleLogin.style.display = 'inline-flex';
+      if (userProfileChip) userProfileChip.style.display = 'none';
+      if (btnOpenAdminUsersModal) btnOpenAdminUsersModal.style.display = 'none';
+    }
+
+    // Refresh current view based on permissions
+    renderDashboard();
+    renderAttendance();
+    renderActivities();
+    renderGraceBank();
+    renderDirectory();
+  });
+}
+
+// ============================================================
 //  Theme Management (Dark / Light Mode)
 // ============================================================
 function applyTheme(theme) {
@@ -467,6 +784,7 @@ function renderDDayProgress() {
 function renderDashboard() {
   renderDDayProgress();
 
+  const isApproved = isUserApproved();
   const students = dataProvider.getStudents();
   const teachers = dataProvider.getTeachers();
   const today = document.getElementById('attDatePicker')?.value || getTodayDateString();
@@ -510,16 +828,25 @@ function renderDashboard() {
       feastCountBadge.textContent = `${feastStudents.length}명 축하 👏`;
       feastGrid.innerHTML = feastStudents.map(st => {
         const [m, d] = st.studentInfo.feastDay.split('-');
+        const displayName = isApproved ? st.name : maskKoreanName(st.name);
+        const displayBaptismal = isApproved
+          ? `(${st.baptismalName || '세례명'})`
+          : maskBaptismalName(st.baptismalName);
+        const avatarInitial = isApproved ? st.name.charAt(0) : '🎉';
+        const nameMarkup = isApproved
+          ? `<span class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${displayName}</span>`
+          : `<span style="color: var(--text-muted); cursor: default;" title="로그인 후 상세 확인 가능">${displayName}</span>`;
+
         return `
           <div class="feast-student-item">
             <div style="display: flex; align-items: center; gap: 0.65rem;">
               <div class="avatar" style="width: 38px; height: 38px; font-size: 0.95rem; background: #fef3c7; color: #b45309; border: 1px solid #fcd34d;">
-                ${st.name.charAt(0)}
+                ${avatarInitial}
               </div>
               <div>
                 <div style="font-weight: 700; font-size: 0.92rem;">
-                  <span class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${st.name}</span>
-                  <span style="font-size: 0.8rem; font-weight: normal; color: #92400e;">(${st.baptismalName || '세례명'})</span>
+                  ${nameMarkup}
+                  <span style="font-size: 0.8rem; font-weight: normal; color: #92400e;">${displayBaptismal}</span>
                 </div>
                 <div style="font-size: 0.74rem; color: var(--text-muted);">
                   <span class="badge badge-grade" style="font-size: 0.68rem; padding: 0.1rem 0.35rem;">${st.studentInfo.grade}</span>
@@ -544,12 +871,20 @@ function renderDashboard() {
     topTableBody.innerHTML = top5.map((st, idx) => {
       const rankMedal = idx === 0 ? '🥇 1' : idx === 1 ? '🥈 2' : idx === 2 ? '🥉 3' : `${idx + 1}`;
       const depts = (st.studentInfo?.departments || []).map(d => `<span class="dept-tag">${d}</span>`).join('') || '<span style="color: var(--text-muted); font-size: 0.75rem;">-</span>';
+      const displayName = isApproved ? st.name : maskKoreanName(st.name);
+      const displayBaptismal = isApproved
+        ? (st.baptismalName ? `<span style="color: var(--text-muted); font-size: 0.8rem;">(${st.baptismalName})</span>` : '')
+        : (st.baptismalName ? `<span style="color: var(--text-muted); font-size: 0.8rem;">${maskBaptismalName(st.baptismalName)}</span>` : '');
+      const nameMarkup = isApproved
+        ? `<strong class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${displayName}</strong>`
+        : `<strong style="color: var(--text-muted); cursor: default;" title="로그인 후 상세 확인 가능">${displayName}</strong>`;
+
       return `
         <tr>
           <td style="font-weight: 700; color: var(--primary);">${rankMedal}</td>
           <td>
-            <strong class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${st.name}</strong>
-            ${st.baptismalName ? `<span style="color: var(--text-muted); font-size: 0.8rem;">(${st.baptismalName})</span>` : ''}
+            ${nameMarkup}
+            ${displayBaptismal}
           </td>
           <td><span class="badge badge-grade">${st.studentInfo?.grade || '-'}</span></td>
           <td>${depts}</td>
@@ -568,23 +903,39 @@ function renderDashboard() {
       const primaryRole = dataProvider.getPrimaryTeacherRole(t);
       const roleBadgeClass = primaryRole?.role === 'principal' ? 'badge-sacrament' :
                               primaryRole?.role === 'vice_principal' ? 'badge-grade' : 'badge-present';
-      const parentBadge = t.roles?.includes('parent')
+      const parentBadge = isApproved && t.roles?.includes('parent')
         ? '<span class="badge badge-grade" style="font-size: 0.7rem; margin-left: 0.3rem;">👨‍👩‍👧 학부모</span>'
         : '';
-      const specialBadges = (t.roles || [])
-        .filter(r => ['liturgy_teacher', 'acolyte_teacher'].includes(r))
-        .map(r => `<span class="badge badge-sacrament" style="font-size: 0.65rem; margin-left: 0.2rem;">${PERSON_ROLES[r]?.icon || ''}</span>`)
-        .join('');
+      const specialBadges = isApproved
+        ? (t.roles || [])
+            .filter(r => ['liturgy_teacher', 'acolyte_teacher'].includes(r))
+            .map(r => `<span class="badge badge-sacrament" style="font-size: 0.65rem; margin-left: 0.2rem;">${PERSON_ROLES[r]?.icon || ''}</span>`)
+            .join('')
+        : '';
+
+      const displayName = isApproved ? t.name : maskTeacherName(t.name);
+      const displayBaptismal = isApproved
+        ? (t.baptismalName ? `<span style="font-weight: normal; color: var(--text-muted); font-size: 0.8rem;">(${t.baptismalName})</span>` : '')
+        : '';
+
+      const nameMarkup = isApproved
+        ? `<span class="clickable-name" data-detail-type="teacher" data-detail-id="${t.id}">${displayName}</span>`
+        : `<span style="color: var(--text-muted); font-weight: 600;">${displayName}</span>`;
+
+      const phoneMarkup = isApproved
+        ? `📞 <a href="tel:${t.phone}" style="color: inherit; text-decoration: underline;">${t.phone || '-'}</a>`
+        : `<span class="privacy-masked-badge">🔒 로그인 후 확인</span>`;
+
       return `
         <div style="background: var(--surface-subtle); padding: 0.65rem 0.85rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
           <div>
             <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-main); display: flex; align-items: center; flex-wrap: wrap; gap: 0.2rem;">
-              <span class="clickable-name" data-detail-type="teacher" data-detail-id="${t.id}">${t.name}</span>
-              <span style="font-weight: normal; color: var(--text-muted); font-size: 0.8rem;">(${t.baptismalName || '-'})</span>
+              ${nameMarkup}
+              ${displayBaptismal}
               ${parentBadge}${specialBadges}
             </div>
             <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem;">
-              📞 <a href="tel:${t.phone}" style="color: inherit; text-decoration: underline;">${t.phone || '-'}</a>
+              ${phoneMarkup}
             </div>
           </div>
           <span class="badge ${roleBadgeClass}">${primaryRole?.label || '교사'}</span>
@@ -598,6 +949,21 @@ function renderDashboard() {
 //  TAB 2: Attendance
 // ============================================================
 function renderAttendance() {
+  const protectedEl = document.getElementById('attendanceProtectedContent');
+  const lockedEl = document.getElementById('attendanceLockedNotice');
+
+  if (!isUserApproved()) {
+    if (protectedEl) protectedEl.style.display = 'none';
+    if (lockedEl) {
+      lockedEl.style.display = 'block';
+      lockedEl.innerHTML = getAccessLockedHtml('주일 출석 체크');
+      lockedEl.querySelector('.btn-login-trigger')?.addEventListener('click', handleGoogleLogin);
+    }
+    return;
+  }
+  if (protectedEl) protectedEl.style.display = '';
+  if (lockedEl) lockedEl.style.display = 'none';
+
   const dateInput = document.getElementById('attDatePicker');
   const selectedDate = dateInput.value || getTodayDateString();
   const students = dataProvider.getStudents();
@@ -701,6 +1067,21 @@ function renderAttendance() {
 //  TAB 3: Activities
 // ============================================================
 function renderActivities() {
+  const protectedEl = document.getElementById('activitiesProtectedContent');
+  const lockedEl = document.getElementById('activitiesLockedNotice');
+
+  if (!isUserApproved()) {
+    if (protectedEl) protectedEl.style.display = 'none';
+    if (lockedEl) {
+      lockedEl.style.display = 'block';
+      lockedEl.innerHTML = getAccessLockedHtml('활동 부서 봉사');
+      lockedEl.querySelector('.btn-login-trigger')?.addEventListener('click', handleGoogleLogin);
+    }
+    return;
+  }
+  if (protectedEl) protectedEl.style.display = 'grid';
+  if (lockedEl) lockedEl.style.display = 'none';
+
   const students = dataProvider.getStudents();
   const allActivities = dataProvider.getActivities();
   const select = document.getElementById('actStudentSelect');
@@ -739,6 +1120,21 @@ function renderActivities() {
 //  TAB 4: Grace Bank
 // ============================================================
 function renderGraceBank() {
+  const protectedEl = document.getElementById('graceProtectedContent');
+  const lockedEl = document.getElementById('graceLockedNotice');
+
+  if (!isUserApproved()) {
+    if (protectedEl) protectedEl.style.display = 'none';
+    if (lockedEl) {
+      lockedEl.style.display = 'block';
+      lockedEl.innerHTML = getAccessLockedHtml('은총표 관리소');
+      lockedEl.querySelector('.btn-login-trigger')?.addEventListener('click', handleGoogleLogin);
+    }
+    return;
+  }
+  if (protectedEl) protectedEl.style.display = '';
+  if (lockedEl) lockedEl.style.display = 'none';
+
   const students = dataProvider.getStudents();
   const ledger = dataProvider.getGraceLedger();
   const search = document.getElementById('graceSearchInput')?.value.trim().toLowerCase() || '';
@@ -834,6 +1230,21 @@ function showGraceLedgerModal(studentId) {
 //  TAB 5: Directory (학생 / 학부모 / 교사 / 반 구성)
 // ============================================================
 function renderDirectory() {
+  const protectedEl = document.getElementById('studentsProtectedContent');
+  const lockedEl = document.getElementById('studentsLockedNotice');
+
+  if (!isUserApproved()) {
+    if (protectedEl) protectedEl.style.display = 'none';
+    if (lockedEl) {
+      lockedEl.style.display = 'block';
+      lockedEl.innerHTML = getAccessLockedHtml('학생 및 학부모 명부');
+      lockedEl.querySelector('.btn-login-trigger')?.addEventListener('click', handleGoogleLogin);
+    }
+    return;
+  }
+  if (protectedEl) protectedEl.style.display = '';
+  if (lockedEl) lockedEl.style.display = 'none';
+
   const search = document.getElementById('directorySearchInput')?.value.trim().toLowerCase() || '';
 
   if (currentDirectoryView === 'students') renderStudentsDirectory(search);
@@ -1417,6 +1828,7 @@ window.showUserDetailGlobal = (type, id) => showUserDetail(type, id);
 // ============================================================
 function initApp() {
   initTheme();
+  initAuthUI();
   renderDashboard();
   renderAttendance();
   renderActivities();
