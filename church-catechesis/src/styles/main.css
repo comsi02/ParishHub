@@ -559,11 +559,25 @@ body {
 .dday-next-sat-info { display: flex; justify-content: space-between; align-items: center; font-size: 0.79rem; color: var(--text-muted); padding-top: 0.4rem; border-top: 1px dashed var(--border); }
 :root[data-theme="dark"] .dday-next-sat-info { border-top-color: var(--border); }
 
-.dday-right-visual { position: relative; border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); border: 2px solid rgba(255,255,255,0.85); min-height: 220px; display: flex; }
+.dday-right-visual {
+  position: relative; border-radius: var(--radius-md); overflow: hidden;
+  box-shadow: var(--shadow-sm); border: 2px solid rgba(255,255,255,0.85);
+  aspect-ratio: 4 / 3; width: 100%; align-self: stretch;
+}
 :root[data-theme="dark"] .dday-right-visual { border-color: rgba(96,165,250,0.25); }
-.dday-visual-img { width: 100%; height: 100%; object-fit: cover; object-position: center; transition: transform 0.7s ease; }
+.dday-right-visual picture { display: block; width: 100%; height: 100%; }
+.dday-visual-img {
+  width: 100%; height: 100%; display: block;
+  object-fit: cover; object-position: center center;
+  transition: transform 0.7s ease; aspect-ratio: 4 / 3;
+}
 .dday-right-visual:hover .dday-visual-img { transform: scale(1.04); }
-.dday-img-overlay-caption { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.35) 60%, transparent 100%); padding: 1rem 1rem 0.75rem; color: white; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.dday-img-overlay-caption {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: linear-gradient(to top, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.35) 60%, transparent 100%);
+  padding: 1rem 1rem 0.75rem; color: white; display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.85rem; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
 
 /* ==========================================================================
    Season Statistics & Charts (시즌별 출석 통계 & 그래프)
@@ -698,9 +712,27 @@ body {
 .footer-desc { font-size: 0.76rem; color: var(--text-muted); line-height: 1.55; }
 
 /* Responsive */
-@media (max-width: 860px) {
-  .dday-banner-card { grid-template-columns: 1fr; }
-  .dday-right-visual { min-height: 180px; max-height: 220px; }
+@media (max-width: 960px) {
+  .dday-banner-card {
+    grid-template-columns: 1fr;
+    gap: 1.1rem;
+    padding: 1.25rem;
+  }
+  .dday-right-visual {
+    order: -1; /* 모바일에서 하트 사진을 먼저 보여줌 */
+    max-width: 100%;
+    width: 100%;
+  }
+  .dday-headline { font-size: 1.2rem; }
+  .dday-next-sat-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+  .dday-img-overlay-caption {
+    font-size: 0.78rem;
+    padding: 0.85rem 0.85rem 0.65rem;
+  }
 }
 
 @media (max-width: 768px) {
@@ -713,8 +745,18 @@ body {
   .search-input { width: 100%; min-width: unset; }
   .brand-info .sub-tag { display: none; }
   .theme-toggle-text { display: none; }
+  .dday-banner-card { padding: 1rem; margin-bottom: 1.15rem; }
+  .dday-path-container { padding: 0.9rem 0.85rem; }
+  .dday-step-node { font-size: 0.65rem; }
+  .dday-node-circle { width: 28px; height: 28px; font-size: 0.72rem; }
+  .dday-date-badge-row { gap: 0.45rem; }
+  .dday-date-badge-row #btnQuickSchedule { margin-left: 0; width: 100%; justify-content: center; }
 }
 
 @media (max-width: 480px) {
   .summary-grid { grid-template-columns: 1fr; }
+  .dday-headline { font-size: 1.08rem; }
+  .dday-subquote { font-size: 0.82rem; }
+  .dday-steps-row { gap: 0.15rem; }
+  .dday-node-label { font-size: 0.6rem; }
 }
