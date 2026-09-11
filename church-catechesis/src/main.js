@@ -712,6 +712,7 @@ function initAuthUI() {
 
     // Refresh current view based on permissions
     renderDashboard();
+    renderSchedule();
     renderAttendance();
     renderStats();
     renderActivities();
@@ -1838,11 +1839,27 @@ const SCHEDULE_TYPE_LABELS = {
   holiday: { label: '연휴/방학', icon: '❄️', badgeClass: 'badge-absent' },
 };
 
+function canEditSchedule() {
+  return isUserApproved();
+}
+
+function requireScheduleEditPermission(actionLabel = '일정 수정') {
+  if (canEditSchedule()) return true;
+  showToast(`🔒 ${actionLabel}은(는) 승인된 교사만 가능합니다. 로그인 후 이용해 주세요.`, '🔒');
+  return false;
+}
+
 function renderSchedule() {
+  const canEdit = canEditSchedule();
+  const editActions = document.getElementById('scheduleEditActions');
+  const readonlyNotice = document.getElementById('scheduleViewOnlyNotice');
+  if (editActions) editActions.style.display = canEdit ? 'flex' : 'none';
+  if (readonlyNotice) readonlyNotice.style.display = canEdit ? 'none' : 'block';
+
   const seasonId = document.getElementById('scheduleSeasonFilter')?.value || '2026-2027';
   const typeFilter = document.getElementById('scheduleTypeFilter')?.value || 'all';
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = getTodayISO();
 
   let schedules = dataProvider.getSchedules(seasonId);
 
@@ -1873,8 +1890,12 @@ function renderSchedule() {
   const tbody = document.getElementById('scheduleTableBody');
   if (!tbody) return;
 
+  // 관리 열 헤더 표시 여부
+  const manageHeader = document.querySelector('#scheduleTable thead th:last-child');
+  if (manageHeader) manageHeader.style.display = canEdit ? '' : 'none';
+
   if (schedules.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding: 2rem;">등록된 일정이 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${canEdit ? 6 : 5}" style="text-align:center; color:var(--text-muted); padding: 2rem;">등록된 일정이 없습니다.</td></tr>`;
     return;
   }
 
@@ -1886,9 +1907,20 @@ function renderSchedule() {
     const isToday = sch.date === todayStr;
     const typeInfo = SCHEDULE_TYPE_LABELS[sch.type] || SCHEDULE_TYPE_LABELS.regular;
     const rowStyle = isPast ? 'opacity: 0.55;' : isToday ? 'background: var(--primary-soft); font-weight: 700;' : '';
-    const hasSchoolBtn = sch.hasSchool
-      ? `<button class="badge badge-present btn-toggle-school" data-id="${sch.id}" style="cursor:pointer; border:none; padding: 0.3rem 0.75rem; font-size: 0.78rem;">🏫 수업 있음</button>`
-      : `<button class="badge badge-absent btn-toggle-school" data-id="${sch.id}" style="cursor:pointer; border:none; padding: 0.3rem 0.75rem; font-size: 0.78rem;">❌ 휴교</button>`;
+    const hasSchoolCell = canEdit
+      ? (sch.hasSchool
+        ? `<button class="badge badge-present btn-toggle-school" data-id="${sch.id}" style="cursor:pointer; border:none; padding: 0.3rem 0.75rem; font-size: 0.78rem;">🏫 수업 있음</button>`
+        : `<button class="badge badge-absent btn-toggle-school" data-id="${sch.id}" style="cursor:pointer; border:none; padding: 0.3rem 0.75rem; font-size: 0.78rem;">❌ 휴교</button>`)
+      : (sch.hasSchool
+        ? `<span class="badge badge-present" style="padding: 0.3rem 0.75rem; font-size: 0.78rem;">🏫 수업 있음</span>`
+        : `<span class="badge badge-absent" style="padding: 0.3rem 0.75rem; font-size: 0.78rem;">❌ 휴교</span>`);
+
+    const manageCell = canEdit
+      ? `<td style="white-space: nowrap;">
+          <button class="btn btn-secondary btn-sm btn-edit-schedule" data-id="${sch.id}" style="font-size: 0.75rem; padding: 0.2rem 0.55rem; margin-right: 0.25rem;">수정</button>
+          <button class="btn btn-secondary btn-sm btn-delete-schedule" data-id="${sch.id}" style="font-size: 0.75rem; padding: 0.2rem 0.55rem; color: var(--danger);">삭제</button>
+        </td>`
+      : '';
 
     return `
       <tr style="${rowStyle}">
@@ -1897,20 +1929,20 @@ function renderSchedule() {
           <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">(${dow}요일)</span>
         </td>
         <td><span class="badge ${typeInfo.badgeClass}" style="font-size: 0.75rem;">${typeInfo.icon} ${typeInfo.label}</span></td>
-        <td>${hasSchoolBtn}</td>
+        <td>${hasSchoolCell}</td>
         <td style="font-weight: 600; font-size: 0.88rem;">${sch.title}</td>
         <td style="font-size: 0.8rem; color: var(--text-muted);">${sch.notes || ''}</td>
-        <td style="white-space: nowrap;">
-          <button class="btn btn-secondary btn-sm btn-edit-schedule" data-id="${sch.id}" style="font-size: 0.75rem; padding: 0.2rem 0.55rem; margin-right: 0.25rem;">수정</button>
-          <button class="btn btn-secondary btn-sm btn-delete-schedule" data-id="${sch.id}" style="font-size: 0.75rem; padding: 0.2rem 0.55rem; color: var(--danger);">삭제</button>
-        </td>
+        ${manageCell}
       </tr>
     `;
   }).join('');
 
+  if (!canEdit) return;
+
   // Toggle school button
   tbody.querySelectorAll('.btn-toggle-school').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (!requireScheduleEditPermission('수업/휴교 전환')) return;
       const id = btn.getAttribute('data-id');
       dataProvider.toggleScheduleHasSchool(id);
       renderSchedule();
@@ -1921,6 +1953,7 @@ function renderSchedule() {
   // Edit button
   tbody.querySelectorAll('.btn-edit-schedule').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (!requireScheduleEditPermission('일정 수정')) return;
       const id = btn.getAttribute('data-id');
       const sch = dataProvider.getScheduleById(id);
       if (!sch) return;
@@ -1940,6 +1973,7 @@ function renderSchedule() {
   // Delete button
   tbody.querySelectorAll('.btn-delete-schedule').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (!requireScheduleEditPermission('일정 삭제')) return;
       const id = btn.getAttribute('data-id');
       const sch = dataProvider.getScheduleById(id);
       if (sch && confirm(`"${sch.title}" 일정을 삭제하시겠습니까?`)) {
@@ -1958,11 +1992,12 @@ document.getElementById('scheduleTypeFilter')?.addEventListener('change', render
 
 // 새 일정 등록 버튼 (모달 열기)
 document.getElementById('btnOpenAddSchedule')?.addEventListener('click', () => {
+  if (!requireScheduleEditPermission('일정 등록')) return;
   document.getElementById('editScheduleId').value = '';
   document.getElementById('modalScheduleTitle').textContent = '📅 새 학사 일정 등록';
   document.getElementById('addScheduleForm').reset();
   const currentSeason = document.getElementById('scheduleSeasonFilter')?.value || '2026-2027';
-  document.getElementById('newScheduleSeason').value = currentSeason;
+  document.getElementById('newScheduleSeason').value = currentSeason === 'all' ? getCurrentSeasonId() : currentSeason;
   document.getElementById('newScheduleHasSchool').checked = true;
   
   // 기본 날짜: 오늘 날짜
@@ -1987,6 +2022,7 @@ document.getElementById('newScheduleType')?.addEventListener('change', (e) => {
 // 학사 일정 폼 제출 (추가 / 수정)
 document.getElementById('addScheduleForm')?.addEventListener('submit', (e) => {
   e.preventDefault();
+  if (!requireScheduleEditPermission('일정 저장')) return;
   const id = document.getElementById('editScheduleId')?.value;
   const seasonId = document.getElementById('newScheduleSeason')?.value || '2026-2027';
   const date = document.getElementById('newScheduleDate')?.value;
@@ -2015,6 +2051,7 @@ document.getElementById('addScheduleForm')?.addEventListener('submit', (e) => {
 
 // 시즌 일정 초기화 (학사 일정만 — 출석/학생/은총 유지)
 document.getElementById('btnResetSeasonSchedules')?.addEventListener('click', () => {
+  if (!requireScheduleEditPermission('시즌 일정 초기화')) return;
   const seasonId = document.getElementById('scheduleSeasonFilter')?.value || getCurrentSeasonId();
   if (seasonId === 'all') {
     showToast('시즌을 선택한 뒤 초기화해 주세요.', '⚠️');
