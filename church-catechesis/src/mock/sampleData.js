@@ -6,9 +6,7 @@
 //  1. 설정 (Settings)
 // ============================================================
 export const DEFAULT_SETTINGS = {
-  attendancePoints: 10,       // 주일 출석 시 기본 은총표
-  massAttendancePoints: 5,    // 주일 미사 참례 추가 은총표
-  latePoints: 5,              // 지각 시 은총표
+  attendancePoints: 10,       // 주일 출석 시 은총표 (출석 시 자동 미사 참례 인정)
   activityPoints: {
     '복사': 15,
     '전례(해설/독서)': 10,
@@ -524,68 +522,143 @@ export const INITIAL_PERSONS = [
 ];
 
 // ============================================================
-//  7. 최근 토요일 날짜 계산 헬퍼
+//  7. 시즌(Season) 및 날짜 헬퍼
+//     시즌 규정: 매년 9월 ~ 이듬해 6월 (예: 2026-09 ~ 2027-06 => 2026-2027 시즌)
 // ============================================================
+export const AVAILABLE_SEASONS = [
+  { id: '2026-2027', label: '2026-2027 학년도 (현재 시즌)', startDate: '2026-09-01', endDate: '2027-06-30', isCurrent: true },
+  { id: '2025-2026', label: '2025-2026 학년도 (지난 시즌)', startDate: '2025-09-01', endDate: '2026-06-30', isCurrent: false },
+  { id: '2024-2025', label: '2024-2025 학년도 (2년 전 시즌)', startDate: '2024-09-01', endDate: '2025-06-30', isCurrent: false },
+];
+
+export const SEASON_MONTHS = [
+  { month: 9, label: '9월' },
+  { month: 10, label: '10월' },
+  { month: 11, label: '11월' },
+  { month: 12, label: '12월' },
+  { month: 1, label: '1월' },
+  { month: 2, label: '2월' },
+  { month: 3, label: '3월' },
+  { month: 4, label: '4월' },
+  { month: 5, label: '5월' },
+  { month: 6, label: '6월' },
+];
+
+/** 날짜 문자열(YYYY-MM-DD)로부터 해당 시즌 ID 반환 */
+export function getSeasonFromDate(dateStr) {
+  if (!dateStr) return '2026-2027';
+  const parts = dateStr.split('-');
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  if (month >= 9) {
+    return `${year}-${year + 1}`;
+  } else {
+    return `${year - 1}-${year}`;
+  }
+}
+
+/** 최근 토요일 날짜 계산 헬퍼 (로컬 타임존) */
 export function getRecentSaturday(offsetWeeks = 0) {
   const d = new Date();
   const day = d.getDay(); // 0(일)~6(토)
   const diffToSaturday = (day === 6) ? 0 : (day + 1);
   d.setDate(d.getDate() - diffToSaturday - (offsetWeeks * 7));
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dayNum = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dayNum}`;
+}
+
+export function getCurrentSeasonId() {
+  const current = AVAILABLE_SEASONS.find(s => s.isCurrent);
+  if (current) return current.id;
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return getSeasonFromDate(`${y}-${m}-${d}`);
 }
 
 const saturdayToday = getRecentSaturday(0);
 
 // ============================================================
-//  8. 출석 초기 데이터
+//  8. 출석 초기 데이터 (시즌별 다주차 풍부한 목업 데이터)
 // ============================================================
-export const INITIAL_ATTENDANCE = [
-  {
-    id: 'att-1',
-    date: saturdayToday,
-    studentPersonId: 'person-10',
-    status: '출석',
-    massAttended: true,
-    pointsEarned: 15,
-    recordedBy: '강태양 (요셉)'
-  },
-  {
-    id: 'att-2',
-    date: saturdayToday,
-    studentPersonId: 'person-11',
-    status: '출석',
-    massAttended: true,
-    pointsEarned: 15,
-    recordedBy: '최현우 (프란치스코)'
-  },
-  {
-    id: 'att-3',
-    date: saturdayToday,
-    studentPersonId: 'person-12',
-    status: '출석',
-    massAttended: true,
-    pointsEarned: 15,
-    recordedBy: '윤지훈 (라파엘)'
-  },
-  {
-    id: 'att-4',
-    date: saturdayToday,
-    studentPersonId: 'person-13',
-    status: '지각',
-    massAttended: true,
-    pointsEarned: 10,
-    recordedBy: '임소라 (데레사)'
-  },
-  {
-    id: 'att-5',
-    date: saturdayToday,
-    studentPersonId: 'person-15',
-    status: '출석',
-    massAttended: false,
-    pointsEarned: 10,
-    recordedBy: '정유미 (안나)'
-  },
-];
+function generateMockAttendanceHistory() {
+  const records = [];
+  let attId = 1;
+
+  // 학생 ID 목록
+  const studentIds = ['person-10', 'person-11', 'person-12', 'person-13', 'person-14', 'person-15', 'person-16-child'];
+  const teachers = ['강태양 (요셉)', '최현우 (프란치스코)', '윤지훈 (라파엘)', '정유미 (안나)', '임소라 (데레사)'];
+
+  // 1. 2026-2027 — 학사 일정 수업일(hasSchool)과 일치 (휴교일·미등록일 제외)
+  const currentSeasonSaturdays = [
+    '2026-09-12', '2026-09-19', '2026-09-26',
+    '2026-10-03', '2026-10-17', '2026-10-24', '2026-10-31',
+    '2026-11-07', '2026-11-14', '2026-11-21', '2026-11-28',
+    '2026-12-05', '2026-12-12', '2026-12-19',
+    '2027-01-09', '2027-01-16', '2027-01-23', '2027-01-30',
+    '2027-02-06', '2027-02-13', '2027-02-20', '2027-02-27',
+    '2027-03-06', '2027-03-20', '2027-03-27',
+    '2027-04-03', '2027-04-10', '2027-04-17', '2027-04-24',
+    '2027-05-01', '2027-05-08', '2027-05-15', '2027-05-29',
+    '2027-06-05', '2027-06-12', '2027-06-19'
+  ];
+
+  // 2. 2025-2026 지난 시즌 토요일들
+  const prevSeasonSaturdays = [
+    '2025-09-06', '2025-09-13', '2025-09-20', '2025-09-27',
+    '2025-10-04', '2025-10-11', '2025-10-18', '2025-10-25',
+    '2025-11-08', '2025-11-15', '2025-11-22', '2025-11-29',
+    '2025-12-06', '2025-12-13', '2025-12-20',
+    '2026-01-10', '2026-01-17', '2026-01-24', '2026-01-31',
+    '2026-02-07', '2026-02-14', '2026-02-21', '2026-02-28',
+    '2026-03-07', '2026-03-14', '2026-03-21', '2026-03-28',
+    '2026-04-04', '2026-04-11', '2026-04-18', '2026-04-25',
+    '2026-05-02', '2026-05-09', '2026-05-16', '2026-05-23', '2026-05-30',
+    '2026-06-06', '2026-06-13', '2026-06-20'
+  ];
+
+  // 가상의 일관된 출석 상태 생성 함수
+  function populateForDates(dates) {
+    dates.forEach((dateStr, dateIdx) => {
+      studentIds.forEach((sId, sIdx) => {
+        // 학생별 출석 성향 (김다니엘, 박준우, 이유나는 95%+ 출석, 김로사 90%, 이서준 80% 등)
+        const hash = (dateIdx * 13 + sIdx * 7) % 100;
+        let status = '출석';
+
+        if (sId === 'person-10' || sId === 'person-12') {
+          // 우수 학생 (개근권)
+          status = hash < 95 ? '출석' : '결석';
+        } else if (sId === 'person-13' || sId === 'person-15') {
+          status = hash < 90 ? '출석' : '결석';
+        } else {
+          status = hash < 84 ? '출석' : '결석';
+        }
+
+        const points = status === '출석' ? 10 : 0;
+
+        records.push({
+          id: `att-${attId++}`,
+          date: dateStr,
+          studentPersonId: sId,
+          status,
+          massAttended: status === '출석',
+          pointsEarned: points,
+          recordedBy: teachers[dateIdx % teachers.length]
+        });
+      });
+    });
+  }
+
+  populateForDates(prevSeasonSaturdays);
+  populateForDates(currentSeasonSaturdays);
+
+  return records;
+}
+
+export const INITIAL_ATTENDANCE = generateMockAttendanceHistory();
 
 // ============================================================
 //  9. 활동 초기 데이터
@@ -633,12 +706,63 @@ export const INITIAL_ACTIVITIES = [
 //  10. 은총표 원장 초기 데이터
 // ============================================================
 export const INITIAL_GRACE_LEDGER = [
-  { id: 'gl-1', studentPersonId: 'person-10', date: saturdayToday, type: '출석', amount: 15, reason: '주일 학교 및 미사 출석', issuedBy: '강태양 (요셉)' },
+  { id: 'gl-1', studentPersonId: 'person-10', date: saturdayToday, type: '출석', amount: 10, reason: '주일 학교 출석', issuedBy: '강태양 (요셉)' },
   { id: 'gl-2', studentPersonId: 'person-10', date: saturdayToday, type: '활동', amount: 15, reason: '복사단 미사 봉헌', issuedBy: '김민호 (미카엘)' },
   { id: 'gl-3', studentPersonId: 'person-10', date: saturdayToday, type: '추가점수', amount: 10, reason: '사순절 성경 구절 암송 우수', issuedBy: '김민호 (미카엘)' },
-  { id: 'gl-4', studentPersonId: 'person-12', date: saturdayToday, type: '출석', amount: 15, reason: '주일 학교 및 미사 출석', issuedBy: '윤지훈 (라파엘)' },
+  { id: 'gl-4', studentPersonId: 'person-12', date: saturdayToday, type: '출석', amount: 10, reason: '주일 학교 출석', issuedBy: '윤지훈 (라파엘)' },
   { id: 'gl-5', studentPersonId: 'person-12', date: saturdayToday, type: '활동', amount: 10, reason: '찬양 밴드 드럼 봉사', issuedBy: '이수진 (세실리아)' },
   { id: 'gl-6', studentPersonId: 'person-12', date: saturdayToday, type: '추가점수', amount: 5, reason: '교리실 뒷정리 모범', issuedBy: '윤지훈 (라파엘)' },
-  { id: 'gl-7', studentPersonId: 'person-13', date: saturdayToday, type: '출석', amount: 10, reason: '주일 학교 지각 및 미사 참례', issuedBy: '임소라 (데레사)' },
+  { id: 'gl-7', studentPersonId: 'person-13', date: saturdayToday, type: '출석', amount: 10, reason: '주일 학교 출석', issuedBy: '임소라 (데레사)' },
   { id: 'gl-8', studentPersonId: 'person-13', date: saturdayToday, type: '활동', amount: 20, reason: '제1독서 및 바이올린 특송 봉헌', issuedBy: '이수진 (세실리아)' },
 ];
+
+// ============================================================
+//  11. 주일학교 학사 일정 (Schedules)
+// ============================================================
+export function generateInitialSchedules() {
+  return [
+    { id: 'sch-2026-09-12', date: '2026-09-12', seasonId: '2026-2027', title: '2026-2027 학년도 개학 미사 & 첫 만남', type: 'special', hasSchool: true, notes: '개학 오리엔테이션 및 반 배정' },
+    { id: 'sch-2026-09-19', date: '2026-09-19', seasonId: '2026-2027', title: '토요 주일학교 & 성 김대건 안드레아 대축일 특강', type: 'regular', hasSchool: true, notes: '본당 주보성인 축일 기념 행사' },
+    { id: 'sch-2026-09-26', date: '2026-09-26', seasonId: '2026-2027', title: '정규 토요 주일학교 (2회차)', type: 'regular', hasSchool: true, notes: '성경 교리 수업' },
+    { id: 'sch-2026-10-03', date: '2026-10-03', seasonId: '2026-2027', title: '정규 토요 주일학교 (3회차)', type: 'regular', hasSchool: true, notes: '성체 성사 교리' },
+    { id: 'sch-2026-10-10', date: '2026-10-10', seasonId: '2026-2027', title: '🍁 Thanksgiving 연휴 (휴교)', type: 'holiday', hasSchool: false, notes: '추수감사절 연휴로 주일학교 쉼' },
+    { id: 'sch-2026-10-17', date: '2026-10-17', seasonId: '2026-2027', title: '정규 토요 주일학교 (4회차)', type: 'regular', hasSchool: true, notes: '묵주기도 성월 특별 교리' },
+    { id: 'sch-2026-10-24', date: '2026-10-24', seasonId: '2026-2027', title: '정규 토요 주일학교 (5회차)', type: 'regular', hasSchool: true, notes: '묵주기도 성월' },
+    { id: 'sch-2026-10-31', date: '2026-10-31', seasonId: '2026-2027', title: '정규 토요 주일학교 & 모든 성인 대축일 전야', type: 'special', hasSchool: true, notes: '성인 성녀 코스튬 및 나눔' },
+    { id: 'sch-2026-11-07', date: '2026-11-07', seasonId: '2026-2027', title: '정규 토요 주일학교 (6회차)', type: 'regular', hasSchool: true, notes: '위령 성월 기도' },
+    { id: 'sch-2026-11-14', date: '2026-11-14', seasonId: '2026-2027', title: '정규 토요 주일학교 (7회차)', type: 'regular', hasSchool: true, notes: '찬양 교리' },
+    { id: 'sch-2026-11-21', date: '2026-11-21', seasonId: '2026-2027', title: '정규 토요 주일학교 (8회차)', type: 'regular', hasSchool: true, notes: '전례력 마감 교리' },
+    { id: 'sch-2026-11-28', date: '2026-11-28', seasonId: '2026-2027', title: '대림 제1주일 전야 & 대림초 점등', type: 'special', hasSchool: true, notes: '대림 시기 시작' },
+    { id: 'sch-2026-12-05', date: '2026-12-05', seasonId: '2026-2027', title: '정규 토요 주일학교 (9회차)', type: 'regular', hasSchool: true, notes: '성탄 맞이 고해성사 준비' },
+    { id: 'sch-2026-12-12', date: '2026-12-12', seasonId: '2026-2027', title: '정규 토요 주일학교 (10회차)', type: 'regular', hasSchool: true, notes: '성탄 축하 발표회 리허설' },
+    { id: 'sch-2026-12-19', date: '2026-12-19', seasonId: '2026-2027', title: '🎄 성탄 축하 은총잔치 & 달란트 시장', type: 'special', hasSchool: true, notes: '1학기 은총표 사용 및 잔치' },
+    { id: 'sch-2026-12-26', date: '2026-12-26', seasonId: '2026-2027', title: '❄️ 성탄/연말 방학 (휴교)', type: 'holiday', hasSchool: false, notes: '겨울 방학' },
+    { id: 'sch-2027-01-02', date: '2027-01-02', seasonId: '2026-2027', title: '🌅 신년 연휴 (휴교)', type: 'holiday', hasSchool: false, notes: '새해 첫 주 방학' },
+    { id: 'sch-2027-01-09', date: '2027-01-09', seasonId: '2026-2027', title: '새해 첫 주일학교 개강 (11회차)', type: 'regular', hasSchool: true, notes: '2학기 시작' },
+    { id: 'sch-2027-01-16', date: '2027-01-16', seasonId: '2026-2027', title: '정규 토요 주일학교 (12회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-01-23', date: '2027-01-23', seasonId: '2026-2027', title: '정규 토요 주일학교 (13회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-01-30', date: '2027-01-30', seasonId: '2026-2027', title: '정규 토요 주일학교 (14회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-02-06', date: '2027-02-06', seasonId: '2026-2027', title: '정규 토요 주일학교 (15회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-02-13', date: '2027-02-13', seasonId: '2026-2027', title: '사순 시기 준비 교리 (16회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-02-20', date: '2027-02-20', seasonId: '2026-2027', title: 'Family Day 연휴 (17회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-02-27', date: '2027-02-27', seasonId: '2026-2027', title: '정규 토요 주일학교 (18회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-03-06', date: '2027-03-06', seasonId: '2026-2027', title: '정규 토요 주일학교 (19회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-03-13', date: '2027-03-13', seasonId: '2026-2027', title: '🌸 March Break 봄방학 (휴교)', type: 'holiday', hasSchool: false, notes: '온타리오 봄방학 기간' },
+    { id: 'sch-2027-03-20', date: '2027-03-20', seasonId: '2026-2027', title: '정규 토요 주일학교 (20회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-03-27', date: '2027-03-27', seasonId: '2026-2027', title: '성주간 및 주님 수난 성지주일 교리', type: 'special', hasSchool: true, notes: '' },
+    { id: 'sch-2027-04-03', date: '2027-04-03', seasonId: '2026-2027', title: '🐣 주님 부활 대축일 은총 미사 & 달걀 찾기', type: 'special', hasSchool: true, notes: '부활 대축일 행사' },
+    { id: 'sch-2027-04-10', date: '2027-04-10', seasonId: '2026-2027', title: '정규 토요 주일학교 (21회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-04-17', date: '2027-04-17', seasonId: '2026-2027', title: '정규 토요 주일학교 (22회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-04-24', date: '2027-04-24', seasonId: '2026-2027', title: '정규 토요 주일학교 (23회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-05-01', date: '2027-05-01', seasonId: '2026-2027', title: '성모 성월 화관식 & 첫영성체반 특별 교리', type: 'special', hasSchool: true, notes: '' },
+    { id: 'sch-2027-05-08', date: '2027-05-08', seasonId: '2026-2027', title: '정규 토요 주일학교 (24회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-05-15', date: '2027-05-15', seasonId: '2026-2027', title: '정규 토요 주일학교 (25회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-05-22', date: '2027-05-22', seasonId: '2026-2027', title: 'Victoria Day 연휴 (휴교)', type: 'holiday', hasSchool: false, notes: '연휴' },
+    { id: 'sch-2027-05-29', date: '2027-05-29', seasonId: '2026-2027', title: '정규 토요 주일학교 (26회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-06-05', date: '2027-06-05', seasonId: '2026-2027', title: '정규 토요 주일학교 (27회차)', type: 'regular', hasSchool: true, notes: '' },
+    { id: 'sch-2027-06-12', date: '2027-06-12', seasonId: '2026-2027', title: '학기말 성경 퀴즈대회 (28회차)', type: 'special', hasSchool: true, notes: '' },
+    { id: 'sch-2027-06-19', date: '2027-06-19', seasonId: '2026-2027', title: '🎓 2026-2027 학년도 종업식, 시상식 & 여름 은총잔치', type: 'special', hasSchool: true, notes: '학년도 마지막 모임 및 개근상 수여' }
+  ];
+}
+
+export const INITIAL_SCHEDULES = generateInitialSchedules();

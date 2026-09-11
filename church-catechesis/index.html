@@ -72,6 +72,9 @@
           </select>
         </div>
 
+        <span class="season-badge" id="seasonHeaderBadge" title="주일학교 시즌: 매년 9월 ~ 이듬해 6월">
+          🎓 2026-2027 학년도
+        </span>
         <span class="env-badge" id="envBadge">
           <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
           로컬 데모 모드
@@ -89,9 +92,15 @@
       <button class="nav-tab-btn active" data-tab="dashboard">
         📊 대시보드
       </button>
+      <button class="nav-tab-btn" data-tab="schedule">
+        📅 학사 일정
+      </button>
       <button class="nav-tab-btn" data-tab="attendance">
         ✅ 주일 출석 체크
         <span class="badge-count" id="badgeAttendedCount">0</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="stats">
+        📈 시즌 출석 통계
       </button>
       <button class="nav-tab-btn" data-tab="activities">
         🕊️ 활동 부서 봉사
@@ -122,6 +131,9 @@
               <span class="dday-highlight-badge" id="ddayHighlightBadge">
                 🏃 D-2
               </span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnQuickSchedule" style="font-size: 0.76rem; padding: 0.22rem 0.65rem; border-radius: 9999px; margin-left: auto;">
+                📅 일정 관리 ↗
+              </button>
             </div>
             <h2 class="dday-headline" id="ddayHeadline" style="margin-top: 0.6rem;">
               토요 주일학교까지 D-2일 남았어요!
@@ -249,7 +261,7 @@
             <div
               style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; font-size: 0.85rem;">
               <div style="background: var(--surface-subtle); padding: 0.75rem; border-radius: 8px;">
-                <strong>토요 주일학교 출석</strong>: +10 P (지각 +5 P)
+                <strong>토요 주일학교 출석</strong>: +10 P (미사 참례 자동 인정)
               </div>
               <div style="background: var(--surface-subtle); padding: 0.75rem; border-radius: 8px;">
                 <strong>미사 참례</strong>: +5 P 추가
@@ -282,7 +294,7 @@
       <div id="attendanceProtectedContent">
         <div class="toolbar">
           <div class="toolbar-group">
-            <span style="font-weight: 600; font-size: 0.88rem;">출석 일자 (매주 토):</span>
+            <span style="font-weight: 600; font-size: 0.88rem;">출석 일자 (학사 수업일):</span>
             <input type="date" id="attDatePicker" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" />
           </div>
           <div class="toolbar-group">
@@ -299,6 +311,7 @@
             </button>
           </div>
         </div>
+        <div id="attScheduleHint" class="att-schedule-hint" style="display: none;"></div>
 
         <!-- Quick Attendance Cards Grid -->
         <div class="attendance-grid" id="attendanceGrid">
@@ -456,7 +469,7 @@
                 <th>축일</th>
                 <th>성사 (첫영성체/견진)</th>
                 <th>활동 부서</th>
-                <th>학부모 (연락처)</th>
+                <th>학부모</th>
                 <th>보유 은총표</th>
                 <th>관리</th>
               </tr>
@@ -473,7 +486,7 @@
             <thead>
               <tr>
                 <th>학부모 1 (세례명)</th>
-                <th>학부모 2 / Spouse (세례명)</th>
+                <th>학부모 2 (세례명)</th>
                 <th>전화번호</th>
                 <th>주소</th>
                 <th>자녀 학생</th>
@@ -519,6 +532,264 @@
       </div>
     </section>
 
+    <!-- TAB 6: Season Statistics (시즌별 출석 통계) -->
+    <section class="tab-panel" id="panel-stats">
+      <!-- Non-auth locked state -->
+      <div id="statsLockedState" class="access-locked-card" style="display: none;">
+        <div class="locked-icon">🔒</div>
+        <h3>시즌별 출석 통계 보호 중</h3>
+        <p>시즌별 출석 통계 및 학생 출석 분석 데이터는 주일학교 교사 및 승인된 회원 전용 메뉴입니다. 구글 로그인 후 이용해 주세요.</p>
+        <button class="btn btn-primary btn-locked-action" id="btnStatsLogin">
+          <span>🔑 Google 로그인하고 통계 보기</span>
+        </button>
+      </div>
+
+      <!-- Main Authenticated Content -->
+      <div id="statsAuthContent">
+        <!-- Stats Toolbar -->
+        <div class="toolbar stats-toolbar">
+          <div class="toolbar-group">
+            <span style="font-weight: 800; font-size: 0.95rem; color: var(--primary); display: flex; align-items: center; gap: 0.35rem;">
+              <span>📈</span> 시즌 선택:
+            </span>
+            <select id="statsSeasonSelect" class="filter-select" style="font-weight: 800; font-size: 0.88rem; min-width: 220px;">
+              <!-- Populated by JS from AVAILABLE_SEASONS -->
+            </select>
+            <select id="statsClassSelect" class="filter-select" style="min-width: 150px;">
+              <option value="all">🏫 전체 반 통합</option>
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div class="toolbar-group">
+            <span class="season-info-badge" id="statsSeasonPeriodInfo">
+              📅 시즌 기간: 9월 ~ 이듬해 6월 (총 40주 과정)
+            </span>
+          </div>
+        </div>
+
+        <!-- KPI Summary Cards -->
+        <div class="summary-grid" id="statsKpiGrid">
+          <div class="summary-card">
+            <div class="summary-icon icon-blue">📈</div>
+            <div>
+              <div class="summary-title">시즌 평균 출석률</div>
+              <div class="summary-value" id="kpiOverallRate">0%</div>
+              <span class="kpi-sub-text" id="kpiOverallCount">0 / 0회</span>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon icon-green">👥</div>
+            <div>
+              <div class="summary-title">주차별 평균 출석</div>
+              <div class="summary-value" id="kpiAvgAttended">0명</div>
+              <span class="kpi-sub-text" id="kpiAvgAttendedSub">평균 출석 인원</span>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon icon-amber">🎒</div>
+            <div>
+              <div class="summary-title">진행된 토요 수업</div>
+              <div class="summary-value" id="kpiTotalWeeks">0주차</div>
+              <span class="kpi-sub-text" id="kpiTotalStudents">등록 학생 0명</span>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon icon-purple">🌟</div>
+            <div>
+              <div class="summary-title">개근 / 정근 꿈나무</div>
+              <div class="summary-value" id="kpiHonoredCount">0명</div>
+              <span class="kpi-sub-text" id="kpiHonoredSub">출석률 90% 이상</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Grid 1: Monthly Trend & Class Breakdown -->
+        <div class="stats-charts-grid">
+          <!-- Monthly Attendance Bar Chart (9월 ~ 6월) -->
+          <div class="stats-card">
+            <div class="stats-card-header">
+              <div>
+                <h3 class="stats-card-title">📊 월별 출석률 추이 그래프 (9월 ~ 이듬해 6월)</h3>
+                <p class="stats-card-sub">매 학년도 시즌(9월~6월) 월별 평균 출석률 추이</p>
+              </div>
+              <div class="stats-legend">
+                <span class="legend-item"><span class="legend-dot dot-attendance"></span> 출석률</span>
+                <span class="legend-item"><span class="legend-dot dot-target"></span> 목표선 (85%)</span>
+              </div>
+            </div>
+            <div class="stats-card-body">
+              <div class="monthly-bar-chart-container" id="monthlyBarChartContainer">
+                <!-- 10 Months (Sep ~ Jun) generated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Class Comparison Ranking Chart -->
+          <div class="stats-card">
+            <div class="stats-card-header">
+              <div>
+                <h3 class="stats-card-title">🏫 반별(Class) 출석률 비교</h3>
+                <p class="stats-card-sub">각 학년부 합반별 평균 출석률 순위</p>
+              </div>
+            </div>
+            <div class="stats-card-body">
+              <div class="class-ranking-list" id="classRankingList">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Grid 2: Honor Roll & Weekly Details -->
+        <div class="stats-charts-grid" style="margin-top: 1.5rem;">
+          <!-- Top Attended Students (개근 & 정근) -->
+          <div class="stats-card">
+            <div class="stats-card-header">
+              <div>
+                <h3 class="stats-card-title">🏆 시즌 성실 출석 꿈나무</h3>
+                <p class="stats-card-sub">성실하게 주일학교에 출석한 어린이 명단</p>
+              </div>
+            </div>
+            <div class="stats-card-body">
+              <div class="honor-students-list" id="honorStudentsList">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Weekly History Table -->
+          <div class="stats-card">
+            <div class="stats-card-header">
+              <div>
+                <h3 class="stats-card-title">📅 주차별 토요 출석 상세 기록</h3>
+                <p class="stats-card-sub">각 토요일 주차별 출석/결석 현황</p>
+              </div>
+            </div>
+            <div class="stats-card-body">
+              <div class="data-table-container" style="max-height: 380px; overflow-y: auto;">
+                <table class="data-table" id="statsWeeklyTable">
+                  <thead>
+                    <tr>
+                      <th>토요 일자</th>
+                      <th>출석률</th>
+                      <th>출석</th>
+                      <th>결석</th>
+                    </tr>
+                  </thead>
+                  <tbody id="statsWeeklyTableBody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: Sunday School Schedule Management (학사 일정 관리) -->
+    <section class="tab-panel" id="panel-schedule">
+      <div class="tab-content-container">
+
+        <!-- Header Hero Banner -->
+        <div class="hero-stats-banner">
+          <div class="hero-content">
+            <div class="hero-tag">📅 SUNDAY SCHOOL CALENDAR & SCHEDULES</div>
+            <h2 class="hero-title">주일학교 학사 일정 및 모임일 관리</h2>
+            <p class="hero-desc">
+              토요 주일학교 수업일, 개학·종업식, 은총잔치, 연휴 및 방학 일정을 등록하고 관리합니다.<br>
+              <strong>※ 등록된 모임 일정에 따라 대시보드의 D-Day 카운트다운과 진행률이 실시간으로 자동 연동됩니다.</strong>
+            </p>
+          </div>
+          <div class="hero-actions" id="scheduleEditActions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="btnOpenAddSchedule">
+              + 새 일정 등록
+            </button>
+            <button class="btn btn-secondary" id="btnResetSeasonSchedules">
+              ⚡ 시즌 일정 초기화
+            </button>
+          </div>
+          <div id="scheduleViewOnlyNotice" class="schedule-view-only-notice" style="display: none;">
+            👀 조회 전용 — 일정 등록·수정·삭제는 승인된 교사만 가능합니다.
+          </div>
+        </div>
+
+        <!-- Schedule KPI Cards -->
+        <div class="summary-grid" style="margin-top: 1.25rem;">
+          <div class="summary-card">
+            <div class="summary-icon icon-students">📅</div>
+            <div class="summary-data">
+              <div class="summary-value" id="schStatTotalCount">0개</div>
+              <div class="summary-label">시즌 등록 일정</div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon icon-att">🏫</div>
+            <div class="summary-data">
+              <div class="summary-value" id="schStatSchoolCount">0회</div>
+              <div class="summary-label">주일학교 모임(수업)일</div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon icon-act">🎉</div>
+            <div class="summary-data">
+              <div class="summary-value" id="schStatSpecialCount">0일</div>
+              <div class="summary-label">특별 행사 / 은총잔치</div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon icon-grace">🏃</div>
+            <div class="summary-data">
+              <div class="summary-value" id="schStatNextDDay">-</div>
+              <div class="summary-label" id="schStatNextTitle">다음 모임일</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Schedule Filter Bar & Table -->
+        <div class="stats-card" style="margin-top: 1.25rem;">
+          <div class="stats-card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+            <div>
+              <h3 class="stats-card-title">📋 주일학교 학사 일정 목록</h3>
+              <p class="stats-card-sub">모임 여부 버튼을 클릭해 손쉽게 휴교/수업일을 전환할 수 있습니다.</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+              <select id="scheduleSeasonFilter" class="form-control" style="font-weight: 700; width: auto; font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+                <!-- Populated by JS from AVAILABLE_SEASONS -->
+              </select>
+              <select id="scheduleTypeFilter" class="form-control" style="font-weight: 600; width: auto; font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+                <option value="all">모든 구분 전체</option>
+                <option value="school_only">🏫 주일학교 모임일만</option>
+                <option value="special">🎉 특별 행사/은총잔치</option>
+                <option value="holiday">❄️ 연휴/방학 (휴교)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="stats-card-body">
+            <div class="data-table-container">
+              <table class="data-table" id="scheduleTable">
+                <thead>
+                  <tr>
+                    <th>날짜 / 요일</th>
+                    <th>구분</th>
+                    <th>주일학교 모임 여부</th>
+                    <th>일정 제목 & 상세 내용</th>
+                    <th>비고/메모</th>
+                    <th>관리</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleTableBody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
   </main>
 
   <!-- App Footer -->
@@ -533,20 +804,70 @@
       </div>
       <div class="footer-info">
         <p class="footer-desc">
-          <span>🍁 40가족의 따뜻하고 행복한 신앙 공동체</span> • 
           <a href="https://standrewkimlondon.ca/" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; font-weight: 600;">
             성당 공식 홈페이지 방문 (standrewkimlondon.ca) ↗
           </a>
         </p>
         <p class="copyright">© 2026 St. Andrew Kim Korean Catholic Church Sunday School. All rights reserved.</p>
-        <p class="footer-sub-text" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
-          가톨릭 주일학교 교리교육 & 은총표 관리 시스템 | Faith • Hope • Love ✝️
-        </p>
       </div>
     </div>
   </footer>
 
   <!-- MODALS -->
+
+  <!-- Modal: Add / Edit Schedule (학사 일정 관리) -->
+  <div class="modal-backdrop" id="modalAddSchedule">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 id="modalScheduleTitle">📅 주일학교 학사 일정 등록</h3>
+        <button class="modal-close-btn" data-close="modalAddSchedule">&times;</button>
+      </div>
+      <form id="addScheduleForm">
+        <div class="modal-body">
+          <input type="hidden" id="editScheduleId" value="" />
+          <div class="form-group">
+            <label class="form-label">시즌</label>
+            <select id="newScheduleSeason" class="form-control">
+              <!-- Populated by JS from AVAILABLE_SEASONS -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">모임/행사 날짜 *</label>
+            <input type="date" id="newScheduleDate" class="form-control" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">일정 제목 *</label>
+            <input type="text" id="newScheduleTitle" class="form-control" placeholder="예: 정규 토요 교리수업, 대림 첫 주일, 성탄 축제" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">일정 구분 *</label>
+            <select id="newScheduleType" class="form-control">
+              <option value="regular">정규 모임 (일반 교리 수업)</option>
+              <option value="special">특별 행사 / 전례 (개학식, 종업식, 첫영성체 등)</option>
+              <option value="holiday">방학 / 휴교 (모임 없음)</option>
+            </select>
+          </div>
+          <div class="form-group" style="background: var(--surface-2); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--border-subtle);">
+            <label class="checkbox-item" style="font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+              <input type="checkbox" id="newScheduleHasSchool" checked />
+              <span>주일학교 모임 및 출석 체크 진행 (D-Day 카운트 대상)</span>
+            </label>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0.35rem 0 0 1.6rem;">
+              체크 해제 시 방학/휴교로 분류되어 메인 화면 D-Day 계산에서 건너뜁니다.
+            </p>
+          </div>
+          <div class="form-group">
+            <label class="form-label">비고 / 안내사항 (선택)</label>
+            <input type="text" id="newScheduleNotes" class="form-control" placeholder="예: 간식 준비, 11시 대미사 후 진행" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modalAddSchedule">취소</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitSchedule">저장</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- Modal: Add / Edit Class (반 구성) -->
   <div class="modal-backdrop" id="modalAddClass">

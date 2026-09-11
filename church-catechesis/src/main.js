@@ -3,7 +3,7 @@
 // v2 - 통합 Person 모델 + 자유 합반(Class) 구조 + Google 인증 및 관리자 승인 체계
 
 import { dataProvider } from './services/DataProvider.js';
-import { GRADES, GRADE_SORT_MAP, DEPARTMENTS, PERSON_ROLES, getRecentSaturday } from './mock/sampleData.js';
+import { GRADES, GRADE_SORT_MAP, DEPARTMENTS, PERSON_ROLES, getRecentSaturday, AVAILABLE_SEASONS, getCurrentSeasonId } from './mock/sampleData.js';
 import {
   signInWithGoogle,
   signOut,
@@ -46,7 +46,77 @@ function getSaturdayDateString() {
 }
 
 function getTodayDateString() {
-  return getSaturdayDateString();
+  return dataProvider.getPreferredAttendanceDate();
+}
+
+// 실제 오늘 날짜 (YYYY-MM-DD) — 모달 기본값 등에 사용
+function getTodayISO() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function populateSeasonSelects() {
+  const optionsHtml = AVAILABLE_SEASONS.map(s =>
+    `<option value="${s.id}"${s.isCurrent ? ' selected' : ''}>🎓 ${s.label}</option>`
+  ).join('');
+
+  const scheduleFilter = document.getElementById('scheduleSeasonFilter');
+  if (scheduleFilter) {
+    scheduleFilter.innerHTML = optionsHtml + '<option value="all">전체 시즌</option>';
+    scheduleFilter.value = getCurrentSeasonId();
+  }
+
+  const statsSelect = document.getElementById('statsSeasonSelect');
+  if (statsSelect) {
+    statsSelect.innerHTML = optionsHtml;
+    statsSelect.value = getCurrentSeasonId();
+  }
+
+  const scheduleModalSeason = document.getElementById('newScheduleSeason');
+  if (scheduleModalSeason) {
+    scheduleModalSeason.innerHTML = AVAILABLE_SEASONS.map(s => {
+      const [startY, endY] = s.id.split('-');
+      return `<option value="${s.id}"${s.isCurrent ? ' selected' : ''}>${s.id} 시즌 (${startY}.09 ~ ${endY}.06)</option>`;
+    }).join('');
+  }
+}
+
+function updateSeasonHeaderBadge() {
+  const badge = document.getElementById('seasonHeaderBadge');
+  if (!badge) return;
+  const seasonId = getCurrentSeasonId();
+  const season = AVAILABLE_SEASONS.find(s => s.id === seasonId);
+  badge.textContent = season ? season.label.replace(/ \(.*\)$/, '') : `${seasonId} 학년도`;
+  badge.title = `주일학교 시즌: 매년 9월 ~ 이듬해 6월 (${seasonId})`;
+}
+
+function updateAttendanceScheduleHint(selectedDate) {
+  const hint = document.getElementById('attScheduleHint');
+  if (!hint) return;
+
+  const sch = dataProvider.getScheduleByDate(selectedDate);
+  const schoolDay = dataProvider.isSchoolDay(selectedDate);
+
+  if (schoolDay === true) {
+    hint.style.display = 'block';
+    hint.className = 'att-schedule-hint att-schedule-hint--school';
+    hint.innerHTML = `🏫 <strong>수업일</strong> — ${sch?.title || '주일학교 모임'}${sch?.notes ? ` · ${sch.notes}` : ''}`;
+  } else if (schoolDay === false) {
+    hint.style.display = 'block';
+    hint.className = 'att-schedule-hint att-schedule-hint--holiday';
+    hint.innerHTML = `❄️ <strong>휴교일</strong> — ${sch?.title || '연휴/방학'} (출석 체크는 가능하지만 통계 수업일에는 포함되지 않습니다)`;
+  } else {
+    hint.style.display = 'block';
+    hint.className = 'att-schedule-hint att-schedule-hint--unknown';
+    hint.innerHTML = `📅 학사 일정에 없는 날짜입니다. <a href="#" id="attHintGotoSchedule">학사 일정</a>에 등록하면 D-Day·통계와 연동됩니다.`;
+    hint.querySelector('#attHintGotoSchedule')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.querySelector('[data-tab="schedule"]')?.click();
+    });
+  }
 }
 
 function showToast(message, icon = '✅') {
@@ -292,20 +362,33 @@ function showUserDetail(type, id) {
     badgeEl.textContent = isTeacher ? `학부모 (${getPrimaryRoleLabel(person)} 겸임)` : '학부모';
     subEl.textContent = `세례명: ${person.baptismalName || '미등록'}`;
 
-    // 배우자 정보
-    let spouseHtml = '<span style="color: var(--text-muted);">미등록 (한 분만 등록)</span>';
+    // 학부모 1 정보 (동일 포맷)
+    const parent1Html = `
+      <div>
+        <strong style="font-size: 0.95rem;">${person.name}</strong>
+        ${person.baptismalName ? `<span style="color: var(--text-muted); font-size: 0.85rem;">(${person.baptismalName})</span>` : ''}
+        ${isTeacher ? `<span class="badge badge-sacrament" style="font-size: 0.7rem; margin-left: 0.25rem;">${getPrimaryRoleLabel(person)}</span>` : ''}
+      </div>
+      ${person.phone ? `<div style="font-size: 0.85rem; margin-top: 0.35rem;">📞 <a href="tel:${person.phone}" style="color: var(--primary); font-weight: 600;">${person.phone}</a></div>` : '<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem;">연락처 미등록</div>'}
+    `;
+
+    // 학부모 2 정보 (동일 포맷)
+    let parent2Html = '<span style="color: var(--text-muted);">미등록 (한 분만 등록)</span>';
     const spouseId = person.parentInfo?.spousePersonId;
     if (spouseId) {
       const spouse = dataProvider.getPersonById(spouseId);
       if (spouse) {
         const spouseTeacher = spouse.roles && spouse.roles.some(r => teacherRoles.includes(r));
         const spouseBadge = spouseTeacher
-          ? `<span class="badge badge-sacrament" style="font-size: 0.7rem;">${getPrimaryRoleLabel(spouse)}</span>`
+          ? `<span class="badge badge-sacrament" style="font-size: 0.7rem; margin-left: 0.25rem;">${getPrimaryRoleLabel(spouse)}</span>`
           : '';
-        spouseHtml = `
-          <span class="clickable-name" data-detail-type="parent" data-detail-id="${spouse.id}">${spouse.name}</span>
-          ${spouse.baptismalName ? `(${spouse.baptismalName})` : ''} ${spouseBadge}
-          ${spouse.phone ? `• 📞 <a href="tel:${spouse.phone}">${spouse.phone}</a>` : ''}
+        parent2Html = `
+          <div>
+            <span class="clickable-name" data-detail-type="parent" data-detail-id="${spouse.id}"><strong style="font-size: 0.95rem;">${spouse.name}</strong></span>
+            ${spouse.baptismalName ? `<span style="color: var(--text-muted); font-size: 0.85rem;">(${spouse.baptismalName})</span>` : ''}
+            ${spouseBadge}
+          </div>
+          ${spouse.phone ? `<div style="font-size: 0.85rem; margin-top: 0.35rem;">📞 <a href="tel:${spouse.phone}" style="color: var(--primary); font-weight: 600;">${spouse.phone}</a></div>` : '<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem;">연락처 미등록</div>'}
         `;
       }
     }
@@ -326,19 +409,12 @@ function showUserDetail(type, id) {
 
     gridEl.innerHTML = `
       <div class="detail-item">
-        <div class="detail-label">학부모 1 (세례명)</div>
-        <div class="detail-value">
-          ${person.name} ${person.baptismalName ? `(${person.baptismalName})` : ''}
-          ${isTeacher ? `<div style="margin-top: 0.2rem;"><span class="badge badge-sacrament" style="font-size: 0.72rem;">✝ ${getPrimaryRoleLabel(person)}</span></div>` : ''}
-        </div>
+        <div class="detail-label">학부모 1</div>
+        <div class="detail-value">${parent1Html}</div>
       </div>
       <div class="detail-item">
-        <div class="detail-label">학부모 2 / Spouse (세례명)</div>
-        <div class="detail-value">${spouseHtml}</div>
-      </div>
-      <div class="detail-item">
-        <div class="detail-label">학부모 1 연락처</div>
-        <div class="detail-value">📞 <a href="tel:${person.phone}">${person.phone || '-'}</a></div>
+        <div class="detail-label">학부모 2</div>
+        <div class="detail-value">${parent2Html}</div>
       </div>
       <div class="detail-item detail-item-full">
         <div class="detail-label">자택 주소</div>
@@ -637,6 +713,7 @@ function initAuthUI() {
     // Refresh current view based on permissions
     renderDashboard();
     renderAttendance();
+    renderStats();
     renderActivities();
     renderGraceBank();
     renderDirectory();
@@ -688,25 +765,23 @@ function renderDDayProgress() {
   const now = new Date();
   const daysOfWeek = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   const dayNamesShort = ['일', '월', '화', '수', '목', '금', '토'];
-  const currentDayIndex = now.getDay(); // 0 (Sun) ~ 6 (Sat)
+  const currentDayIndex = now.getDay();
 
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const date = now.getDate();
   const dayFullName = daysOfWeek[currentDayIndex];
 
-  // D-Day calculation to upcoming Saturday (day index 6)
-  const daysUntilSaturday = (6 - currentDayIndex + 7) % 7;
+  // 📅 등록된 학사 일정 기반 다음 모임일 계산
+  const nextSchool = dataProvider.getNextUpcomingSchoolDate(now);
+  const daysLeft = nextSchool.daysLeft;
+  const targetDateStr = nextSchool.targetDate
+    ? `${nextSchool.targetDate.getFullYear()}년 ${nextSchool.targetDate.getMonth() + 1}월 ${nextSchool.targetDate.getDate()}일`
+    : '';
+  const schoolTitle = nextSchool.title || '토요 주일학교';
 
-  // Next Saturday Date
-  const nextSat = new Date(now);
-  nextSat.setDate(now.getDate() + daysUntilSaturday);
-  const nextSatYear = nextSat.getFullYear();
-  const nextSatMonth = nextSat.getMonth() + 1;
-  const nextSatDate = nextSat.getDate();
-
-  // Progress % (Sun=14%, Mon=28%, Tue=43%, Wed=57%, Thu=71%, Fri=86%, Sat=100%)
-  const progressPercent = currentDayIndex === 6 ? 100 : Math.round(((currentDayIndex + 1) / 7) * 100);
+  // 진행률: 등록된 다음 모임일까지 주 중 경과일 비율
+  const progressPercent = daysLeft === 0 ? 100 : Math.max(5, Math.round(((7 - daysLeft) / 7) * 100));
 
   // DOM Elements
   const todayBadge = document.getElementById('ddayTodayDateBadge');
@@ -723,20 +798,20 @@ function renderDDayProgress() {
   }
 
   if (highlightBadge && headline && subquote) {
-    if (daysUntilSaturday === 0) {
+    if (daysLeft === 0) {
       highlightBadge.textContent = '🔥 D-Day 오늘';
       highlightBadge.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-      headline.textContent = '🎉 오늘은 신나는 토요 주일학교 날이에요!';
+      headline.textContent = `🎉 오늘은 주일학교 날이에요! — ${schoolTitle}`;
       subquote.textContent = '친구들과 선생님을 만나는 기쁜 날! 즐겁게 미사와 교리에 참여해요 ✝️';
-    } else if (daysUntilSaturday === 1) {
+    } else if (daysLeft === 1) {
       highlightBadge.textContent = '🏃 D-1';
       highlightBadge.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
-      headline.textContent = '🏃 주일학교까지 딱 하루 남았어요! (D-1)';
+      headline.textContent = `🏃 주일학교까지 딱 하루! — ${schoolTitle}`;
       subquote.textContent = '내일은 토요 주일학교! 교리 책과 성경을 미리 챙겨두어요 🎒';
     } else {
-      highlightBadge.textContent = `🏃 D-${daysUntilSaturday}`;
+      highlightBadge.textContent = `🏃 D-${daysLeft}`;
       highlightBadge.style.background = 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)';
-      headline.textContent = `토요 주일학교까지 D-${daysUntilSaturday}일 남았어요!`;
+      headline.textContent = `다음 주일학교까지 D-${daysLeft}일 — ${schoolTitle}`;
       subquote.textContent = '평일에도 예수님 사랑 실천하며 즐거운 마음으로 성당 갈 준비를 해요 ✨';
     }
   }
@@ -745,7 +820,9 @@ function renderDDayProgress() {
     stepsRow.innerHTML = dayNamesShort.map((name, idx) => {
       const isCompleted = idx < currentDayIndex;
       const isActive = idx === currentDayIndex;
-      const isTarget = idx === 6;
+      // 다음 모임 요일을 target으로 표시
+      const targetDayIdx = nextSchool.targetDate ? nextSchool.targetDate.getDay() : 6;
+      const isTarget = idx === targetDayIdx && idx !== currentDayIndex;
 
       let classes = ['dday-step-node'];
       if (isCompleted) classes.push('completed');
@@ -770,7 +847,9 @@ function renderDDayProgress() {
   }
 
   if (nextSatText) {
-    nextSatText.textContent = `⛪ 다가오는 토요 주일학교: ${nextSatYear}년 ${nextSatMonth}월 ${nextSatDate}일 (토)`;
+    nextSatText.textContent = nextSchool.date
+      ? `⛪ 다음 주일학교: ${targetDateStr} — ${schoolTitle}`
+      : '⛪ 다음 주일학교 일정 미등록';
   }
 
   if (progressPercentText) {
@@ -793,7 +872,7 @@ function renderDashboard() {
   const allLedger = dataProvider.getGraceLedger();
 
   const totalGrace = allLedger.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const attendedCount = attendanceToday.filter(a => a.status === '출석' || a.status === '지각').length;
+  const attendedCount = attendanceToday.filter(a => a.status === '출석').length;
 
   document.getElementById('statTotalStudents').textContent = `${students.length}명`;
   document.getElementById('statTodayAttendance').textContent = `${attendedCount}명 출석`;
@@ -965,11 +1044,15 @@ function renderAttendance() {
   if (lockedEl) lockedEl.style.display = 'none';
 
   const dateInput = document.getElementById('attDatePicker');
-  const selectedDate = dateInput.value || getTodayDateString();
+  const selectedDate = dateInput?.value || getTodayDateString();
+  if (dateInput && !dateInput.value) dateInput.value = selectedDate;
+  updateAttendanceScheduleHint(selectedDate);
+
   const students = dataProvider.getStudents();
   const attendanceList = dataProvider.getAttendance(selectedDate);
   const attendanceGrid = document.getElementById('attendanceGrid');
 
+  const schoolDay = dataProvider.isSchoolDay(selectedDate);
   const filtered = students.filter(st => matchGradeGroup(st.studentInfo?.grade || '', currentAttGradeFilter));
 
   if (filtered.length === 0) {
@@ -1012,53 +1095,34 @@ function renderAttendance() {
           </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        <div>
           <div class="att-button-row">
             <button class="btn-att-toggle ${status === '출석' ? 'active-present' : ''}" data-status="출석" data-id="${st.id}">
-              ✓ 출석 (+10)
-            </button>
-            <button class="btn-att-toggle ${status === '지각' ? 'active-late' : ''}" data-status="지각" data-id="${st.id}">
-              ⏰ 지각 (+5)
+              ✓ 출석 (+10 P)
             </button>
             <button class="btn-att-toggle ${status === '결석' ? 'active-absent' : ''}" data-status="결석" data-id="${st.id}">
               ✕ 결석
             </button>
           </div>
-          <label class="mass-checkbox-label">
-            <input type="checkbox" class="att-mass-check" data-id="${st.id}" ${massAttended ? 'checked' : ''} />
-            주일 미사 참례 (+5 P)
-          </label>
         </div>
       </div>
     `;
   }).join('');
 
-  // 출석 버튼 이벤트
+  // 출석 버튼 이벤트 (원클릭으로 출석 체크 완료)
   attendanceGrid.querySelectorAll('.btn-att-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
       const studentId = btn.getAttribute('data-id');
       const newStatus = btn.getAttribute('data-status');
-      const card = btn.closest('.student-att-card');
-      const massChecked = card.querySelector('.att-mass-check').checked;
-      dataProvider.recordAttendance({ date: selectedDate, studentId, status: newStatus, massAttended: massChecked, recordedBy: '담당 선생님' });
+      if (schoolDay === false) {
+        const ok = confirm('선택한 날짜는 학사 일정 상 휴교일입니다. 그래도 출석을 기록할까요?');
+        if (!ok) return;
+      }
+      dataProvider.recordAttendance({ date: selectedDate, studentId, status: newStatus, recordedBy: '담당 선생님' });
       showToast(`${newStatus} 체크 완료 (은총표 자동 반영)`, '✅');
       renderAttendance();
       renderDashboard();
-    });
-  });
-
-  // 미사 참례 체크
-  attendanceGrid.querySelectorAll('.att-mass-check').forEach(chk => {
-    chk.addEventListener('change', () => {
-      const studentId = chk.getAttribute('data-id');
-      const currentAtt = dataProvider.getAttendance(selectedDate).find(
-        a => a.studentPersonId === studentId || a.studentId === studentId
-      );
-      const curStatus = currentAtt ? currentAtt.status : '출석';
-      dataProvider.recordAttendance({ date: selectedDate, studentId, status: curStatus, massAttended: chk.checked, recordedBy: '담당 선생님' });
-      showToast('미사 참례 여부 변경 완료', '⛪');
-      renderAttendance();
-      renderDashboard();
+      renderStats();
     });
   });
 }
@@ -1282,8 +1346,7 @@ function renderStudentsDirectory(search = '') {
     const si = st.studentInfo || {};
     const parents = dataProvider.getParentsOfStudent(st.id);
     const parentInfo = parents.length > 0
-      ? parents.map(p => `<span class="clickable-name" data-detail-type="parent" data-detail-id="${p.id}">${p.name}</span>`).join(' / ')
-        + (parents[0]?.phone ? ` (<a href="tel:${parents[0].phone}" style="color: var(--primary);">${parents[0].phone}</a>)` : '')
+      ? parents.map(p => `<span class="clickable-name" data-detail-type="parent" data-detail-id="${p.id}">${p.name}${p.baptismalName ? ` <span style="font-size: 0.75rem; color: var(--text-muted);">(${p.baptismalName})</span>` : ''}</span>`).join(', ')
       : '<span style="color: var(--text-muted);">-</span>';
     const sacraments = [];
     if (si.firstCommunion) sacraments.push('<span class="badge badge-sacrament">첫영성체</span>');
@@ -1476,7 +1539,7 @@ function renderClassesView() {
           </div>
           <div style="display: flex; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm btn-edit-class" data-id="${cls.id}">편집</button>
-            <button class="btn btn-sm" style="background: #fee2e2; color: #dc2626; border: none; cursor: pointer; border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 0.78rem;" class="btn-delete-class" data-id="${cls.id}">삭제</button>
+            <button class="btn btn-sm btn-delete-class" style="background: #fee2e2; color: #dc2626; border: none; cursor: pointer; border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 0.78rem;" data-id="${cls.id}">삭제</button>
           </div>
         </div>
         <div style="margin-bottom: 0.6rem;">
@@ -1499,16 +1562,14 @@ function renderClassesView() {
   grid.querySelectorAll('.btn-edit-class').forEach(btn => {
     btn.addEventListener('click', () => openEditClassModal(btn.getAttribute('data-id')));
   });
-  grid.querySelectorAll('[data-id]').forEach(btn => {
-    if (btn.textContent.trim() === '삭제') {
-      btn.addEventListener('click', () => {
-        if (confirm('이 반을 삭제하시겠습니까?')) {
-          dataProvider.deleteClass(btn.getAttribute('data-id'));
-          showToast('반이 삭제되었습니다.', '🗑️');
-          renderClassesView();
-        }
-      });
-    }
+  grid.querySelectorAll('.btn-delete-class').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (confirm('이 반을 삭제하시겠습니까?')) {
+        dataProvider.deleteClass(btn.getAttribute('data-id'));
+        showToast('반이 삭제되었습니다.', '🗑️');
+        renderClassesView();
+      }
+    });
   });
 }
 
@@ -1588,6 +1649,402 @@ document.getElementById('addClassForm')?.addEventListener('submit', (e) => {
 });
 
 // ============================================================
+//  Season Statistics & Analytics (시즌별 출석 통계 & 그래프)
+// ============================================================
+function renderStats() {
+  const lockedState = document.getElementById('statsLockedState');
+  const authContent = document.getElementById('statsAuthContent');
+
+  if (!isUserApproved()) {
+    if (lockedState) {
+      lockedState.style.display = 'flex';
+      lockedState.querySelector('.btn-locked-action')?.addEventListener('click', handleGoogleLogin);
+    }
+    if (authContent) authContent.style.display = 'none';
+    return;
+  }
+
+  if (lockedState) lockedState.style.display = 'none';
+  if (authContent) authContent.style.display = 'block';
+
+  // 1. Season & Class selectors
+  const seasonSelect = document.getElementById('statsSeasonSelect');
+  const classSelect = document.getElementById('statsClassSelect');
+  const selectedSeason = seasonSelect ? seasonSelect.value : '2026-2027';
+  const selectedClass = classSelect ? classSelect.value : 'all';
+
+  // Populate Class Select options if empty
+  if (classSelect && classSelect.options.length <= 1) {
+    const classes = dataProvider.getClasses();
+    classSelect.innerHTML = '<option value="all">🏫 전체 반 통합</option>' +
+      classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  }
+
+  // Update Season Period Info Badge
+  const periodBadge = document.getElementById('statsSeasonPeriodInfo');
+  if (periodBadge) {
+    const [startYear, endYear] = selectedSeason.split('-');
+    const schoolDays = stats.schoolDayCount || stats.totalWeeks;
+    periodBadge.textContent = `📅 시즌 기간: ${startYear}년 9월 ~ ${endYear}년 6월 (학사 수업일 ${schoolDays}회)`;
+  }
+
+  // 2. Fetch Aggregated Statistics
+  const stats = dataProvider.getSeasonStatistics(selectedSeason, selectedClass);
+
+  // 3. Update KPI Summary Cards
+  const kpiOverallRate = document.getElementById('kpiOverallRate');
+  const kpiOverallCount = document.getElementById('kpiOverallCount');
+  const kpiAvgAttended = document.getElementById('kpiAvgAttended');
+  const kpiAvgAttendedSub = document.getElementById('kpiAvgAttendedSub');
+  const kpiTotalWeeks = document.getElementById('kpiTotalWeeks');
+  const kpiTotalStudents = document.getElementById('kpiTotalStudents');
+  const kpiHonoredCount = document.getElementById('kpiHonoredCount');
+  const kpiHonoredSub = document.getElementById('kpiHonoredSub');
+
+  const avgAttendedPerWeek = stats.totalWeeks > 0 ? (stats.attendedCount / stats.totalWeeks).toFixed(1) : '0';
+
+  if (kpiOverallRate) kpiOverallRate.textContent = `${stats.overallRate}%`;
+  if (kpiOverallCount) kpiOverallCount.textContent = `총 ${stats.attendedCount}회 출석 (출석률 ${stats.overallRate}%)`;
+  if (kpiAvgAttended) kpiAvgAttended.textContent = `${avgAttendedPerWeek}명`;
+  if (kpiAvgAttendedSub) kpiAvgAttendedSub.textContent = `주차별 평균 출석 (전체 ${stats.totalStudents}명 중)`;
+  if (kpiTotalWeeks) kpiTotalWeeks.textContent = `${stats.totalWeeks}주차`;
+  if (kpiTotalStudents) kpiTotalStudents.textContent = `등록 학생 ${stats.totalStudents}명`;
+
+  const perfectStudents = stats.topStudents.filter(s => s.isPerfect);
+  const honoredStudents = stats.topStudents.filter(s => s.isHonored && !s.isPerfect);
+  if (kpiHonoredCount) kpiHonoredCount.textContent = `${perfectStudents.length + honoredStudents.length}명`;
+  if (kpiHonoredSub) kpiHonoredSub.textContent = `개근 ${perfectStudents.length}명 • 정근 ${honoredStudents.length}명`;
+
+  // 4. Monthly Attendance Bar Chart (9월 ~ 6월 10개 월)
+  const barChartContainer = document.getElementById('monthlyBarChartContainer');
+  if (barChartContainer) {
+    barChartContainer.innerHTML = `
+      <div class="bar-target-line"></div>
+      ${stats.monthlyStats.map(m => {
+        const heightPct = m.possible > 0 ? Math.min(100, Math.max(m.rate, 0)) : 0;
+        const barFillHeight = heightPct > 0 ? `${heightPct}%` : '4px';
+        const isTargetMet = m.rate >= 85;
+        const colorGradient = isTargetMet
+          ? 'linear-gradient(180deg, #10b981 0%, #059669 100%)'
+          : 'linear-gradient(180deg, var(--primary-light) 0%, var(--primary) 100%)';
+
+        return `
+          <div class="monthly-bar-col" title="${m.label}: 출석률 ${m.rate}% (${m.attended}/${m.possible}회)">
+            <span class="bar-value-label">${m.possible > 0 ? `${m.rate}%` : '-'}</span>
+            <div class="bar-track">
+              <div class="bar-fill" style="height: ${barFillHeight}; background: ${m.possible > 0 ? colorGradient : 'var(--border)'};"></div>
+            </div>
+            <span class="bar-month-label">${m.label}</span>
+          </div>
+        `;
+      }).join('')}
+    `;
+  }
+
+  // 5. Class Breakdown Ranking Progress Bars
+  const classRankingList = document.getElementById('classRankingList');
+  if (classRankingList) {
+    if (stats.classStats.length === 0) {
+      classRankingList.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">등록된 반이 없습니다.</p>';
+    } else {
+      classRankingList.innerHTML = stats.classStats.map((c, idx) => {
+        const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : '🏷️'));
+        return `
+          <div class="class-rank-item">
+            <div class="class-rank-header">
+              <span style="display: flex; align-items: center; gap: 0.4rem; color: var(--text-main);">
+                <span>${medal}</span>
+                <span>${c.className}</span>
+                <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">(${c.studentCount}명)</span>
+              </span>
+              <span style="font-weight: 800; color: var(--primary); font-family: 'Nunito', sans-serif;">
+                ${c.rate}%
+              </span>
+            </div>
+            <div class="class-rank-bar-bg">
+              <div class="class-rank-bar-fill" style="width: ${c.rate}%;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // 6. Honor Students List (개근 & 정근)
+  const honorList = document.getElementById('honorStudentsList');
+  if (honorList) {
+    const honored = stats.topStudents.filter(s => s.isHonored || s.isPerfect);
+    if (honored.length === 0) {
+      honorList.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">해당 조건의 우수 학생이 없습니다.</p>';
+    } else {
+      honorList.innerHTML = honored.map(s => {
+        const student = s.student;
+        const badge = s.isPerfect
+          ? '<span class="honor-badge-perfect">🌟 개근상 (100%)</span>'
+          : `<span class="honor-badge-good">🏅 정근 (${s.rate}%)</span>`;
+
+        return `
+          <div class="honor-student-card">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 1.2rem;">${s.isPerfect ? '👑' : '⭐'}</span>
+              <div>
+                <div style="font-weight: 700; font-size: 0.88rem; color: var(--text-main);">
+                  ${student.name}
+                  <span style="font-size: 0.75rem; color: var(--text-muted);">(${student.baptismalName || '-'})</span>
+                </div>
+                <div style="font-size: 0.72rem; color: var(--text-muted);">
+                  ${student.studentInfo?.grade || '-'} • ${s.attendedWeeks}/${s.totalWeeks}주 출석 (${s.rate}%)
+                </div>
+              </div>
+            </div>
+            <div>${badge}</div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // 7. Weekly History Table
+  const weeklyTbody = document.getElementById('statsWeeklyTableBody');
+  if (weeklyTbody) {
+    if (stats.weeklyHistory.length === 0) {
+      weeklyTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">출석 기록이 없습니다.</td></tr>';
+    } else {
+      weeklyTbody.innerHTML = stats.weeklyHistory.map(w => {
+        const rateBadgeClass = w.rate >= 85 ? 'badge-present' : (w.rate >= 70 ? 'badge-grace' : 'badge-absent');
+        return `
+          <tr>
+            <td style="font-weight: 700; font-family: 'Nunito', sans-serif;">📅 ${w.date}</td>
+            <td>
+              <span class="badge ${rateBadgeClass}" style="font-family: 'Nunito', sans-serif; font-weight: 800;">
+                ${w.rate}%
+              </span>
+            </td>
+            <td><span style="color: var(--success); font-weight: 700;">${w.present}명</span></td>
+            <td><span style="color: var(--danger); font-weight: 700;">${w.absent}명</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+}
+
+// ============================================================
+//  TAB: Schedule (학사 일정 관리)
+// ============================================================
+const SCHEDULE_TYPE_LABELS = {
+  regular: { label: '정규 수업', icon: '🏫', badgeClass: 'badge-present' },
+  special: { label: '특별 행사', icon: '🎉', badgeClass: 'badge-sacrament' },
+  holiday: { label: '연휴/방학', icon: '❄️', badgeClass: 'badge-absent' },
+};
+
+function renderSchedule() {
+  const seasonId = document.getElementById('scheduleSeasonFilter')?.value || '2026-2027';
+  const typeFilter = document.getElementById('scheduleTypeFilter')?.value || 'all';
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+
+  let schedules = dataProvider.getSchedules(seasonId);
+
+  // Type filter
+  if (typeFilter === 'school_only') schedules = schedules.filter(s => s.hasSchool);
+  else if (typeFilter === 'special') schedules = schedules.filter(s => s.type === 'special');
+  else if (typeFilter === 'holiday') schedules = schedules.filter(s => s.type === 'holiday' || !s.hasSchool);
+
+  // KPI summary
+  const allSeason = dataProvider.getSchedules(seasonId);
+  const schoolDays = allSeason.filter(s => s.hasSchool).length;
+  const specialDays = allSeason.filter(s => s.type === 'special').length;
+  const nextSchool = dataProvider.getNextUpcomingSchoolDate(now);
+
+  const kpiTotal = document.getElementById('schStatTotalCount');
+  const kpiSchool = document.getElementById('schStatSchoolCount');
+  const kpiSpecial = document.getElementById('schStatSpecialCount');
+  const kpiDDay = document.getElementById('schStatNextDDay');
+  const kpiTitle = document.getElementById('schStatNextTitle');
+
+  if (kpiTotal) kpiTotal.textContent = `${allSeason.length}개`;
+  if (kpiSchool) kpiSchool.textContent = `${schoolDays}회`;
+  if (kpiSpecial) kpiSpecial.textContent = `${specialDays}일`;
+  if (kpiDDay) kpiDDay.textContent = nextSchool ? `D-${nextSchool.daysLeft}` : '-';
+  if (kpiTitle) kpiTitle.textContent = nextSchool ? (nextSchool.title || '다음 모임일') : '다음 모임일';
+
+  // Table
+  const tbody = document.getElementById('scheduleTableBody');
+  if (!tbody) return;
+
+  if (schedules.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding: 2rem;">등록된 일정이 없습니다.</td></tr>`;
+    return;
+  }
+
+  const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+  tbody.innerHTML = schedules.map(sch => {
+    const d = new Date(sch.date + 'T00:00:00');
+    const dow = weekDays[d.getDay()];
+    const isPast = sch.date < todayStr;
+    const isToday = sch.date === todayStr;
+    const typeInfo = SCHEDULE_TYPE_LABELS[sch.type] || SCHEDULE_TYPE_LABELS.regular;
+    const rowStyle = isPast ? 'opacity: 0.55;' : isToday ? 'background: var(--primary-soft); font-weight: 700;' : '';
+    const hasSchoolBtn = sch.hasSchool
+      ? `<button class="badge badge-present btn-toggle-school" data-id="${sch.id}" style="cursor:pointer; border:none; padding: 0.3rem 0.75rem; font-size: 0.78rem;">🏫 수업 있음</button>`
+      : `<button class="badge badge-absent btn-toggle-school" data-id="${sch.id}" style="cursor:pointer; border:none; padding: 0.3rem 0.75rem; font-size: 0.78rem;">❌ 휴교</button>`;
+
+    return `
+      <tr style="${rowStyle}">
+        <td style="font-family: 'Nunito', sans-serif; font-weight: 700; white-space: nowrap;">
+          ${isToday ? '⭐ ' : ''}${sch.date}<br>
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">(${dow}요일)</span>
+        </td>
+        <td><span class="badge ${typeInfo.badgeClass}" style="font-size: 0.75rem;">${typeInfo.icon} ${typeInfo.label}</span></td>
+        <td>${hasSchoolBtn}</td>
+        <td style="font-weight: 600; font-size: 0.88rem;">${sch.title}</td>
+        <td style="font-size: 0.8rem; color: var(--text-muted);">${sch.notes || ''}</td>
+        <td style="white-space: nowrap;">
+          <button class="btn btn-secondary btn-sm btn-edit-schedule" data-id="${sch.id}" style="font-size: 0.75rem; padding: 0.2rem 0.55rem; margin-right: 0.25rem;">수정</button>
+          <button class="btn btn-secondary btn-sm btn-delete-schedule" data-id="${sch.id}" style="font-size: 0.75rem; padding: 0.2rem 0.55rem; color: var(--danger);">삭제</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Toggle school button
+  tbody.querySelectorAll('.btn-toggle-school').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      dataProvider.toggleScheduleHasSchool(id);
+      renderSchedule();
+      renderDashboard();
+    });
+  });
+
+  // Edit button
+  tbody.querySelectorAll('.btn-edit-schedule').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const sch = dataProvider.getScheduleById(id);
+      if (!sch) return;
+
+      document.getElementById('editScheduleId').value = sch.id;
+      document.getElementById('modalScheduleTitle').textContent = '✏️ 주일학교 학사 일정 수정';
+      document.getElementById('newScheduleSeason').value = sch.seasonId || '2026-2027';
+      document.getElementById('newScheduleDate').value = sch.date;
+      document.getElementById('newScheduleTitle').value = sch.title;
+      document.getElementById('newScheduleType').value = sch.type || 'regular';
+      document.getElementById('newScheduleHasSchool').checked = sch.hasSchool !== false;
+      document.getElementById('newScheduleNotes').value = sch.notes || '';
+      openModal('modalAddSchedule');
+    });
+  });
+
+  // Delete button
+  tbody.querySelectorAll('.btn-delete-schedule').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const sch = dataProvider.getScheduleById(id);
+      if (sch && confirm(`"${sch.title}" 일정을 삭제하시겠습니까?`)) {
+        dataProvider.deleteSchedule(id);
+        showToast('일정이 삭제되었습니다.', '🗑️');
+        renderSchedule();
+        renderDashboard();
+      }
+    });
+  });
+}
+
+// Schedule event listeners
+document.getElementById('scheduleSeasonFilter')?.addEventListener('change', renderSchedule);
+document.getElementById('scheduleTypeFilter')?.addEventListener('change', renderSchedule);
+
+// 새 일정 등록 버튼 (모달 열기)
+document.getElementById('btnOpenAddSchedule')?.addEventListener('click', () => {
+  document.getElementById('editScheduleId').value = '';
+  document.getElementById('modalScheduleTitle').textContent = '📅 새 학사 일정 등록';
+  document.getElementById('addScheduleForm').reset();
+  const currentSeason = document.getElementById('scheduleSeasonFilter')?.value || '2026-2027';
+  document.getElementById('newScheduleSeason').value = currentSeason;
+  document.getElementById('newScheduleHasSchool').checked = true;
+  
+  // 기본 날짜: 오늘 날짜
+  const todayStr = getTodayISO();
+  document.getElementById('newScheduleDate').value = todayStr;
+  
+  openModal('modalAddSchedule');
+});
+
+// 일정 구분 변경 시 hasSchool 자동 토글
+document.getElementById('newScheduleType')?.addEventListener('change', (e) => {
+  const hasSchoolCheckbox = document.getElementById('newScheduleHasSchool');
+  if (hasSchoolCheckbox) {
+    if (e.target.value === 'holiday') {
+      hasSchoolCheckbox.checked = false;
+    } else {
+      hasSchoolCheckbox.checked = true;
+    }
+  }
+});
+
+// 학사 일정 폼 제출 (추가 / 수정)
+document.getElementById('addScheduleForm')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const id = document.getElementById('editScheduleId')?.value;
+  const seasonId = document.getElementById('newScheduleSeason')?.value || '2026-2027';
+  const date = document.getElementById('newScheduleDate')?.value;
+  const title = document.getElementById('newScheduleTitle')?.value?.trim();
+  const type = document.getElementById('newScheduleType')?.value || 'regular';
+  const hasSchool = document.getElementById('newScheduleHasSchool')?.checked ?? true;
+  const notes = document.getElementById('newScheduleNotes')?.value?.trim() || '';
+
+  if (!date || !title) {
+    showToast('날짜와 일정 제목을 입력해주세요.', '⚠️');
+    return;
+  }
+
+  if (id) {
+    dataProvider.updateSchedule(id, { seasonId, date, title, type, hasSchool, notes });
+    showToast(`✅ "${title}" 일정이 수정되었습니다.`, '📅');
+  } else {
+    dataProvider.addSchedule({ seasonId, date, title, type, hasSchool, notes });
+    showToast(`✅ "${title}" 일정이 등록되었습니다.`, '📅');
+  }
+
+  closeModal('modalAddSchedule');
+  renderSchedule();
+  renderDashboard();
+});
+
+// 시즌 일정 초기화 (학사 일정만 — 출석/학생/은총 유지)
+document.getElementById('btnResetSeasonSchedules')?.addEventListener('click', () => {
+  const seasonId = document.getElementById('scheduleSeasonFilter')?.value || getCurrentSeasonId();
+  if (seasonId === 'all') {
+    showToast('시즌을 선택한 뒤 초기화해 주세요.', '⚠️');
+    return;
+  }
+  if (confirm(`${seasonId} 시즌 학사 일정을 기본 샘플로 초기화합니까?\n(출석·학생·은총 데이터는 유지됩니다)`)) {
+    const count = dataProvider.resetSeasonSchedules(seasonId);
+    showToast(count > 0
+      ? `${seasonId} 학사 일정 ${count}건으로 복구했습니다.`
+      : `${seasonId} 기본 시드가 없어 일정을 비웠습니다.`, '⚡');
+    renderSchedule();
+    renderDashboard();
+    renderStats();
+    renderAttendance();
+  }
+});
+
+// D-day 배너의 일정 관리 바로가기 버튼
+document.getElementById('btnQuickSchedule')?.addEventListener('click', () => {
+  navTabs.forEach(b => b.classList.remove('active'));
+  tabPanels.forEach(p => p.classList.remove('active'));
+  const scheduleTab = document.querySelector('[data-tab="schedule"]');
+  if (scheduleTab) scheduleTab.classList.add('active');
+  const schedulePanel = document.getElementById('panel-schedule');
+  if (schedulePanel) schedulePanel.classList.add('active');
+  currentTab = 'schedule';
+  renderSchedule();
+});
+
+// ============================================================
 //  Tab Switching & Events
 // ============================================================
 navTabs.forEach(btn => {
@@ -1600,12 +2057,18 @@ navTabs.forEach(btn => {
     if (targetPanel) targetPanel.classList.add('active');
     currentTab = tabName;
     if (tabName === 'dashboard') renderDashboard();
+    if (tabName === 'schedule') renderSchedule();
     if (tabName === 'attendance') renderAttendance();
+    if (tabName === 'stats') renderStats();
     if (tabName === 'activities') renderActivities();
     if (tabName === 'grace') renderGraceBank();
     if (tabName === 'students') renderDirectory();
   });
 });
+
+// Stats Filter Listeners
+document.getElementById('statsSeasonSelect')?.addEventListener('change', () => renderStats());
+document.getElementById('statsClassSelect')?.addEventListener('change', () => renderStats());
 
 // Directory view switch (학생/학부모/교사/반)
 document.querySelectorAll('#directoryTabSwitch .pill-btn').forEach(btn => {
@@ -1670,6 +2133,10 @@ document.getElementById('directorySearchInput')?.addEventListener('input', () =>
 // 전원 출석
 document.getElementById('btnMarkAllPresent')?.addEventListener('click', () => {
   const selectedDate = attDatePicker.value || getTodayDateString();
+  if (dataProvider.isSchoolDay(selectedDate) === false) {
+    const ok = confirm('선택한 날짜는 학사 일정 상 휴교일입니다. 그래도 전원 출석을 기록할까요?');
+    if (!ok) return;
+  }
   const students = dataProvider.getStudents();
   const filtered = students.filter(st => matchGradeGroup(st.studentInfo?.grade || '', currentAttGradeFilter));
   filtered.forEach(st => {
@@ -1678,6 +2145,7 @@ document.getElementById('btnMarkAllPresent')?.addEventListener('click', () => {
   showToast(`${filtered.length}명 전원 출석(+미사) 체크 완료!`, '🎉');
   renderAttendance();
   renderDashboard();
+  renderStats();
 });
 
 // Activity dept -> points
@@ -1803,7 +2271,9 @@ btnResetData?.addEventListener('click', () => {
     dataProvider.resetToDefaults();
     showToast('샘플 데이터로 초기화되었습니다.', '🔄');
     renderDashboard();
+    renderSchedule();
     renderAttendance();
+    renderStats();
     renderActivities();
     renderGraceBank();
     renderDirectory();
@@ -1829,8 +2299,12 @@ window.showUserDetailGlobal = (type, id) => showUserDetail(type, id);
 function initApp() {
   initTheme();
   initAuthUI();
+  populateSeasonSelects();
+  updateSeasonHeaderBadge();
   renderDashboard();
+  renderSchedule();
   renderAttendance();
+  renderStats();
   renderActivities();
   renderGraceBank();
   renderDirectory();
