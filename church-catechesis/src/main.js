@@ -58,6 +58,22 @@ function getTodayISO() {
   return `${y}-${m}-${d}`;
 }
 
+/** Fill mobile card list sibling (hidden on desktop via CSS). */
+function setMobileCards(el, html) {
+  if (el) el.innerHTML = html;
+}
+
+function emptyMobileCards(msg) {
+  return `<div class="mobile-card-empty">${msg}</div>`;
+}
+
+/** Bind click handlers on the same selector across table body + card list. */
+function bindInRoots(roots, selector, handler) {
+  roots.filter(Boolean).forEach(root => {
+    root.querySelectorAll(selector).forEach(el => el.addEventListener('click', handler));
+  });
+}
+
 function populateSeasonSelects() {
   const optionsHtml = AVAILABLE_SEASONS.map(s =>
     `<option value="${s.id}"${s.isCurrent ? ' selected' : ''}>🎓 ${s.label}</option>`
@@ -510,16 +526,21 @@ async function handleGoogleLogin() {
 
 async function renderAdminUsersModal() {
   const tbody = document.getElementById('adminUsersTableBody');
+  const cardList = document.getElementById('adminUsersCardList');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">사용자 목록을 불러오는 중...</td></tr>';
+  const loadingMsg = '사용자 목록을 불러오는 중...';
+  tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${loadingMsg}</td></tr>`;
+  setMobileCards(cardList, emptyMobileCards(loadingMsg));
 
   const users = await getAllUsers();
   if (users.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">등록된 사용자가 없습니다.</td></tr>';
+    const emptyMsg = '등록된 사용자가 없습니다.';
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
+    setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
 
-  tbody.innerHTML = users.map(u => {
+  const rows = users.map(u => {
     const isPending = u.status === 'pending';
     const isApproved = u.status === 'approved';
     const statusBadge = isPending
@@ -551,7 +572,14 @@ async function renderAdminUsersModal() {
       `;
     }
 
-    return `
+    const roleBadge = `
+      <span class="badge ${u.role === 'admin' ? 'badge-sacrament' : 'badge-present'}" style="font-size: 0.74rem;">
+        ${u.role === 'admin' ? '관리자' : u.role === 'parent' ? '학부모' : '교사'}
+      </span>
+    `;
+
+    return {
+      table: `
       <tr>
         <td>
           <div style="font-weight: 700;">${u.displayName || '이름 없음'}</div>
@@ -559,53 +587,65 @@ async function renderAdminUsersModal() {
         </td>
         <td style="font-size: 0.8rem;">${reqDate}</td>
         <td>${statusBadge}</td>
-        <td>
-          <span class="badge ${u.role === 'admin' ? 'badge-sacrament' : 'badge-present'}" style="font-size: 0.74rem;">
-            ${u.role === 'admin' ? '관리자' : u.role === 'parent' ? '학부모' : '교사'}
-          </span>
-        </td>
+        <td>${roleBadge}</td>
         <td>
           <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
             ${actionBtns}
           </div>
         </td>
       </tr>
-    `;
-  }).join('');
+    `,
+      card: `
+      <article class="mobile-data-card">
+        <div class="mobile-card-top">
+          <div>
+            <div class="mobile-card-title">${u.displayName || '이름 없음'}</div>
+            <div class="mobile-card-sub">${u.email || '-'}</div>
+          </div>
+          <div class="mobile-card-side">${statusBadge}</div>
+        </div>
+        <div class="mobile-card-meta">${roleBadge}<span class="mobile-card-points">신청 ${reqDate}</span></div>
+        ${isPending ? `<div class="mobile-card-actions">${actionBtns}</div>` : `<div class="mobile-card-meta">${actionBtns}</div>`}
+      </article>
+    `
+    };
+  });
 
-  tbody.querySelectorAll('.btn-approve-user').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const uid = btn.getAttribute('data-uid');
-      const role = btn.getAttribute('data-role') || 'teacher';
+  tbody.innerHTML = rows.map(r => r.table).join('');
+  setMobileCards(cardList, rows.map(r => r.card).join(''));
+
+  const roots = [tbody, cardList];
+  bindInRoots(roots, '.btn-approve-user', async (e) => {
+    const btn = e.currentTarget;
+    const uid = btn.getAttribute('data-uid');
+    const role = btn.getAttribute('data-role') || 'teacher';
+    try {
+      btn.disabled = true;
+      await approveUser(uid, role);
+      showToast('사용자가 성공적으로 승인되었습니다!', '🎉');
+      renderAdminUsersModal();
+      updateAdminBadge();
+    } catch (err) {
+      console.error(err);
+      showToast('승인 처리에 실패하였습니다.', '❌');
+    }
+  });
+
+  bindInRoots(roots, '.btn-reject-user', async (e) => {
+    const btn = e.currentTarget;
+    const uid = btn.getAttribute('data-uid');
+    if (confirm('해당 사용자의 가입을 거절하시겠습니까?')) {
       try {
         btn.disabled = true;
-        await approveUser(uid, role);
-        showToast('사용자가 성공적으로 승인되었습니다!', '🎉');
+        await rejectUser(uid);
+        showToast('사용자가 거절 처리되었습니다.', 'ℹ️');
         renderAdminUsersModal();
         updateAdminBadge();
       } catch (err) {
         console.error(err);
-        showToast('승인 처리에 실패하였습니다.', '❌');
+        showToast('거절 처리에 실패하였습니다.', '❌');
       }
-    });
-  });
-
-  tbody.querySelectorAll('.btn-reject-user').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const uid = btn.getAttribute('data-uid');
-      if (confirm('해당 사용자의 가입을 거절하시겠습니까?')) {
-        try {
-          btn.disabled = true;
-          await rejectUser(uid);
-          showToast('사용자가 거절 처리되었습니다.', 'ℹ️');
-          renderAdminUsersModal();
-          updateAdminBadge();
-        } catch (err) {
-          console.error(err);
-          showToast('거절 처리에 실패하였습니다.', '❌');
-        }
-      }
-    });
+    }
   });
 }
 
@@ -634,7 +674,7 @@ function initAuthUI() {
 
   if (import.meta.env.VITE_PROVIDER === 'firebase') {
     if (envBadge) {
-      envBadge.innerHTML = `<span style="width: 8px; height: 8px; border-radius: 50%; background: #3b82f6;"></span> Firebase 운영 모드`;
+      envBadge.innerHTML = `<span class="env-dot" style="background:#3b82f6;" aria-hidden="true"></span><span class="env-badge-text">Firebase 운영 모드</span>`;
       envBadge.style.color = '#1d4ed8';
       envBadge.style.borderColor = '#93c5fd';
       envBadge.style.background = '#eff6ff';
@@ -645,6 +685,16 @@ function initAuthUI() {
     demoRoleSelect?.addEventListener('change', (e) => {
       setLocalDemoUserRole(e.target.value);
     });
+    if (demoRoleSelect) {
+      try {
+        const stored = JSON.parse(localStorage.getItem('catechesis_local_user') || 'null');
+        if (!stored) demoRoleSelect.value = 'none';
+        else if (stored.status === 'pending') demoRoleSelect.value = 'pending';
+        else if (stored.role === 'admin') demoRoleSelect.value = 'admin';
+        else if (stored.status === 'approved') demoRoleSelect.value = 'teacher';
+      } catch (_) { /* keep HTML default */ }
+      setLocalDemoUserRole(demoRoleSelect.value);
+    }
   }
 
   btnGoogleLogin?.addEventListener('click', handleGoogleLogin);
@@ -945,10 +995,13 @@ function renderDashboard() {
   const sortedStudents = [...students].sort((a, b) => b.totalGracePoints - a.totalGracePoints);
   const top5 = sortedStudents.slice(0, 5);
   const topTableBody = document.querySelector('#topGraceTable tbody');
+  const topCardList = document.getElementById('topGraceCardList');
   if (top5.length === 0) {
-    topTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">학생 데이터가 없습니다.</td></tr>';
+    const emptyMsg = '학생 데이터가 없습니다.';
+    topTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">${emptyMsg}</td></tr>`;
+    setMobileCards(topCardList, emptyMobileCards(emptyMsg));
   } else {
-    topTableBody.innerHTML = top5.map((st, idx) => {
+    const rows = top5.map((st, idx) => {
       const rankMedal = idx === 0 ? '🥇 1' : idx === 1 ? '🥈 2' : idx === 2 ? '🥉 3' : `${idx + 1}`;
       const depts = (st.studentInfo?.departments || []).map(d => `<span class="dept-tag">${d}</span>`).join('') || '<span style="color: var(--text-muted); font-size: 0.75rem;">-</span>';
       const displayName = isApproved ? st.name : maskKoreanName(st.name);
@@ -958,22 +1011,39 @@ function renderDashboard() {
       const nameMarkup = isApproved
         ? `<strong class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${displayName}</strong>`
         : `<strong style="color: var(--text-muted); cursor: default;" title="로그인 후 상세 확인 가능">${displayName}</strong>`;
+      const gradeBadge = `<span class="badge badge-grade">${st.studentInfo?.grade || '-'}</span>`;
+      const points = `<span class="grace-badge"><span class="coin">🪙</span> ${st.totalGracePoints.toLocaleString()} P</span>`;
 
-      return `
+      return {
+        table: `
         <tr>
           <td style="font-weight: 700; color: var(--primary);">${rankMedal}</td>
           <td>
             ${nameMarkup}
             ${displayBaptismal}
           </td>
-          <td><span class="badge badge-grade">${st.studentInfo?.grade || '-'}</span></td>
+          <td>${gradeBadge}</td>
           <td>${depts}</td>
           <td style="text-align: right;">
-            <span class="grace-badge"><span class="coin">🪙</span> ${st.totalGracePoints.toLocaleString()} P</span>
+            ${points}
           </td>
         </tr>
-      `;
-    }).join('');
+      `,
+        card: `
+        <article class="mobile-data-card">
+          <div class="mobile-card-top">
+            <div>
+              <div class="mobile-card-title">${rankMedal} · ${nameMarkup} ${displayBaptismal}</div>
+              <div class="mobile-card-meta" style="margin-top: 0.35rem;">${gradeBadge}${depts}</div>
+            </div>
+            <div class="mobile-card-side">${points}</div>
+          </div>
+        </article>
+      `
+      };
+    });
+    topTableBody.innerHTML = rows.map(r => r.table).join('');
+    setMobileCards(topCardList, rows.map(r => r.card).join(''));
   }
 
   // --- 교사회 명단 (대시보드 우측) ---
@@ -1151,6 +1221,7 @@ function renderActivities() {
   const allActivities = dataProvider.getActivities();
   const select = document.getElementById('actStudentSelect');
   const tableBody = document.querySelector('#activityHistoryTable tbody');
+  const cardList = document.getElementById('activityHistoryCardList');
 
   const prevVal = select.value;
   select.innerHTML = '<option value="">봉사 학생을 선택하세요...</option>' +
@@ -1161,24 +1232,45 @@ function renderActivities() {
   document.getElementById('activityListCount').textContent = `${sorted.length}건`;
 
   if (sorted.length === 0) {
-    tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">기록된 활동 봉사 내역이 없습니다.</td></tr>';
+    const emptyMsg = '기록된 활동 봉사 내역이 없습니다.';
+    tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">${emptyMsg}</td></tr>`;
+    setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
 
-  tableBody.innerHTML = sorted.map(act => {
+  const rows = sorted.map(act => {
     const st = students.find(s => s.id === (act.studentPersonId || act.studentId));
     const stName = st ? `${st.name} (${st.baptismalName || '-'}, ${st.studentInfo?.grade || '-'})` : '알 수 없음';
-    return `
+    const nameMarkup = `<strong class="clickable-name" data-detail-type="student" data-detail-id="${act.studentPersonId || act.studentId}">${stName}</strong>`;
+    const dept = `<span class="dept-tag">${act.department}</span>`;
+    const points = `<span class="grace-badge"><span class="coin">🪙</span> +${act.pointsEarned} P</span>`;
+    return {
+      table: `
       <tr>
         <td style="white-space: nowrap;">${act.date}</td>
-        <td><strong class="clickable-name" data-detail-type="student" data-detail-id="${act.studentPersonId || act.studentId}">${stName}</strong></td>
-        <td><span class="dept-tag">${act.department}</span></td>
+        <td>${nameMarkup}</td>
+        <td>${dept}</td>
         <td>${act.roleDetail || '-'}</td>
-        <td style="text-align: right;"><span class="grace-badge"><span class="coin">🪙</span> +${act.pointsEarned} P</span></td>
+        <td style="text-align: right;">${points}</td>
         <td style="color: var(--text-muted); font-size: 0.8rem;">${act.recordedBy || '선생님'}</td>
       </tr>
-    `;
-  }).join('');
+    `,
+      card: `
+      <article class="mobile-data-card">
+        <div class="mobile-card-top">
+          <div>
+            <div class="mobile-card-title">${nameMarkup}</div>
+            <div class="mobile-card-sub">${act.date} · ${act.recordedBy || '선생님'}</div>
+          </div>
+          <div class="mobile-card-side">${points}</div>
+        </div>
+        <div class="mobile-card-meta">${dept}<span class="mobile-card-points">${act.roleDetail || '-'}</span></div>
+      </article>
+    `
+    };
+  });
+  tableBody.innerHTML = rows.map(r => r.table).join('');
+  setMobileCards(cardList, rows.map(r => r.card).join(''));
 }
 
 // ============================================================
@@ -1204,6 +1296,7 @@ function renderGraceBank() {
   const ledger = dataProvider.getGraceLedger();
   const search = document.getElementById('graceSearchInput')?.value.trim().toLowerCase() || '';
   const tableBody = document.querySelector('#graceOverviewTable tbody');
+  const cardList = document.getElementById('graceOverviewCardList');
 
   let filtered = students.filter(st => {
     const matchSearch = !search ||
@@ -1214,50 +1307,77 @@ function renderGraceBank() {
   });
 
   if (filtered.length === 0) {
-    tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">일치하는 학생이 없습니다.</td></tr>';
+    const emptyMsg = '일치하는 학생이 없습니다.';
+    tableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">${emptyMsg}</td></tr>`;
+    setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
 
-  tableBody.innerHTML = filtered.map(st => {
+  const rows = filtered.map(st => {
     const studentLedger = ledger.filter(l => l.studentPersonId === st.id || l.studentId === st.id);
     const attPts = studentLedger.filter(l => l.type === '출석').reduce((s, i) => s + Number(i.amount || 0), 0);
     const actPts = studentLedger.filter(l => l.type === '활동').reduce((s, i) => s + Number(i.amount || 0), 0);
     const bonusPts = studentLedger.filter(l => l.type === '추가점수' || l.type === '사용/차감').reduce((s, i) => s + Number(i.amount || 0), 0);
     const totalPts = attPts + actPts + bonusPts;
     const depts = (st.studentInfo?.departments || []).map(d => `<span class="dept-tag">${d}</span>`).join('') || '-';
-
-    return `
-      <tr>
-        <td>
+    const nameMarkup = `
           <strong class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${st.name}</strong>
           ${st.baptismalName ? `<span style="color: var(--text-muted); font-size: 0.82rem;">(${st.baptismalName})</span>` : ''}
-        </td>
-        <td><span class="badge badge-grade">${st.studentInfo?.grade || '-'}</span></td>
+    `;
+    const gradeBadge = `<span class="badge badge-grade">${st.studentInfo?.grade || '-'}</span>`;
+    const totalBadge = `
+          <span class="grace-badge" style="font-size: 0.95rem;">
+            <span class="coin">🪙</span> ${totalPts.toLocaleString()} P
+          </span>
+    `;
+    const actions = `
+          <button class="btn btn-secondary btn-sm btn-view-ledger" data-id="${st.id}">원장 조회</button>
+          <button class="btn btn-grace btn-sm btn-quick-bonus" data-id="${st.id}">+ 점수</button>
+    `;
+
+    return {
+      table: `
+      <tr>
+        <td>${nameMarkup}</td>
+        <td>${gradeBadge}</td>
         <td>${depts}</td>
         <td style="text-align: center; color: #059669; font-weight: 600;">+${attPts}</td>
         <td style="text-align: center; color: #7c3aed; font-weight: 600;">+${actPts}</td>
         <td style="text-align: center; font-weight: 600; color: ${bonusPts >= 0 ? '#2563eb' : '#dc2626'};">${bonusPts >= 0 ? '+' : ''}${bonusPts}</td>
-        <td style="text-align: right;">
-          <span class="grace-badge" style="font-size: 0.95rem;">
-            <span class="coin">🪙</span> ${totalPts.toLocaleString()} P
-          </span>
-        </td>
-        <td style="text-align: center;">
-          <button class="btn btn-secondary btn-sm btn-view-ledger" data-id="${st.id}">원장 조회</button>
-          <button class="btn btn-grace btn-sm btn-quick-bonus" data-id="${st.id}" style="margin-left: 0.25rem;">+ 점수</button>
-        </td>
+        <td style="text-align: right;">${totalBadge}</td>
+        <td style="text-align: center;">${actions}</td>
       </tr>
-    `;
-  }).join('');
-
-  tableBody.querySelectorAll('.btn-view-ledger').forEach(btn => {
-    btn.addEventListener('click', () => showGraceLedgerModal(btn.getAttribute('data-id')));
+    `,
+      card: `
+      <article class="mobile-data-card">
+        <div class="mobile-card-top">
+          <div>
+            <div class="mobile-card-title">${nameMarkup}</div>
+            <div class="mobile-card-meta" style="margin-top: 0.3rem;">${gradeBadge}${depts}</div>
+          </div>
+          <div class="mobile-card-side">${totalBadge}</div>
+        </div>
+        <div class="mobile-card-points">
+          <span>출석 +${attPts}</span>
+          <span>활동 +${actPts}</span>
+          <span>보너스 ${bonusPts >= 0 ? '+' : ''}${bonusPts}</span>
+        </div>
+        <div class="mobile-card-actions">${actions}</div>
+      </article>
+    `
+    };
   });
-  tableBody.querySelectorAll('.btn-quick-bonus').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.getElementById('bonusStudentSelect').value = btn.getAttribute('data-id');
-      openModal('modalBonusPoints');
-    });
+
+  tableBody.innerHTML = rows.map(r => r.table).join('');
+  setMobileCards(cardList, rows.map(r => r.card).join(''));
+
+  const roots = [tableBody, cardList];
+  bindInRoots(roots, '.btn-view-ledger', (e) => {
+    showGraceLedgerModal(e.currentTarget.getAttribute('data-id'));
+  });
+  bindInRoots(roots, '.btn-quick-bonus', (e) => {
+    document.getElementById('bonusStudentSelect').value = e.currentTarget.getAttribute('data-id');
+    openModal('modalBonusPoints');
   });
 }
 
@@ -1322,6 +1442,7 @@ function renderStudentsDirectory(search = '') {
   const students = dataProvider.getStudents();
   const classes = dataProvider.getClasses();
   const studentsBody = document.querySelector('#studentsTable tbody');
+  const cardList = document.getElementById('studentsCardList');
 
   const filtered = students.filter(s => {
     if (!search) return true;
@@ -1339,11 +1460,13 @@ function renderStudentsDirectory(search = '') {
   });
 
   if (filtered.length === 0) {
-    studentsBody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">등록된 학생이 없습니다.</td></tr>';
+    const emptyMsg = '등록된 학생이 없습니다.';
+    studentsBody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">${emptyMsg}</td></tr>`;
+    setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
 
-  studentsBody.innerHTML = filtered.map(st => {
+  const rows = filtered.map(st => {
     const si = st.studentInfo || {};
     const parents = dataProvider.getParentsOfStudent(st.id);
     const parentInfo = parents.length > 0
@@ -1354,41 +1477,67 @@ function renderStudentsDirectory(search = '') {
     if (si.confirmation) sacraments.push('<span class="badge badge-sacrament">견진</span>');
     const depts = (si.departments || []).map(d => `<span class="dept-tag">${d}</span>`).join('') || '-';
     const className = getClassNameForGrade(si.grade || '');
-
-    return `
-      <tr>
-        <td>
+    const nameMarkup = `
           <strong class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${st.name}</strong>
           ${st.baptismalName ? `<div style="font-size: 0.78rem; color: var(--text-muted);">${st.baptismalName}</div>` : ''}
-        </td>
-        <td>
+    `;
+    const gradeCell = `
           <span class="badge badge-grade">${si.grade || '-'}</span>
           ${className !== si.grade ? `<div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">${className}</div>` : ''}
-        </td>
+    `;
+    const points = `<span class="grace-badge"><span class="coin">🪙</span> ${st.totalGracePoints} P</span>`;
+    const action = `<button class="btn btn-secondary btn-sm btn-quick-bonus" data-id="${st.id}">+ 점수</button>`;
+
+    return {
+      table: `
+      <tr>
+        <td>${nameMarkup}</td>
+        <td>${gradeCell}</td>
         <td>${si.gender || '-'}</td>
         <td>${si.feastDay ? `📅 ${si.feastDay}` : '<span style="color: var(--text-muted); font-size: 0.78rem;">해당없음</span>'}</td>
         <td>${sacraments.join(' ') || '<span style="color: var(--text-muted); font-size: 0.78rem;">미수품</span>'}</td>
         <td>${depts}</td>
         <td>${parentInfo}</td>
-        <td><span class="grace-badge"><span class="coin">🪙</span> ${st.totalGracePoints} P</span></td>
-        <td>
-          <button class="btn btn-secondary btn-sm btn-quick-bonus" data-id="${st.id}">+ 점수</button>
-        </td>
+        <td>${points}</td>
+        <td>${action}</td>
       </tr>
-    `;
-  }).join('');
+    `,
+      card: `
+      <article class="mobile-data-card">
+        <div class="mobile-card-top">
+          <div>
+            <div class="mobile-card-title">
+              <strong class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${st.name}</strong>
+              ${st.baptismalName ? `<span style="font-weight: 600; color: var(--text-muted); font-size: 0.85rem;"> (${st.baptismalName})</span>` : ''}
+            </div>
+            <div class="mobile-card-meta" style="margin-top: 0.3rem;">
+              <span class="badge badge-grade">${si.grade || '-'}</span>
+              ${depts}
+              ${sacraments.join('')}
+            </div>
+          </div>
+          <div class="mobile-card-side">${points}</div>
+        </div>
+        <div class="mobile-card-sub">학부모: ${parentInfo}</div>
+        <div class="mobile-card-actions">${action}</div>
+      </article>
+    `
+    };
+  });
 
-  studentsBody.querySelectorAll('.btn-quick-bonus').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.getElementById('bonusStudentSelect').value = btn.getAttribute('data-id');
-      openModal('modalBonusPoints');
-    });
+  studentsBody.innerHTML = rows.map(r => r.table).join('');
+  setMobileCards(cardList, rows.map(r => r.card).join(''));
+
+  bindInRoots([studentsBody, cardList], '.btn-quick-bonus', (e) => {
+    document.getElementById('bonusStudentSelect').value = e.currentTarget.getAttribute('data-id');
+    openModal('modalBonusPoints');
   });
 }
 
 function renderParentsDirectory(search = '') {
   const parents = dataProvider.getParents();
   const parentsBody = document.querySelector('#parentsTable tbody');
+  const cardList = document.getElementById('parentsCardList');
 
   const filtered = parents.filter(p => {
     if (!search) return true;
@@ -1399,11 +1548,13 @@ function renderParentsDirectory(search = '') {
   });
 
   if (filtered.length === 0) {
-    parentsBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">등록된 학부모가 없습니다.</td></tr>';
+    const emptyMsg = '등록된 학부모가 없습니다.';
+    parentsBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">${emptyMsg}</td></tr>`;
+    setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
 
-  parentsBody.innerHTML = filtered.map(p => {
+  const rows = filtered.map(p => {
     const teacherRoles = dataProvider.getTeacherRoles();
     const isTeacher = p.roles && p.roles.some(r => teacherRoles.includes(r));
     const p1TeacherBadge = isTeacher
@@ -1412,6 +1563,7 @@ function renderParentsDirectory(search = '') {
 
     // 배우자 정보
     let spouseCell = '<span style="color: var(--text-muted); font-size: 0.85rem;">—</span>';
+    let spouseShort = '';
     const spouseId = p.parentInfo?.spousePersonId;
     if (spouseId) {
       const spouse = dataProvider.getPersonById(spouseId);
@@ -1425,6 +1577,7 @@ function renderParentsDirectory(search = '') {
           ${spouse.baptismalName ? `<span style="font-size: 0.82rem; color: var(--text-muted);">(${spouse.baptismalName})</span>` : ''}
           ${spouseBadge}
         `;
+        spouseShort = ` · 배우자 ${spouse.name}`;
       }
     }
 
@@ -1433,7 +1586,10 @@ function renderParentsDirectory(search = '') {
       return s ? `<span class="clickable-name" data-detail-type="student" data-detail-id="${s.id}">${s.name}</span>(${s.studentInfo?.grade || '-'})` : '';
     }).filter(Boolean).join(', ') || '등록 자녀 없음';
 
-    return `
+    const detailBtn = `<button class="btn btn-secondary btn-sm" onclick="showUserDetailGlobal('parent', '${p.id}')">상세 보기</button>`;
+
+    return {
+      table: `
       <tr>
         <td>
           <strong class="clickable-name" data-detail-type="parent" data-detail-id="${p.id}">${p.name}</strong>
@@ -1444,18 +1600,37 @@ function renderParentsDirectory(search = '') {
         <td><a href="tel:${p.phone}" style="color: var(--primary); font-weight: 600;">📞 ${p.phone || '-'}</a></td>
         <td style="font-size: 0.85rem; color: var(--text-muted);">${p.address || '-'}</td>
         <td><span style="font-size: 0.85rem;">${childNames}</span></td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="showUserDetailGlobal('parent', '${p.id}')">상세 보기</button>
-        </td>
+        <td>${detailBtn}</td>
       </tr>
-    `;
-  }).join('');
+    `,
+      card: `
+      <article class="mobile-data-card">
+        <div class="mobile-card-top">
+          <div>
+            <div class="mobile-card-title">
+              <strong class="clickable-name" data-detail-type="parent" data-detail-id="${p.id}">${p.name}</strong>
+              ${p.baptismalName ? `<span style="font-weight: 600; color: var(--text-muted); font-size: 0.85rem;"> (${p.baptismalName})</span>` : ''}
+              ${p1TeacherBadge}
+            </div>
+            <div class="mobile-card-sub">${p.phone ? `📞 ${p.phone}` : ''}${spouseShort}</div>
+          </div>
+        </div>
+        <div class="mobile-card-meta">자녀: ${childNames}</div>
+        <div class="mobile-card-actions">${detailBtn}</div>
+      </article>
+    `
+    };
+  });
+
+  parentsBody.innerHTML = rows.map(r => r.table).join('');
+  setMobileCards(cardList, rows.map(r => r.card).join(''));
 }
 
 function renderTeachersDirectory(search = '') {
   const teachers = dataProvider.getTeachers();
   const classes = dataProvider.getClasses();
   const teachersBody = document.querySelector('#teachersTable tbody');
+  const cardList = document.getElementById('teachersCardList');
 
   const filtered = teachers.filter(t => {
     if (!search) return true;
@@ -1464,14 +1639,17 @@ function renderTeachersDirectory(search = '') {
   });
 
   if (filtered.length === 0) {
-    teachersBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">등록된 교사가 없습니다.</td></tr>';
+    const emptyMsg = '등록된 교사가 없습니다.';
+    teachersBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">${emptyMsg}</td></tr>`;
+    setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
 
-  teachersBody.innerHTML = filtered.map(t => {
+  const rows = filtered.map(t => {
     const primaryRole = dataProvider.getPrimaryTeacherRole(t);
     const roleBadgeClass = primaryRole?.role === 'principal' ? 'badge-sacrament' :
                             primaryRole?.role === 'vice_principal' ? 'badge-grade' : 'badge-present';
+    const roleBadge = `<span class="badge ${roleBadgeClass}">${primaryRole?.label || '교사'}</span>`;
 
     // 담당 반
     const assignedClasses = (t.teacherInfo?.assignedClassIds || [])
@@ -1486,27 +1664,46 @@ function renderTeachersDirectory(search = '') {
     if (t.roles?.includes('parent')) dualRoles.push('학부모 겸임');
     if (t.roles?.includes('liturgy_teacher')) dualRoles.push('전례부');
     if (t.roles?.includes('acolyte_teacher')) dualRoles.push('복사담당');
+    const dualHtml = dualRoles.length > 0
+      ? dualRoles.map(r => `<span class="badge badge-grade" style="font-size: 0.7rem;">${r}</span>`).join(' ')
+      : '<span style="color: var(--text-muted);">-</span>';
 
-    return `
+    const detailBtn = `<button class="btn btn-secondary btn-sm" onclick="showUserDetailGlobal('teacher', '${t.id}')">상세 보기</button>`;
+
+    return {
+      table: `
       <tr>
         <td>
           <strong class="clickable-name" data-detail-type="teacher" data-detail-id="${t.id}">${t.name}</strong>
           ${t.baptismalName ? `<div style="font-size: 0.78rem; color: var(--text-muted);">(${t.baptismalName})</div>` : ''}
         </td>
-        <td><span class="badge ${roleBadgeClass}">${primaryRole?.label || '교사'}</span></td>
+        <td>${roleBadge}</td>
         <td>${assignedClassHtml}</td>
         <td><a href="tel:${t.phone}" style="color: var(--primary);">📞 ${t.phone || '-'}</a></td>
-        <td>
-          ${dualRoles.length > 0
-            ? dualRoles.map(r => `<span class="badge badge-grade" style="font-size: 0.7rem;">${r}</span>`).join(' ')
-            : '<span style="color: var(--text-muted);">-</span>'}
-        </td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="showUserDetailGlobal('teacher', '${t.id}')">상세 보기</button>
-        </td>
+        <td>${dualHtml}</td>
+        <td>${detailBtn}</td>
       </tr>
-    `;
-  }).join('');
+    `,
+      card: `
+      <article class="mobile-data-card">
+        <div class="mobile-card-top">
+          <div>
+            <div class="mobile-card-title">
+              <strong class="clickable-name" data-detail-type="teacher" data-detail-id="${t.id}">${t.name}</strong>
+              ${t.baptismalName ? `<span style="font-weight: 600; color: var(--text-muted); font-size: 0.85rem;"> (${t.baptismalName})</span>` : ''}
+            </div>
+            <div class="mobile-card-meta" style="margin-top: 0.3rem;">${roleBadge}${assignedClassHtml}</div>
+          </div>
+        </div>
+        <div class="mobile-card-sub">${t.phone ? `📞 ${t.phone}` : ''}${dualRoles.length ? ` · ${dualRoles.join(', ')}` : ''}</div>
+        <div class="mobile-card-actions">${detailBtn}</div>
+      </article>
+    `
+    };
+  });
+
+  teachersBody.innerHTML = rows.map(r => r.table).join('');
+  setMobileCards(cardList, rows.map(r => r.card).join(''));
 }
 
 function renderClassesView() {
@@ -1807,25 +2004,45 @@ function renderStats() {
 
   // 7. Weekly History Table
   const weeklyTbody = document.getElementById('statsWeeklyTableBody');
+  const weeklyCards = document.getElementById('statsWeeklyCardList');
   if (weeklyTbody) {
     if (stats.weeklyHistory.length === 0) {
-      weeklyTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">출석 기록이 없습니다.</td></tr>';
+      const emptyMsg = '출석 기록이 없습니다.';
+      weeklyTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">${emptyMsg}</td></tr>`;
+      setMobileCards(weeklyCards, emptyMobileCards(emptyMsg));
     } else {
-      weeklyTbody.innerHTML = stats.weeklyHistory.map(w => {
+      const rows = stats.weeklyHistory.map(w => {
         const rateBadgeClass = w.rate >= 85 ? 'badge-present' : (w.rate >= 70 ? 'badge-grace' : 'badge-absent');
-        return `
-          <tr>
-            <td style="font-weight: 700; font-family: 'Nunito', sans-serif;">📅 ${w.date}</td>
-            <td>
+        const rateBadge = `
               <span class="badge ${rateBadgeClass}" style="font-family: 'Nunito', sans-serif; font-weight: 800;">
                 ${w.rate}%
               </span>
-            </td>
+        `;
+        return {
+          table: `
+          <tr>
+            <td style="font-weight: 700; font-family: 'Nunito', sans-serif;">📅 ${w.date}</td>
+            <td>${rateBadge}</td>
             <td><span style="color: var(--success); font-weight: 700;">${w.present}명</span></td>
             <td><span style="color: var(--danger); font-weight: 700;">${w.absent}명</span></td>
           </tr>
-        `;
-      }).join('');
+        `,
+          card: `
+          <article class="mobile-data-card">
+            <div class="mobile-card-top">
+              <div class="mobile-card-title">📅 ${w.date}</div>
+              <div class="mobile-card-side">${rateBadge}</div>
+            </div>
+            <div class="mobile-card-points">
+              <span style="color: var(--success);">출석 ${w.present}명</span>
+              <span style="color: var(--danger);">결석 ${w.absent}명</span>
+            </div>
+          </article>
+        `
+        };
+      });
+      weeklyTbody.innerHTML = rows.map(r => r.table).join('');
+      setMobileCards(weeklyCards, rows.map(r => r.card).join(''));
     }
   }
 }
@@ -1888,6 +2105,7 @@ function renderSchedule() {
 
   // Table
   const tbody = document.getElementById('scheduleTableBody');
+  const cardList = document.getElementById('scheduleCardList');
   if (!tbody) return;
 
   // 관리 열 헤더 표시 여부
@@ -1895,18 +2113,22 @@ function renderSchedule() {
   if (manageHeader) manageHeader.style.display = canEdit ? '' : 'none';
 
   if (schedules.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${canEdit ? 6 : 5}" style="text-align:center; color:var(--text-muted); padding: 2rem;">등록된 일정이 없습니다.</td></tr>`;
+    const emptyMsg = '등록된 일정이 없습니다.';
+    tbody.innerHTML = `<tr><td colspan="${canEdit ? 6 : 5}" style="text-align:center; color:var(--text-muted); padding: 2rem;">${emptyMsg}</td></tr>`;
+    setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
 
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
-  tbody.innerHTML = schedules.map(sch => {
+  const rows = schedules.map(sch => {
     const d = new Date(sch.date + 'T00:00:00');
     const dow = weekDays[d.getDay()];
     const isPast = sch.date < todayStr;
     const isToday = sch.date === todayStr;
     const typeInfo = SCHEDULE_TYPE_LABELS[sch.type] || SCHEDULE_TYPE_LABELS.regular;
     const rowStyle = isPast ? 'opacity: 0.55;' : isToday ? 'background: var(--primary-soft); font-weight: 700;' : '';
+    const cardClass = `mobile-data-card${isPast ? ' is-past' : ''}${isToday ? ' is-today' : ''}`;
+    const typeBadge = `<span class="badge ${typeInfo.badgeClass}" style="font-size: 0.75rem;">${typeInfo.icon} ${typeInfo.label}</span>`;
     const hasSchoolCell = canEdit
       ? (sch.hasSchool
         ? `<button class="badge badge-present btn-toggle-school" data-id="${sch.id}" style="cursor:pointer; border:none; padding: 0.3rem 0.75rem; font-size: 0.78rem;">🏫 수업 있음</button>`
@@ -1915,74 +2137,95 @@ function renderSchedule() {
         ? `<span class="badge badge-present" style="padding: 0.3rem 0.75rem; font-size: 0.78rem;">🏫 수업 있음</span>`
         : `<span class="badge badge-absent" style="padding: 0.3rem 0.75rem; font-size: 0.78rem;">❌ 휴교</span>`);
 
-    const manageCell = canEdit
-      ? `<td style="white-space: nowrap;">
-          <button class="btn btn-secondary btn-sm btn-edit-schedule" data-id="${sch.id}" style="font-size: 0.75rem; padding: 0.2rem 0.55rem; margin-right: 0.25rem;">수정</button>
+    const manageBtns = canEdit
+      ? `
+          <button class="btn btn-secondary btn-sm btn-edit-schedule" data-id="${sch.id}" style="font-size: 0.75rem; padding: 0.2rem 0.55rem;">수정</button>
           <button class="btn btn-secondary btn-sm btn-delete-schedule" data-id="${sch.id}" style="font-size: 0.75rem; padding: 0.2rem 0.55rem; color: var(--danger);">삭제</button>
-        </td>`
+        `
+      : '';
+    const manageCell = canEdit
+      ? `<td style="white-space: nowrap;">${manageBtns}</td>`
       : '';
 
-    return `
+    return {
+      table: `
       <tr style="${rowStyle}">
         <td style="font-family: 'Nunito', sans-serif; font-weight: 700; white-space: nowrap;">
           ${isToday ? '⭐ ' : ''}${sch.date}<br>
           <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">(${dow}요일)</span>
         </td>
-        <td><span class="badge ${typeInfo.badgeClass}" style="font-size: 0.75rem;">${typeInfo.icon} ${typeInfo.label}</span></td>
+        <td>${typeBadge}</td>
         <td>${hasSchoolCell}</td>
         <td style="font-weight: 600; font-size: 0.88rem;">${sch.title}</td>
         <td style="font-size: 0.8rem; color: var(--text-muted);">${sch.notes || ''}</td>
         ${manageCell}
       </tr>
-    `;
-  }).join('');
+    `,
+      card: `
+      <article class="${cardClass}">
+        <div class="mobile-card-top">
+          <div>
+            <div class="mobile-card-sub">${isToday ? '⭐ ' : ''}${sch.date} (${dow})</div>
+            <div class="mobile-card-title">${sch.title}</div>
+          </div>
+          <div class="mobile-card-side">${typeBadge}</div>
+        </div>
+        <div class="mobile-card-meta">${hasSchoolCell}</div>
+        ${sch.notes ? `<div class="mobile-card-sub">${sch.notes}</div>` : ''}
+        ${canEdit ? `<div class="mobile-card-actions">${manageBtns}</div>` : ''}
+      </article>
+    `
+    };
+  });
+
+  tbody.innerHTML = rows.map(r => r.table).join('');
+  setMobileCards(cardList, rows.map(r => r.card).join(''));
 
   if (!canEdit) return;
 
+  const roots = [tbody, cardList];
+
   // Toggle school button
-  tbody.querySelectorAll('.btn-toggle-school').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!requireScheduleEditPermission('수업/휴교 전환')) return;
-      const id = btn.getAttribute('data-id');
-      dataProvider.toggleScheduleHasSchool(id);
-      renderSchedule();
-      renderDashboard();
-    });
+  bindInRoots(roots, '.btn-toggle-school', (e) => {
+    const btn = e.currentTarget;
+    if (!requireScheduleEditPermission('수업/휴교 전환')) return;
+    const id = btn.getAttribute('data-id');
+    dataProvider.toggleScheduleHasSchool(id);
+    renderSchedule();
+    renderDashboard();
   });
 
   // Edit button
-  tbody.querySelectorAll('.btn-edit-schedule').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!requireScheduleEditPermission('일정 수정')) return;
-      const id = btn.getAttribute('data-id');
-      const sch = dataProvider.getScheduleById(id);
-      if (!sch) return;
+  bindInRoots(roots, '.btn-edit-schedule', (e) => {
+    const btn = e.currentTarget;
+    if (!requireScheduleEditPermission('일정 수정')) return;
+    const id = btn.getAttribute('data-id');
+    const sch = dataProvider.getScheduleById(id);
+    if (!sch) return;
 
-      document.getElementById('editScheduleId').value = sch.id;
-      document.getElementById('modalScheduleTitle').textContent = '✏️ 주일학교 학사 일정 수정';
-      document.getElementById('newScheduleSeason').value = sch.seasonId || '2026-2027';
-      document.getElementById('newScheduleDate').value = sch.date;
-      document.getElementById('newScheduleTitle').value = sch.title;
-      document.getElementById('newScheduleType').value = sch.type || 'regular';
-      document.getElementById('newScheduleHasSchool').checked = sch.hasSchool !== false;
-      document.getElementById('newScheduleNotes').value = sch.notes || '';
-      openModal('modalAddSchedule');
-    });
+    document.getElementById('editScheduleId').value = sch.id;
+    document.getElementById('modalScheduleTitle').textContent = '✏️ 주일학교 학사 일정 수정';
+    document.getElementById('newScheduleSeason').value = sch.seasonId || '2026-2027';
+    document.getElementById('newScheduleDate').value = sch.date;
+    document.getElementById('newScheduleTitle').value = sch.title;
+    document.getElementById('newScheduleType').value = sch.type || 'regular';
+    document.getElementById('newScheduleHasSchool').checked = sch.hasSchool !== false;
+    document.getElementById('newScheduleNotes').value = sch.notes || '';
+    openModal('modalAddSchedule');
   });
 
   // Delete button
-  tbody.querySelectorAll('.btn-delete-schedule').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!requireScheduleEditPermission('일정 삭제')) return;
-      const id = btn.getAttribute('data-id');
-      const sch = dataProvider.getScheduleById(id);
-      if (sch && confirm(`"${sch.title}" 일정을 삭제하시겠습니까?`)) {
-        dataProvider.deleteSchedule(id);
-        showToast('일정이 삭제되었습니다.', '🗑️');
-        renderSchedule();
-        renderDashboard();
-      }
-    });
+  bindInRoots(roots, '.btn-delete-schedule', (e) => {
+    const btn = e.currentTarget;
+    if (!requireScheduleEditPermission('일정 삭제')) return;
+    const id = btn.getAttribute('data-id');
+    const sch = dataProvider.getScheduleById(id);
+    if (sch && confirm(`"${sch.title}" 일정을 삭제하시겠습니까?`)) {
+      dataProvider.deleteSchedule(id);
+      showToast('일정이 삭제되었습니다.', '🗑️');
+      renderSchedule();
+      renderDashboard();
+    }
   });
 }
 

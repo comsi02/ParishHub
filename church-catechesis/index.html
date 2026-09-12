@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>church-catechesis | 가톨릭 주일학교 & 은총표 관리</title>
   <link rel="stylesheet" href="./src/styles/main.css" />
   <link rel="icon" type="image/png" href="/favicon.png" />
@@ -20,7 +20,10 @@
             style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;" />
         </div>
         <div class="brand-info">
-          <h1>천주교 캐나다 런던 한인 성당 주일학교</h1>
+          <h1>
+            <span class="brand-title-full">천주교 캐나다 런던 한인 성당 주일학교</span>
+            <span class="brand-title-short">런던 한인성당 주일학교</span>
+          </h1>
           <span class="sub-tag">ST. ANDREW KIM KOREAN CATHOLIC CHURCH SUNDAY SCHOOL</span>
         </div>
       </a>
@@ -61,33 +64,12 @@
           <span class="theme-toggle-icon">🌙</span>
           <span class="theme-toggle-text">다크 모드</span>
         </button>
-
-        <!-- Demo Mode Persona Switcher (Local Demo only) -->
-        <div id="demoPersonaWrapper" style="display: inline-flex; align-items: center; gap: 0.3rem;">
-          <select id="demoRoleSelect" class="filter-select" style="padding: 0.3rem 0.55rem; font-size: 0.76rem; border-radius: var(--radius-full); font-weight: 600;" title="데모 권한 전환">
-            <option value="none">🔒 비로그인 (일반 모드)</option>
-            <option value="pending">⏳ 승인 대기 회원</option>
-            <option value="teacher" selected>✅ 교사 계정 (승인)</option>
-            <option value="admin">🛡️ 관리자 (신부님/교감)</option>
-          </select>
-        </div>
-
-        <span class="season-badge" id="seasonHeaderBadge" title="주일학교 시즌: 매년 9월 ~ 이듬해 6월">
-          🎓 2026-2027 학년도
-        </span>
-        <span class="env-badge" id="envBadge">
-          <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
-          로컬 데모 모드
-        </span>
-        <button class="btn btn-secondary btn-sm" id="btnResetData" title="샘플 데이터로 초기화">
-          🔄 데이터 초기화
-        </button>
       </div>
     </div>
   </header>
 
   <!-- Nav Tabs -->
-  <nav class="nav-tabs">
+  <nav class="nav-tabs" id="mainNavTabs">
     <div class="nav-container">
       <button class="nav-tab-btn active" data-tab="dashboard">
         📊 대시보드
@@ -114,6 +96,32 @@
       </button>
     </div>
   </nav>
+
+  <!-- Utility strip: demo role / season / env (kept out of sticky brand row) -->
+  <div class="util-strip" id="utilStrip">
+    <div class="util-strip-inner">
+      <div id="demoPersonaWrapper" class="demo-persona-wrap">
+        <label class="util-label" for="demoRoleSelect">데모</label>
+        <select id="demoRoleSelect" class="filter-select demo-role-select" title="데모 권한 전환">
+          <option value="none">🔒 비로그인 (일반 모드)</option>
+          <option value="pending">⏳ 승인 대기 회원</option>
+          <option value="teacher" selected>✅ 교사 계정 (승인)</option>
+          <option value="admin">🛡️ 관리자 (신부님/교감)</option>
+        </select>
+      </div>
+      <span class="season-badge" id="seasonHeaderBadge" title="주일학교 시즌: 매년 9월 ~ 이듬해 6월">
+        🎓 2026-2027 학년도
+      </span>
+      <span class="env-badge" id="envBadge">
+        <span class="env-dot" aria-hidden="true"></span>
+        <span class="env-badge-text">로컬 데모 모드</span>
+      </span>
+      <button class="btn btn-secondary btn-sm" id="btnResetData" title="샘플 데이터로 초기화" type="button">
+        <span class="reset-label-full">🔄 데이터 초기화</span>
+        <span class="reset-label-short">🔄</span>
+      </button>
+    </div>
+  </div>
 
   <!-- Main Content Wrapper -->
   <main class="main-wrapper">
@@ -241,46 +249,48 @@
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.25rem; margin-top: 1rem;">
+      <div class="dashboard-split">
         <!-- Left: Leaderboard & Quick Notice -->
-        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <div class="dashboard-split-main">
           <div class="data-table-container">
             <div
               style="padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
               <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-dark);">🌟 이번 학기 은총표 랭킹 TOP 5</h3>
               <span style="font-size: 0.8rem; color: var(--text-muted);">실시간 자동 계산</span>
             </div>
-            <table class="data-table" id="topGraceTable">
-              <thead>
-                <tr>
-                  <th style="width: 50px;">순위</th>
-                  <th>이름 (세례명)</th>
-                  <th>학년</th>
-                  <th>활동 부서</th>
-                  <th style="text-align: right;">보유 은총표</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Dynamically injected -->
-              </tbody>
-            </table>
+            <div class="data-view-desktop">
+              <table class="data-table" id="topGraceTable">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">순위</th>
+                    <th>이름 (세례명)</th>
+                    <th>학년</th>
+                    <th>활동 부서</th>
+                    <th style="text-align: right;">보유 은총표</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Dynamically injected -->
+                </tbody>
+              </table>
+            </div>
+            <div class="mobile-card-list" id="topGraceCardList" aria-label="은총표 랭킹 카드"></div>
           </div>
 
           <div class="data-table-container" style="padding: 1.25rem;">
             <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 0.75rem;">📋 은총표 적립
               기준 안내</h3>
-            <div
-              style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; font-size: 0.85rem;">
-              <div style="background: var(--surface-subtle); padding: 0.75rem; border-radius: 8px;">
+            <div class="grace-rules-grid">
+              <div class="grace-rule-item">
                 <strong>토요 주일학교 출석</strong>: +10 P (미사 참례 자동 인정)
               </div>
-              <div style="background: var(--surface-subtle); padding: 0.75rem; border-radius: 8px;">
+              <div class="grace-rule-item">
                 <strong>미사 참례</strong>: +5 P 추가
               </div>
-              <div style="background: var(--surface-subtle); padding: 0.75rem; border-radius: 8px;">
+              <div class="grace-rule-item">
                 <strong>복사단 봉사</strong>: +15 P
               </div>
-              <div style="background: var(--surface-subtle); padding: 0.75rem; border-radius: 8px;">
+              <div class="grace-rule-item">
                 <strong>전례/성가/악기 봉사</strong>: +10 P
               </div>
             </div>
@@ -334,7 +344,7 @@
     <!-- TAB 3: Activities -->
     <section class="tab-panel" id="panel-activities">
       <div id="activitiesLockedNotice" style="display: none;"></div>
-      <div id="activitiesProtectedContent" style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.25rem;">
+      <div id="activitiesProtectedContent" class="activities-layout">
         <!-- Left: Activity Recording Form -->
         <div class="data-table-container" style="padding: 1.25rem; height: fit-content;">
           <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 1rem;">
@@ -383,21 +393,24 @@
             <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-dark);">최근 활동 봉사 내역</h3>
             <span style="font-size: 0.8rem; color: var(--text-muted);" id="activityListCount">0건</span>
           </div>
-          <table class="data-table" id="activityHistoryTable">
-            <thead>
-              <tr>
-                <th>일자</th>
-                <th>학생</th>
-                <th>부서</th>
-                <th>상세 내용</th>
-                <th style="text-align: right;">지급 은총표</th>
-                <th>기록 교사</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Activities injected -->
-            </tbody>
-          </table>
+          <div class="data-view-desktop">
+            <table class="data-table" id="activityHistoryTable">
+              <thead>
+                <tr>
+                  <th>일자</th>
+                  <th>학생</th>
+                  <th>부서</th>
+                  <th>상세 내용</th>
+                  <th style="text-align: right;">지급 은총표</th>
+                  <th>기록 교사</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Activities injected -->
+              </tbody>
+            </table>
+          </div>
+          <div class="mobile-card-list" id="activityHistoryCardList" aria-label="활동 내역 카드"></div>
         </div>
       </div>
     </section>
@@ -424,23 +437,26 @@
         </div>
 
         <div class="data-table-container">
-          <table class="data-table" id="graceOverviewTable">
-            <thead>
-              <tr>
-                <th>학생 (세례명)</th>
-                <th>학년</th>
-                <th>활동 부서</th>
-                <th style="text-align: center;">출석 점수</th>
-                <th style="text-align: center;">활동 점수</th>
-                <th style="text-align: center;">보너스 점수</th>
-                <th style="text-align: right;">총 은총표</th>
-                <th style="text-align: center;">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Grace overview injected -->
-            </tbody>
-          </table>
+          <div class="data-view-desktop">
+            <table class="data-table" id="graceOverviewTable">
+              <thead>
+                <tr>
+                  <th>학생 (세례명)</th>
+                  <th>학년</th>
+                  <th>활동 부서</th>
+                  <th style="text-align: center;">출석 점수</th>
+                  <th style="text-align: center;">활동 점수</th>
+                  <th style="text-align: center;">보너스 점수</th>
+                  <th style="text-align: right;">총 은총표</th>
+                  <th style="text-align: center;">관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Grace overview injected -->
+              </tbody>
+            </table>
+          </div>
+          <div class="mobile-card-list" id="graceOverviewCardList" aria-label="은총표 카드"></div>
         </div>
       </div>
     </section>
@@ -470,63 +486,72 @@
         </div>
 
         <!-- Students Table View -->
-        <div class="data-table-container" id="studentsContainer">
-          <table class="data-table" id="studentsTable">
-            <thead>
-              <tr>
-                <th>이름 (세례명)</th>
-                <th>학년 / 반</th>
-                <th>성별</th>
-                <th>축일</th>
-                <th>성사 (첫영성체/견진)</th>
-                <th>활동 부서</th>
-                <th>학부모</th>
-                <th>보유 은총표</th>
-                <th>관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Students injected -->
-            </tbody>
-          </table>
+        <div id="studentsContainer">
+          <div class="data-table-container data-view-desktop">
+            <table class="data-table" id="studentsTable">
+              <thead>
+                <tr>
+                  <th>이름 (세례명)</th>
+                  <th>학년 / 반</th>
+                  <th>성별</th>
+                  <th>축일</th>
+                  <th>성사 (첫영성체/견진)</th>
+                  <th>활동 부서</th>
+                  <th>학부모</th>
+                  <th>보유 은총표</th>
+                  <th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Students injected -->
+              </tbody>
+            </table>
+          </div>
+          <div class="mobile-card-list" id="studentsCardList" aria-label="학생 명부 카드"></div>
         </div>
 
         <!-- Parents Table View -->
-        <div class="data-table-container" id="parentsContainer" style="display: none;">
-          <table class="data-table" id="parentsTable">
-            <thead>
-              <tr>
-                <th>학부모 1 (세례명)</th>
-                <th>학부모 2 (세례명)</th>
-                <th>전화번호</th>
-                <th>주소</th>
-                <th>자녀 학생</th>
-                <th>관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Parents injected -->
-            </tbody>
-          </table>
+        <div id="parentsContainer" style="display: none;">
+          <div class="data-table-container data-view-desktop">
+            <table class="data-table" id="parentsTable">
+              <thead>
+                <tr>
+                  <th>학부모 1 (세례명)</th>
+                  <th>학부모 2 (세례명)</th>
+                  <th>전화번호</th>
+                  <th>주소</th>
+                  <th>자녀 학생</th>
+                  <th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Parents injected -->
+              </tbody>
+            </table>
+          </div>
+          <div class="mobile-card-list" id="parentsCardList" aria-label="학부모 명부 카드"></div>
         </div>
 
         <!-- Teachers Table View -->
-        <div class="data-table-container" id="teachersContainer" style="display: none;">
-          <table class="data-table" id="teachersTable">
-            <thead>
-              <tr>
-                <th>이름 (세례명)</th>
-                <th>역할</th>
-                <th>담당 반</th>
-                <th>전화번호</th>
-                <th>겸임</th>
-                <th>관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Teachers injected -->
-            </tbody>
-          </table>
+        <div id="teachersContainer" style="display: none;">
+          <div class="data-table-container data-view-desktop">
+            <table class="data-table" id="teachersTable">
+              <thead>
+                <tr>
+                  <th>이름 (세례명)</th>
+                  <th>역할</th>
+                  <th>담당 반</th>
+                  <th>전화번호</th>
+                  <th>겸임</th>
+                  <th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Teachers injected -->
+              </tbody>
+            </table>
+          </div>
+          <div class="mobile-card-list" id="teachersCardList" aria-label="교사 명부 카드"></div>
         </div>
 
         <!-- Classes (반 구성) View -->
@@ -535,8 +560,7 @@
             <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-dark);">🏫 현재 반 구성</h3>
             <button class="btn btn-primary btn-sm" id="btnOpenAddClassModal">+ 새 반 추가</button>
           </div>
-          <div id="classesGrid"
-            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+          <div id="classesGrid" class="classes-grid">
             <!-- Classes injected -->
           </div>
         </div>
@@ -629,8 +653,10 @@
               </div>
             </div>
             <div class="stats-card-body">
-              <div class="monthly-bar-chart-container" id="monthlyBarChartContainer">
-                <!-- 10 Months (Sep ~ Jun) generated dynamically -->
+              <div class="monthly-bar-chart-scroll">
+                <div class="monthly-bar-chart-container" id="monthlyBarChartContainer">
+                  <!-- 10 Months (Sep ~ Jun) generated dynamically -->
+                </div>
               </div>
             </div>
           </div>
@@ -678,19 +704,22 @@
             </div>
             <div class="stats-card-body">
               <div class="data-table-container" style="max-height: 380px; overflow-y: auto;">
-                <table class="data-table" id="statsWeeklyTable">
-                  <thead>
-                    <tr>
-                      <th>토요 일자</th>
-                      <th>출석률</th>
-                      <th>출석</th>
-                      <th>결석</th>
-                    </tr>
-                  </thead>
-                  <tbody id="statsWeeklyTableBody">
-                    <!-- Populated dynamically -->
-                  </tbody>
-                </table>
+                <div class="data-view-desktop">
+                  <table class="data-table" id="statsWeeklyTable">
+                    <thead>
+                      <tr>
+                        <th>토요 일자</th>
+                        <th>출석률</th>
+                        <th>출석</th>
+                        <th>결석</th>
+                      </tr>
+                    </thead>
+                    <tbody id="statsWeeklyTableBody">
+                      <!-- Populated dynamically -->
+                    </tbody>
+                  </table>
+                </div>
+                <div class="mobile-card-list" id="statsWeeklyCardList" aria-label="주차별 출석 카드"></div>
               </div>
             </div>
           </div>
@@ -779,21 +808,24 @@
 
           <div class="stats-card-body">
             <div class="data-table-container">
-              <table class="data-table" id="scheduleTable">
-                <thead>
-                  <tr>
-                    <th>날짜 / 요일</th>
-                    <th>구분</th>
-                    <th>주일학교 모임 여부</th>
-                    <th>일정 제목 & 상세 내용</th>
-                    <th>비고/메모</th>
-                    <th>관리</th>
-                  </tr>
-                </thead>
-                <tbody id="scheduleTableBody">
-                  <!-- Populated dynamically -->
-                </tbody>
-              </table>
+              <div class="data-view-desktop">
+                <table class="data-table" id="scheduleTable">
+                  <thead>
+                    <tr>
+                      <th>날짜 / 요일</th>
+                      <th>구분</th>
+                      <th>주일학교 모임 여부</th>
+                      <th>일정 제목 & 상세 내용</th>
+                      <th>비고/메모</th>
+                      <th>관리</th>
+                    </tr>
+                  </thead>
+                  <tbody id="scheduleTableBody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+              <div class="mobile-card-list" id="scheduleCardList" aria-label="학사 일정 카드"></div>
             </div>
           </div>
         </div>
@@ -890,8 +922,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">포함 학년 (복수 선택 가능 - 합반 자유 조합)</label>
-            <div class="checkbox-group" id="classGradeCheckboxes"
-              style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem;">
+            <div class="checkbox-group grade-checkbox-grid" id="classGradeCheckboxes">
               <label class="checkbox-item"><input type="checkbox" value="JK" /> JK</label>
               <label class="checkbox-item"><input type="checkbox" value="SK" /> SK</label>
               <label class="checkbox-item"><input type="checkbox" value="G1" /> G1</label>
@@ -1236,20 +1267,23 @@
           Google 로그인으로 가입을 요청한 사용자를 승인하거나 역할을 지정할 수 있습니다. 승인된 교사/관리자만 주일학교 학생 출석, 은총표 및 명부 상세 정보에 접근할 수 있습니다.
         </p>
         <div class="data-table-container">
-          <table class="data-table" id="adminUsersTable">
-            <thead>
-              <tr>
-                <th>사용자</th>
-                <th>신청 일시</th>
-                <th>상태</th>
-                <th>부여 역할</th>
-                <th>관리</th>
-              </tr>
-            </thead>
-            <tbody id="adminUsersTableBody">
-              <!-- Dynamically populated -->
-            </tbody>
-          </table>
+          <div class="data-view-desktop">
+            <table class="data-table" id="adminUsersTable">
+              <thead>
+                <tr>
+                  <th>사용자</th>
+                  <th>신청 일시</th>
+                  <th>상태</th>
+                  <th>부여 역할</th>
+                  <th>관리</th>
+                </tr>
+              </thead>
+              <tbody id="adminUsersTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+          <div class="mobile-card-list" id="adminUsersCardList" aria-label="사용자 승인 카드"></div>
         </div>
       </div>
       <div class="modal-footer">
