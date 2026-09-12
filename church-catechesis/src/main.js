@@ -26,6 +26,9 @@ let currentDirectoryView = 'students'; // 'students' | 'parents' | 'teachers' | 
 let currentUser = null;
 let currentUserProfile = null;
 
+const MORE_TABS = new Set(['stats', 'activities', 'students']);
+const ALL_TABS = new Set(['dashboard', 'schedule', 'attendance', 'stats', 'activities', 'grace', 'students']);
+
 function isUserApproved() {
   return Boolean(currentUserProfile && currentUserProfile.isApproved);
 }
@@ -39,6 +42,68 @@ const navTabs = document.querySelectorAll('.nav-tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 const toastContainer = document.getElementById('toastContainer');
 const btnResetData = document.getElementById('btnResetData');
+const bottomTabBar = document.getElementById('bottomTabBar');
+const navMoreSheet = document.getElementById('navMoreSheet');
+const btnNavMore = document.getElementById('btnNavMore');
+
+function setNavBadges({ attended, activity } = {}) {
+  if (attended != null) {
+    document.querySelectorAll('.badge-attended-count').forEach(el => {
+      el.textContent = String(attended);
+      if (el.classList.contains('bottom-tab-badge')) {
+        el.dataset.empty = Number(attended) > 0 ? 'false' : 'true';
+      }
+    });
+  }
+  if (activity != null) {
+    document.querySelectorAll('.badge-activity-count').forEach(el => {
+      el.textContent = String(activity);
+    });
+  }
+}
+
+function openNavMore() {
+  if (!navMoreSheet) return;
+  navMoreSheet.hidden = false;
+  btnNavMore?.setAttribute('aria-expanded', 'true');
+}
+
+function closeNavMore() {
+  if (!navMoreSheet || navMoreSheet.hidden) return;
+  navMoreSheet.hidden = true;
+  btnNavMore?.setAttribute('aria-expanded', 'false');
+}
+
+function syncNavActiveState(tabName) {
+  document.querySelectorAll('.nav-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+  });
+  document.querySelectorAll('.bottom-tab-btn').forEach(btn => {
+    const t = btn.getAttribute('data-tab');
+    if (t === 'more') btn.classList.toggle('active', MORE_TABS.has(tabName));
+    else btn.classList.toggle('active', t === tabName);
+  });
+  document.querySelectorAll('.nav-more-item').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+  });
+}
+
+function switchToTab(tabName) {
+  if (!ALL_TABS.has(tabName)) return;
+  currentTab = tabName;
+  tabPanels.forEach(p => p.classList.remove('active'));
+  document.getElementById(`panel-${tabName}`)?.classList.add('active');
+  syncNavActiveState(tabName);
+  closeNavMore();
+
+  if (tabName === 'dashboard') renderDashboard();
+  if (tabName === 'schedule') renderSchedule();
+  if (tabName === 'attendance') renderAttendance();
+  if (tabName === 'stats') renderStats();
+  if (tabName === 'activities') renderActivities();
+  if (tabName === 'grace') renderGraceBank();
+  if (tabName === 'students') renderDirectory();
+}
 
 // --- Helper Functions ---
 function getSaturdayDateString() {
@@ -130,7 +195,7 @@ function updateAttendanceScheduleHint(selectedDate) {
     hint.innerHTML = `📅 학사 일정에 없는 날짜입니다. <a href="#" id="attHintGotoSchedule">학사 일정</a>에 등록하면 D-Day·통계와 연동됩니다.`;
     hint.querySelector('#attHintGotoSchedule')?.addEventListener('click', (e) => {
       e.preventDefault();
-      document.querySelector('[data-tab="schedule"]')?.click();
+      switchToTab('schedule');
     });
   }
 }
@@ -930,8 +995,10 @@ function renderDashboard() {
   document.getElementById('statTodayActivities').textContent = `${activitiesToday.length}건 봉사`;
   document.getElementById('statTotalGrace').textContent = `${totalGrace.toLocaleString()} P`;
 
-  document.getElementById('badgeAttendedCount').textContent = attendedCount;
-  document.getElementById('badgeActivityCount').textContent = activitiesToday.length;
+  setNavBadges({
+    attended: attendedCount,
+    activity: activitiesToday.length
+  });
 
   // --- 이번 달 축일 대상자 ---
   const now = new Date();
@@ -2314,36 +2381,36 @@ document.getElementById('btnResetSeasonSchedules')?.addEventListener('click', ()
 
 // D-day 배너의 일정 관리 바로가기 버튼
 document.getElementById('btnQuickSchedule')?.addEventListener('click', () => {
-  navTabs.forEach(b => b.classList.remove('active'));
-  tabPanels.forEach(p => p.classList.remove('active'));
-  const scheduleTab = document.querySelector('[data-tab="schedule"]');
-  if (scheduleTab) scheduleTab.classList.add('active');
-  const schedulePanel = document.getElementById('panel-schedule');
-  if (schedulePanel) schedulePanel.classList.add('active');
-  currentTab = 'schedule';
-  renderSchedule();
+  switchToTab('schedule');
 });
 
 // ============================================================
 //  Tab Switching & Events
 // ============================================================
 navTabs.forEach(btn => {
+  btn.addEventListener('click', () => switchToTab(btn.getAttribute('data-tab')));
+});
+
+bottomTabBar?.querySelectorAll('.bottom-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const tabName = btn.getAttribute('data-tab');
-    navTabs.forEach(b => b.classList.remove('active'));
-    tabPanels.forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    const targetPanel = document.getElementById(`panel-${tabName}`);
-    if (targetPanel) targetPanel.classList.add('active');
-    currentTab = tabName;
-    if (tabName === 'dashboard') renderDashboard();
-    if (tabName === 'schedule') renderSchedule();
-    if (tabName === 'attendance') renderAttendance();
-    if (tabName === 'stats') renderStats();
-    if (tabName === 'activities') renderActivities();
-    if (tabName === 'grace') renderGraceBank();
-    if (tabName === 'students') renderDirectory();
+    if (tabName === 'more') {
+      if (navMoreSheet?.hidden === false) closeNavMore();
+      else openNavMore();
+      return;
+    }
+    switchToTab(tabName);
   });
+});
+
+document.querySelectorAll('.nav-more-item').forEach(btn => {
+  btn.addEventListener('click', () => switchToTab(btn.getAttribute('data-tab')));
+});
+
+document.getElementById('navMoreBackdrop')?.addEventListener('click', closeNavMore);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeNavMore();
 });
 
 // Stats Filter Listeners

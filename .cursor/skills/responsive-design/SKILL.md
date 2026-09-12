@@ -54,16 +54,14 @@ Avoid desktop-only inline `grid-template-columns: 2fr 1fr` without a matching me
 
 ```
 [ brand | essential actions ]
-[ scrollable nav tabs ...... ]
-[ hero image full bleed card ]
-[ title + CTA ]
-[ progress ]
-[ 1-col or 2-col KPIs ]
-[ stacked sections ]
+[ util strip ]
+[ content ]
+[ bottom: 홈 | 출석 | 일정 | 은총 | 더보기 ]
 ```
 
+- Phone (≤768): **bottom tab bar** with 4 primary tabs + More sheet (stats / activities / directory). Hide the top horizontal tab strip.
+- Tablet+ (`md`+): keep the top horizontal tab bar with full labels.
 - Stack split grids (`dashboard-split`, `activities-layout`, stats charts) to `1fr`.
-- Nav: horizontal scroll, no wrap, hide scrollbar, `-webkit-overflow-scrolling: touch`.
 - Brand title: short Korean label on phone; full title from `md` up.
 
 ### Tablet (`md`–`lg`)
@@ -83,7 +81,8 @@ Avoid desktop-only inline `grid-template-columns: 2fr 1fr` without a matching me
 
 ## Anti-patterns
 
-- Hamburger that hides the only weekly workflow tabs behind an extra tap (prefer scrollable tab bar for ≤7 tabs)
+- Horizontal scroll of 7+ primary workflow tabs on phone (prefer bottom bar + More)
+- Hamburger that hides weekly tabs without a clear primary bottom set
 - Shrinking type below ~12px for critical labels
 - Desktop hover-only affordances without pressed/active states
 - Purple SaaS / cream-terracotta / newspaper defaults (existing brand wins)
