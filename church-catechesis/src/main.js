@@ -739,10 +739,13 @@ function initAuthUI() {
 
   if (import.meta.env.VITE_PROVIDER === 'firebase') {
     if (envBadge) {
-      envBadge.innerHTML = `<span class="env-dot" style="background:#3b82f6;" aria-hidden="true"></span><span class="env-badge-text">Firebase 운영 모드</span>`;
-      envBadge.style.color = '#1d4ed8';
-      envBadge.style.borderColor = '#93c5fd';
-      envBadge.style.background = '#eff6ff';
+      const usingEmulator = import.meta.env.VITE_USE_EMULATOR === 'true';
+      envBadge.innerHTML = usingEmulator
+        ? `<span class="env-dot" style="background:#f59e0b;" aria-hidden="true"></span><span class="env-badge-text">Firebase Emulator</span>`
+        : `<span class="env-dot" style="background:#3b82f6;" aria-hidden="true"></span><span class="env-badge-text">Firebase · ${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'cloud'}</span>`;
+      envBadge.style.color = usingEmulator ? '#b45309' : '#1d4ed8';
+      envBadge.style.borderColor = usingEmulator ? '#fcd34d' : '#93c5fd';
+      envBadge.style.background = usingEmulator ? '#fffbeb' : '#eff6ff';
     }
     const demoWrapper = document.getElementById('demoPersonaWrapper');
     if (demoWrapper) demoWrapper.style.display = 'none';

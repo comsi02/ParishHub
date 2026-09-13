@@ -3,47 +3,101 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ─────────────────────────────────────────
-    // admins 컬렉션: 권한이 있는 사용자 목록
-    // - 본인 문서만 읽기 허용 (로그인 체크용)
-    // - 쓰기는 Firebase 콘솔에서만 (관리자가 직접 추가)
+    // 헬퍼 (parish-hub-liturgy 공유 프로젝트)
+    // church-catechesis/firestore.rules 와 동일하게 유지하세요.
+    // ─────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isLiturgyAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isCatechesisAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/catechesis_admins/$(request.auth.uid));
+    }
+
+    function isAnyAdmin() {
+      return isLiturgyAdmin() || isCatechesisAdmin();
+    }
+
+    function isAdmin() {
+      return isLiturgyAdmin();
+    }
+
+    // ─────────────────────────────────────────
+    // 전례 (church-liturgy)
     // ─────────────────────────────────────────
     match /admins/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == uid || isAnyAdmin());
       allow write: if false;
     }
 
-    // ─────────────────────────────────────────
-    // masses 컬렉션
-    // - 읽기: 관리자만
-    // - 쓰기: 관리자만
-    // ─────────────────────────────────────────
     match /masses/{massId} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow read, write: if isLiturgyAdmin();
 
-      // slides 서브컬렉션
       match /slides/{slideId} {
-        allow read: if isAdmin();
-        allow write: if isAdmin();
+        allow read, write: if isLiturgyAdmin();
       }
     }
 
-    // ─────────────────────────────────────────
-    // presentation_state: 현재 발표 상태
-    // - 읽기: 누구나 허용 (display 페이지 비인증 접근)
-    // - 쓰기: 관리자만
-    // ─────────────────────────────────────────
     match /presentation_state/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isLiturgyAdmin();
     }
 
     // ─────────────────────────────────────────
-    // 헬퍼 함수: admins 컬렉션에 UID가 존재하는지 확인
+    // 주일학교 인증 · 승인
     // ─────────────────────────────────────────
-    function isAdmin() {
-      return request.auth != null &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    match /catechesis_users/{uid} {
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == uid || isCatechesisAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+      allow update: if isAuthenticated() &&
+        (request.auth.uid == uid || isCatechesisAdmin());
+    }
+
+    match /catechesis_admins/{uid} {
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == uid || isCatechesisAdmin());
+      allow write: if isCatechesisAdmin();
+    }
+
+    // ─────────────────────────────────────────
+    // 주일학교 데이터
+    // ─────────────────────────────────────────
+    match /catechesis_students/{studentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_parents/{parentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_teachers/{teacherId} {
+      allow read: if isAuthenticated();
+      allow write: if isAnyAdmin();
+    }
+
+    match /catechesis_attendance/{attendanceId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_activities/{activityId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_grace_ledger/{ledgerId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /catechesis_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAnyAdmin();
     }
   }
 }

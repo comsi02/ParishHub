@@ -124,44 +124,90 @@ export async function syncUserProfile(user) {
   }
 
   const userRef = doc(db, 'catechesis_users', user.uid);
-  const snap = await getDoc(userRef);
-
-  // Check if user is in admins collection
   const adminRef = doc(db, 'catechesis_admins', user.uid);
-  const adminSnap = await getDoc(adminRef);
-  const isAdmin = adminSnap.exists();
+  const liturgyAdminRef = doc(db, 'admins', user.uid);
 
-  if (!snap.exists()) {
-    // New user registered -> default status: 'pending' (unless they are admin)
+  let snap = null;
+  let isAdminDoc = false;
+
+  try {
+    snap = await getDoc(userRef);
+  } catch (e) {
+    console.error('[Auth] catechesis_users 읽기 실패:', e);
+  }
+
+  try {
+    const adminSnap = await getDoc(adminRef);
+    isAdminDoc = adminSnap.exists();
+  } catch (e) {
+    console.error('[Auth] catechesis_admins 읽기 실패 (규칙 미배포 가능):', e);
+  }
+
+  // 전례 admins 에만 넣은 경우도 관리자로 인정 (임시 호환)
+  if (!isAdminDoc) {
+    try {
+      const liturgySnap = await getDoc(liturgyAdminRef);
+      if (liturgySnap.exists()) isAdminDoc = true;
+    } catch (_) { /* ignore */ }
+  }
+
+  const now = new Date().toISOString();
+
+  if (!snap || !snap.exists()) {
     const newProfile = {
       uid: user.uid,
       email: user.email,
-      displayName: user.displayName || user.email.split('@')[0],
+      displayName: user.displayName || (user.email ? user.email.split('@')[0] : '사용자'),
       photoURL: user.photoURL || null,
-      status: isAdmin ? 'approved' : 'pending',
-      role: isAdmin ? 'admin' : 'teacher',
-      requestedAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString()
+      status: isAdminDoc ? 'approved' : 'pending',
+      role: isAdminDoc ? 'admin' : 'teacher',
+      requestedAt: now,
+      lastLoginAt: now,
+      ...(isAdminDoc ? { approvedAt: now } : {}),
     };
-    await setDoc(userRef, newProfile);
+    try {
+      await setDoc(userRef, newProfile);
+    } catch (e) {
+      console.error('[Auth] catechesis_users 생성 실패:', e);
+    }
     return {
       ...newProfile,
-      isApproved: newProfile.status === 'approved',
-      isAdmin
-    };
-  } else {
-    const data = snap.data();
-    await updateDoc(userRef, {
-      lastLoginAt: new Date().toISOString(),
-      displayName: user.displayName || data.displayName,
-      photoURL: user.photoURL || data.photoURL
-    });
-    return {
-      ...data,
-      isApproved: data.status === 'approved' || isAdmin,
-      isAdmin: isAdmin || data.role === 'admin'
+      isApproved: newProfile.status === 'approved' || isAdminDoc,
+      isAdmin: isAdminDoc || newProfile.role === 'admin',
     };
   }
+
+  const data = snap.data();
+  const roleIsAdmin = data.role === 'admin';
+  const statusApproved = data.status === 'approved';
+  const isAdmin = isAdminDoc || roleIsAdmin;
+  const isApproved = statusApproved || isAdmin;
+
+  const profilePatch = {
+    lastLoginAt: now,
+    displayName: user.displayName || data.displayName,
+    photoURL: user.photoURL || data.photoURL || null,
+  };
+
+  // 관리자 문서가 있는데 users 가 pending 이면 승격 동기화
+  if (isAdminDoc && (!statusApproved || data.role !== 'admin')) {
+    profilePatch.status = 'approved';
+    profilePatch.role = 'admin';
+    profilePatch.approvedAt = data.approvedAt || now;
+  }
+
+  try {
+    await updateDoc(userRef, profilePatch);
+  } catch (e) {
+    console.error('[Auth] catechesis_users 업데이트 실패:', e);
+  }
+
+  const merged = { ...data, ...profilePatch };
+  return {
+    ...merged,
+    isApproved: merged.status === 'approved' || isAdmin,
+    isAdmin,
+  };
 }
 
 /**
@@ -191,7 +237,14 @@ export function onAuthStateChanged(callback) {
           callback(user, profile);
         } catch (e) {
           console.error('[Auth] Profile sync error:', e);
-          callback(user, { uid: user.uid, status: 'pending', isApproved: false });
+          callback(user, {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            status: 'pending',
+            isApproved: false,
+            isAdmin: false,
+          });
         }
       } else {
         callback(null, null);

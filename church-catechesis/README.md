@@ -55,7 +55,12 @@ npm install
 npm run dev
 ```
 
-브라우저에서 `http://localhost:5174`로 접속하시면 즉시 모든 기능을 체험할 수 있습니다. (기본 Mock/Local 모드로 동작하여 Firebase 설정 없이도 즉시 완벽 작동)
+기본(`.env.development`)은 **Firebase 모드**입니다. Google 로그인과 Firestore(`catechesis_users`, `catechesis_admins` 등)를 운영과 같은 `parish-hub-catechesis` 프로젝트에 연결합니다.
+
+- 배지에 **Firebase 운영 모드**가 보이면 정상입니다.
+- 오프라인 데모만 쓰려면 `.env.development`에서 `VITE_PROVIDER=local` 로 바꾸세요.
+
+브라우저에서 `http://localhost:5173` (또는 Vite가 안내한 포트)로 접속하세요.
 
 ---
 
