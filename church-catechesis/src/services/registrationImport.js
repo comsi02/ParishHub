@@ -60,13 +60,43 @@ function col(row, idx) {
   return (row[idx] || '').trim();
 }
 
-function slug(s) {
-  return String(s || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9가-힣\-]/gi, '')
-    .slice(0, 40) || 'x';
+/** 재임포트 키용 안정 해시 (email|name 원문을 직접 저장하지 않음) */
+function stableHash(input) {
+  const s = String(input ?? '');
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h) ^ s.charCodeAt(i);
+  }
+  let h2 = 0;
+  for (let i = 0; i < s.length; i++) {
+    h2 = (h2 * 33 + s.charCodeAt(i)) >>> 0;
+  }
+  return (h >>> 0).toString(36) + h2.toString(36);
+}
+
+/** 시트 이메일 정규화 (Google 자동 매칭에는 사용하지 않음) */
+function normalizeRegistrationEmail(raw) {
+  const email = String(raw || '').trim().toLowerCase();
+  if (!email || !email.includes('@')) return '';
+  return email;
+}
+
+function normalizePersonName(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * importKey = hash(email|name)
+ * (Google 계정 자동 매칭에는 사용하지 않음)
+ */
+function makeImportKey(email, name) {
+  const raw = `${email}|${normalizePersonName(name)}`.toLowerCase();
+  return `imp_${stableHash(raw)}`;
+}
+
+/** familyKey = hash(email) */
+function makeFamilyKey(email) {
+  return `fam_${stableHash(email.toLowerCase())}`;
 }
 
 function isPlaceholderName(name) {
@@ -134,7 +164,8 @@ function normalizeFeast(raw) {
 function buildHeaderIndex(headers) {
   return {
     timestamp: findCol(headers, [h => h.includes('타임스탬프')]),
-    // email intentionally unused
+    // 재임포트 키로만 사용 (Google 계정 자동 매칭에는 사용하지 않음)
+    email: findCol(headers, [h => h.includes('이메일')]),
     applicantName: findCol(headers, [h => h.includes('이름') && h.includes('신청자')]),
     applicantBaptismal: findCol(headers, [h => h.includes('세례명') && h.includes('신청자')]),
     applicantPhone: findCol(headers, [h => h.includes('전화') && h.includes('신청자')]),
@@ -189,13 +220,23 @@ export function parseRegistrationCsv(csvText) {
     const applicantName = col(row, idx.applicantName);
     if (isPlaceholderName(applicantName)) continue;
 
+    const registrationEmail = normalizeRegistrationEmail(col(row, idx.email));
+    if (!registrationEmail) {
+      errors.push(`${r + 1}행: 이메일이 없어 건너뜁니다. (${applicantName || '이름 없음'})`);
+      continue;
+    }
+
     const spouseName = col(row, idx.spouseName);
     const address = col(row, idx.address);
-    const familyKey = `reg-${slug(applicantName)}-${slug(spouseName || 'none')}-${slug(address).slice(0, 20)}`;
-    const applicantId = `${familyKey}-parent-a`;
-    const spouseId = spouseName && !isPlaceholderName(spouseName) ? `${familyKey}-parent-b` : null;
+    const familyKey = makeFamilyKey(registrationEmail);
+    // 파싱 단계에서는 importKey 로 가족 관계만 연결. 실제 문서 id 는 upsert 시 자동 발급.
+    // 키 원문: email|name → 해시
+    const applicantKey = makeImportKey(registrationEmail, applicantName);
+    const spouseKey = spouseName && !isPlaceholderName(spouseName)
+      ? makeImportKey(registrationEmail, spouseName)
+      : null;
 
-    const childIds = [];
+    const childKeys = [];
     const children = [];
 
     for (let c = 0; c < idx.children.length; c++) {
@@ -203,12 +244,13 @@ export function parseRegistrationCsv(csvText) {
       const childName = col(row, cmap.name);
       if (isPlaceholderName(childName)) continue;
 
-      const childId = `${familyKey}-child-${c + 1}`;
-      childIds.push(childId);
+      const childKey = makeImportKey(registrationEmail, childName);
+      childKeys.push(childKey);
       const student = {
-        id: childId,
-        importKey: childId,
+        id: childKey,
+        importKey: childKey,
         familyKey,
+        registrationEmail,
         name: childName,
         baptismalName: col(row, cmap.baptismal),
         phone: '',
@@ -225,7 +267,7 @@ export function parseRegistrationCsv(csvText) {
           confirmation: parseYesNo(col(row, cmap.confirmation)),
           departments: parseDepartments(col(row, cmap.deptHope)),
           departmentsPrev: col(row, cmap.deptPrev) || '',
-          parentPersonIds: [applicantId, ...(spouseId ? [spouseId] : [])],
+          parentPersonIds: [applicantKey, ...(spouseKey ? [spouseKey] : [])],
         },
         notes: '',
         source: 'registration_sheet',
@@ -235,9 +277,10 @@ export function parseRegistrationCsv(csvText) {
     }
 
     const applicant = {
-      id: applicantId,
-      importKey: applicantId,
+      id: applicantKey,
+      importKey: applicantKey,
       familyKey,
+      registrationEmail,
       name: applicantName,
       baptismalName: col(row, idx.applicantBaptismal),
       phone: col(row, idx.applicantPhone),
@@ -246,8 +289,8 @@ export function parseRegistrationCsv(csvText) {
       roles: ['parent'],
       teacherInfo: null,
       parentInfo: {
-        childPersonIds: [...childIds],
-        spousePersonId: spouseId,
+        childPersonIds: [...childKeys],
+        spousePersonId: spouseKey,
       },
       studentInfo: null,
       notes: '',
@@ -257,11 +300,12 @@ export function parseRegistrationCsv(csvText) {
     persons.push(applicant);
 
     let spouse = null;
-    if (spouseId) {
+    if (spouseKey) {
       spouse = {
-        id: spouseId,
-        importKey: spouseId,
+        id: spouseKey,
+        importKey: spouseKey,
         familyKey,
+        registrationEmail,
         name: spouseName,
         baptismalName: col(row, idx.spouseBaptismal),
         phone: col(row, idx.spousePhone),
@@ -270,8 +314,8 @@ export function parseRegistrationCsv(csvText) {
         roles: ['parent'],
         teacherInfo: null,
         parentInfo: {
-          childPersonIds: [...childIds],
-          spousePersonId: applicantId,
+          childPersonIds: [...childKeys],
+          spousePersonId: applicantKey,
         },
         studentInfo: null,
         notes: '',

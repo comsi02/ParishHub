@@ -720,8 +720,8 @@ function initRegistrationImportUI() {
     if (!confirm(`학부모·학생 ${pendingRegistrationImport.persons.length}명을 저장할까요? (동일 ID는 덮어씁니다)`)) return;
     try {
       btnApply.disabled = true;
-      await upsertPersons(pendingRegistrationImport.persons);
-      showToast(`저장 완료: Person ${pendingRegistrationImport.persons.length}명`, '✅');
+      const result = await upsertPersons(pendingRegistrationImport.persons);
+      showToast(`저장 완료: Person ${result.count}명`, '✅');
       pendingRegistrationImport = null;
       input.value = '';
       btnPreview.disabled = true;
