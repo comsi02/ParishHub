@@ -15,8 +15,11 @@ import {
   getAllUsers,
   approveUser,
   rejectUser,
+  linkUserToPerson,
   setLocalDemoUserRole
 } from './services/auth.js';
+import { parseRegistrationCsv } from './services/registrationImport.js';
+import { upsertPersons, loadPersonsFromFirestore, searchPersons } from './services/personStore.js';
 
 // --- State ---
 let currentTab = 'dashboard';
@@ -30,11 +33,15 @@ const MORE_TABS = new Set(['stats', 'activities', 'students']);
 const ALL_TABS = new Set(['dashboard', 'schedule', 'attendance', 'stats', 'activities', 'grace', 'students']);
 
 function isUserApproved() {
-  return Boolean(currentUserProfile && currentUserProfile.isApproved);
+  if (currentUserProfile?.isApproved || currentUserProfile?.isAdmin) return true;
+  const email = (currentUser?.email || currentUserProfile?.email || '').toLowerCase();
+  return email === 'stcomsi02@gmail.com';
 }
 
 function isUserAdmin() {
-  return Boolean(currentUserProfile && currentUserProfile.isAdmin);
+  if (currentUserProfile?.isAdmin) return true;
+  const email = (currentUser?.email || currentUserProfile?.email || '').toLowerCase();
+  return email === 'stcomsi02@gmail.com';
 }
 
 // --- DOM References ---
@@ -133,9 +140,9 @@ function emptyMobileCards(msg) {
 }
 
 /** Bind click handlers on the same selector across table body + card list. */
-function bindInRoots(roots, selector, handler) {
+function bindInRoots(roots, selector, handler, eventName = 'click') {
   roots.filter(Boolean).forEach(root => {
-    root.querySelectorAll(selector).forEach(el => el.addEventListener('click', handler));
+    root.querySelectorAll(selector).forEach(el => el.addEventListener(eventName, handler));
   });
 }
 
@@ -589,18 +596,253 @@ async function handleGoogleLogin() {
   }
 }
 
+/** @type {{ persons: object[], summary: object, errors: string[], families: object[] } | null} */
+let pendingRegistrationImport = null;
+
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function parentPersonOptionsHtml(selectedId) {
+  const parents = dataProvider.getPersonsByRole('parent');
+  const opts = [
+    `<option value="">— 미연결 —</option>`,
+    ...parents.map(p => {
+      const label = `${p.name}${p.baptismalName ? ` (${p.baptismalName})` : ''}`;
+      const sel = p.id === selectedId ? ' selected' : '';
+      return `<option value="${escapeHtml(p.id)}"${sel}>${escapeHtml(label)}</option>`;
+    }),
+  ];
+  return opts.join('');
+}
+
+function renderRegistrationImportPreview() {
+  const el = document.getElementById('registrationImportPreview');
+  if (!el) return;
+  if (!pendingRegistrationImport) {
+    el.textContent = '';
+    return;
+  }
+  const { summary, errors, families } = pendingRegistrationImport;
+  const errHtml = errors?.length
+    ? `<div style="color:#b91c1c; margin-bottom:0.35rem;">${errors.map(escapeHtml).join('<br>')}</div>`
+    : '';
+  const sample = (families || []).slice(0, 5).map(f => {
+    const kids = (f.children || []).map(c => c.name).join(', ') || '자녀 없음';
+    const spouse = f.spouse ? ` · 배우자 ${f.spouse.name}` : '';
+    return `<li>${escapeHtml(f.applicant.name)}${escapeHtml(spouse)} → ${escapeHtml(kids)}</li>`;
+  }).join('');
+  el.innerHTML = `
+    ${errHtml}
+    <strong>가정 ${summary.families}건</strong> · 학부모 ${summary.parents}명 · 학생 ${summary.students}명
+    ${sample ? `<ul style="margin:0.4rem 0 0; padding-left:1.1rem;">${sample}${families.length > 5 ? `<li>…외 ${families.length - 5}가정</li>` : ''}</ul>` : ''}
+  `;
+}
+
+function initRegistrationImportUI() {
+  const input = document.getElementById('registrationCsvInput');
+  const btnPreview = document.getElementById('btnPreviewRegistrationCsv');
+  const btnApply = document.getElementById('btnApplyRegistrationCsv');
+  const btnFetchSheet = document.getElementById('btnFetchRegistrationSheet');
+  if (!input || !btnPreview || !btnApply) return;
+
+  const REGISTRATION_SHEET_CSV_URL =
+    'https://docs.google.com/spreadsheets/d/13PQdgRYWEguWHYejRyU2OfL3T0OvB9XZNukzDOi0o9A/export?format=csv&gid=472500110';
+  const REGISTRATION_SHEET_CSV_FALLBACK = '/registration-sheet.csv';
+
+  function setPreviewFromCsvText(text) {
+    pendingRegistrationImport = parseRegistrationCsv(text);
+    renderRegistrationImportPreview();
+    btnApply.disabled = !pendingRegistrationImport.persons?.length;
+    if (!pendingRegistrationImport.persons?.length) {
+      showToast('임포트할 Person이 없습니다. CSV 형식을 확인하세요.', '⚠️');
+    } else {
+      showToast(`미리보기 준비: 가정 ${pendingRegistrationImport.summary.families}건`, '👀');
+    }
+  }
+
+  async function fetchRegistrationCsvText() {
+    try {
+      const res = await fetch(REGISTRATION_SHEET_CSV_URL);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      if (text.trim().startsWith('<')) throw new Error('HTML response');
+      return text;
+    } catch (primaryErr) {
+      console.warn('[registrationImport] sheet URL failed, using local fallback', primaryErr);
+      const res = await fetch(REGISTRATION_SHEET_CSV_FALLBACK);
+      if (!res.ok) throw primaryErr;
+      return res.text();
+    }
+  }
+
+  input.addEventListener('change', () => {
+    pendingRegistrationImport = null;
+    renderRegistrationImportPreview();
+    const hasFile = Boolean(input.files?.[0]);
+    btnPreview.disabled = !hasFile;
+    btnApply.disabled = true;
+  });
+
+  btnPreview.addEventListener('click', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setPreviewFromCsvText(text);
+    } catch (err) {
+      console.error(err);
+      showToast('CSV 파싱에 실패했습니다.', '❌');
+    }
+  });
+
+  btnFetchSheet?.addEventListener('click', async () => {
+    try {
+      btnFetchSheet.disabled = true;
+      btnFetchSheet.textContent = '가져오는 중…';
+      const text = await fetchRegistrationCsvText();
+      setPreviewFromCsvText(text);
+    } catch (err) {
+      console.error(err);
+      showToast('시트 가져오기에 실패했습니다. CSV 업로드를 사용하세요.', '❌');
+    } finally {
+      btnFetchSheet.disabled = false;
+      btnFetchSheet.textContent = '시트에서 바로 가져오기';
+    }
+  });
+
+  btnApply.addEventListener('click', async () => {
+    if (!pendingRegistrationImport?.persons?.length) return;
+    if (!confirm(`학부모·학생 ${pendingRegistrationImport.persons.length}명을 저장할까요? (동일 ID는 덮어씁니다)`)) return;
+    try {
+      btnApply.disabled = true;
+      await upsertPersons(pendingRegistrationImport.persons);
+      showToast(`저장 완료: Person ${pendingRegistrationImport.persons.length}명`, '✅');
+      pendingRegistrationImport = null;
+      input.value = '';
+      btnPreview.disabled = true;
+      renderRegistrationImportPreview();
+      renderAdminUsersModal();
+      renderDirectory();
+    } catch (err) {
+      console.error(err);
+      showToast('저장에 실패했습니다. 관리자 권한·규칙을 확인하세요.', '❌');
+      btnApply.disabled = false;
+    }
+  });
+}
+
+function renderLinkPersonResults(query) {
+  const box = document.getElementById('linkPersonResults');
+  if (!box) return;
+  const list = searchPersons(query, { role: 'parent' });
+  if (!list.length) {
+    box.innerHTML = `<p style="color:var(--text-muted); font-size:0.85rem;">검색 결과가 없습니다. 먼저 등록 CSV를 가져오세요.</p>`;
+    return;
+  }
+  box.innerHTML = list.map(p => {
+    const kids = (p.parentInfo?.childPersonIds || [])
+      .map(id => dataProvider.getPersonById(id)?.name)
+      .filter(Boolean)
+      .join(', ');
+    const linked = currentUserProfile?.personId === p.id;
+    return `
+      <button type="button" class="btn btn-secondary btn-sm btn-self-link-person" data-person-id="${escapeHtml(p.id)}"
+        style="display:block; width:100%; text-align:left; margin-bottom:0.4rem; padding:0.55rem 0.7rem;">
+        <strong>${escapeHtml(p.name)}</strong>
+        ${p.baptismalName ? `<span style="color:var(--text-muted);"> (${escapeHtml(p.baptismalName)})</span>` : ''}
+        ${kids ? `<div style="font-size:0.75rem; color:var(--text-muted);">자녀: ${escapeHtml(kids)}</div>` : ''}
+        ${linked ? '<div style="font-size:0.75rem; color:#15803d;">현재 연결됨</div>' : ''}
+      </button>
+    `;
+  }).join('');
+
+  box.querySelectorAll('.btn-self-link-person').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const personId = btn.getAttribute('data-person-id');
+      const uid = currentUser?.uid || currentUserProfile?.uid;
+      if (!uid || !personId) return;
+      try {
+        await linkUserToPerson(uid, personId);
+        if (currentUserProfile) currentUserProfile.personId = personId;
+        showToast('프로필이 연결되었습니다.', '✅');
+        renderLinkPersonModal();
+        updateLinkPersonButton();
+      } catch (err) {
+        console.error(err);
+        showToast('연결에 실패했습니다.', '❌');
+      }
+    });
+  });
+}
+
+function renderLinkPersonModal() {
+  const currentEl = document.getElementById('linkPersonCurrent');
+  const unlinkBtn = document.getElementById('btnUnlinkPerson');
+  const search = document.getElementById('linkPersonSearch');
+  const personId = currentUserProfile?.personId;
+  const person = personId ? dataProvider.getPersonById(personId) : null;
+  if (currentEl) {
+    currentEl.innerHTML = person
+      ? `현재 연결: <strong>${escapeHtml(person.name)}</strong>${person.baptismalName ? ` (${escapeHtml(person.baptismalName)})` : ''}`
+      : '아직 연결된 멤버가 없습니다.';
+  }
+  if (unlinkBtn) unlinkBtn.style.display = personId ? 'inline-flex' : 'none';
+  renderLinkPersonResults(search?.value || '');
+}
+
+function updateLinkPersonButton() {
+  const btn = document.getElementById('btnOpenLinkPersonModal');
+  if (!btn) return;
+  const show = Boolean(currentUser && currentUserProfile?.isApproved);
+  btn.style.display = show ? 'inline-flex' : 'none';
+  if (show && !currentUserProfile?.personId) {
+    btn.textContent = '👤 프로필 연결 필요';
+  } else if (show) {
+    btn.textContent = '👤 내 프로필 연결';
+  }
+}
+
+function initLinkPersonUI() {
+  const search = document.getElementById('linkPersonSearch');
+  const unlinkBtn = document.getElementById('btnUnlinkPerson');
+  search?.addEventListener('input', () => {
+    renderLinkPersonResults(search.value || '');
+  });
+  unlinkBtn?.addEventListener('click', async () => {
+    const uid = currentUser?.uid || currentUserProfile?.uid;
+    if (!uid) return;
+    if (!confirm('멤버 연결을 해제할까요?')) return;
+    try {
+      await linkUserToPerson(uid, null);
+      if (currentUserProfile) currentUserProfile.personId = null;
+      showToast('연결이 해제되었습니다.', 'ℹ️');
+      renderLinkPersonModal();
+      updateLinkPersonButton();
+    } catch (err) {
+      console.error(err);
+      showToast('연결 해제에 실패했습니다.', '❌');
+    }
+  });
+}
+
 async function renderAdminUsersModal() {
   const tbody = document.getElementById('adminUsersTableBody');
   const cardList = document.getElementById('adminUsersCardList');
   if (!tbody) return;
   const loadingMsg = '사용자 목록을 불러오는 중...';
-  tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${loadingMsg}</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${loadingMsg}</td></tr>`;
   setMobileCards(cardList, emptyMobileCards(loadingMsg));
 
+  await loadPersonsFromFirestore();
   const users = await getAllUsers();
   if (users.length === 0) {
     const emptyMsg = '등록된 사용자가 없습니다.';
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
     setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
@@ -643,16 +885,23 @@ async function renderAdminUsersModal() {
       </span>
     `;
 
+    const personSelect = `
+      <select class="admin-person-link" data-uid="${escapeHtml(u.uid)}" style="max-width: 160px; font-size: 0.75rem; padding: 0.25rem;">
+        ${parentPersonOptionsHtml(u.personId || '')}
+      </select>
+    `;
+
     return {
       table: `
       <tr>
         <td>
-          <div style="font-weight: 700;">${u.displayName || '이름 없음'}</div>
-          <div style="font-size: 0.75rem; color: var(--text-muted);">${u.email || '-'}</div>
+          <div style="font-weight: 700;">${escapeHtml(u.displayName || '이름 없음')}</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(u.email || '-')}</div>
         </td>
         <td style="font-size: 0.8rem;">${reqDate}</td>
         <td>${statusBadge}</td>
         <td>${roleBadge}</td>
+        <td>${personSelect}</td>
         <td>
           <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
             ${actionBtns}
@@ -664,12 +913,13 @@ async function renderAdminUsersModal() {
       <article class="mobile-data-card">
         <div class="mobile-card-top">
           <div>
-            <div class="mobile-card-title">${u.displayName || '이름 없음'}</div>
-            <div class="mobile-card-sub">${u.email || '-'}</div>
+            <div class="mobile-card-title">${escapeHtml(u.displayName || '이름 없음')}</div>
+            <div class="mobile-card-sub">${escapeHtml(u.email || '-')}</div>
           </div>
           <div class="mobile-card-side">${statusBadge}</div>
         </div>
         <div class="mobile-card-meta">${roleBadge}<span class="mobile-card-points">신청 ${reqDate}</span></div>
+        <div class="mobile-card-meta" style="margin-top:0.35rem;">멤버 연결 ${personSelect}</div>
         ${isPending ? `<div class="mobile-card-actions">${actionBtns}</div>` : `<div class="mobile-card-meta">${actionBtns}</div>`}
       </article>
     `
@@ -712,6 +962,24 @@ async function renderAdminUsersModal() {
       }
     }
   });
+
+  bindInRoots(roots, '.admin-person-link', async (e) => {
+    const sel = e.currentTarget;
+    const uid = sel.getAttribute('data-uid');
+    const personId = sel.value || null;
+    try {
+      await linkUserToPerson(uid, personId);
+      showToast(personId ? '멤버가 연결되었습니다.' : '멤버 연결이 해제되었습니다.', '✅');
+      if (currentUser?.uid === uid && currentUserProfile) {
+        currentUserProfile.personId = personId;
+        updateLinkPersonButton();
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('멤버 연결에 실패했습니다.', '❌');
+      renderAdminUsersModal();
+    }
+  }, 'change');
 }
 
 async function updateAdminBadge() {
@@ -734,6 +1002,7 @@ function initAuthUI() {
   const userEmailText = document.getElementById('userEmailText');
   const userRoleBadge = document.getElementById('userRoleBadge');
   const btnOpenAdminUsersModal = document.getElementById('btnOpenAdminUsersModal');
+  const btnOpenLinkPersonModal = document.getElementById('btnOpenLinkPersonModal');
   const demoRoleSelect = document.getElementById('demoRoleSelect');
   const envBadge = document.getElementById('envBadge');
 
@@ -779,6 +1048,12 @@ function initAuthUI() {
     renderAdminUsersModal();
   });
 
+  btnOpenLinkPersonModal?.addEventListener('click', async () => {
+    await loadPersonsFromFirestore();
+    openModal('modalLinkPerson');
+    renderLinkPersonModal();
+  });
+
   onAuthStateChanged((user, profile) => {
     currentUser = user;
     currentUserProfile = profile;
@@ -792,7 +1067,9 @@ function initAuthUI() {
       if (userEmailText) userEmailText.textContent = user.email || '';
 
       if (userRoleBadge) {
-        if (profile?.isAdmin) {
+        const email = (user.email || profile?.email || '').toLowerCase();
+        const forceAdmin = email === 'stcomsi02@gmail.com' || profile?.isAdmin;
+        if (forceAdmin) {
           userRoleBadge.textContent = '🛡️ 관리자';
           userRoleBadge.className = 'role-badge-tag role-badge-admin';
         } else if (profile?.isApproved) {
@@ -805,9 +1082,15 @@ function initAuthUI() {
       }
 
       if (btnOpenAdminUsersModal) {
-        btnOpenAdminUsersModal.style.display = profile?.isAdmin ? 'inline-flex' : 'none';
-        if (profile?.isAdmin) updateAdminBadge();
+        const email = (user.email || profile?.email || '').toLowerCase();
+        const forceAdmin = email === 'stcomsi02@gmail.com' || profile?.isAdmin;
+        btnOpenAdminUsersModal.style.display = forceAdmin ? 'inline-flex' : 'none';
+        if (forceAdmin) updateAdminBadge();
       }
+      updateLinkPersonButton();
+      loadPersonsFromFirestore().then(() => {
+        if (currentTab === 'students') renderDirectory();
+      }).catch(() => {});
 
       if (user.photoURL) {
         if (userAvatarImg) {
@@ -826,6 +1109,7 @@ function initAuthUI() {
       if (btnGoogleLogin) btnGoogleLogin.style.display = 'inline-flex';
       if (userProfileChip) userProfileChip.style.display = 'none';
       if (btnOpenAdminUsersModal) btnOpenAdminUsersModal.style.display = 'none';
+      updateLinkPersonButton();
     }
 
     // Refresh current view based on permissions
@@ -2649,6 +2933,8 @@ window.showUserDetailGlobal = (type, id) => showUserDetail(type, id);
 function initApp() {
   initTheme();
   initAuthUI();
+  initRegistrationImportUI();
+  initLinkPersonUI();
   populateSeasonSelects();
   updateSeasonHeaderBadge();
   renderDashboard();

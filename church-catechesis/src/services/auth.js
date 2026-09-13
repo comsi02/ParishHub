@@ -10,6 +10,7 @@ import {
 import {
   doc,
   getDoc,
+  getDocFromServer,
   setDoc,
   updateDoc,
   collection,
@@ -20,6 +21,33 @@ import {
 import { auth, db } from './firebase-init.js';
 
 const isFirebaseMode = import.meta.env.VITE_PROVIDER === 'firebase';
+
+/** 최초 관리자 이메일 — 로그인 시 role=admin + catechesis_admins 자동 부여 */
+const BOOTSTRAP_ADMIN_EMAILS = [
+  'stcomsi02@gmail.com',
+];
+
+function isBootstrapAdminEmail(email) {
+  return BOOTSTRAP_ADMIN_EMAILS.includes(String(email || '').trim().toLowerCase());
+}
+
+/** Google 계정 이메일 (user.email 또는 providerData) */
+function resolveUserEmail(user) {
+  if (!user) return '';
+  if (user.email) return String(user.email).trim();
+  const fromProvider = (user.providerData || []).map(p => p?.email).find(Boolean);
+  return fromProvider ? String(fromProvider).trim() : '';
+}
+
+/** 오프라인 캐시 대신 서버 우선 조회 (관리자 권한 오판 방지) */
+async function getDocPreferServer(ref) {
+  try {
+    return await getDocFromServer(ref);
+  } catch (e) {
+    console.warn('[Auth] 서버 조회 실패, 캐시 fallback:', e?.code || e?.message || e);
+    return getDoc(ref);
+  }
+}
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
@@ -111,103 +139,157 @@ export async function signInWithGoogle() {
  */
 export async function syncUserProfile(user) {
   if (!user) return null;
+
+  const userEmail = resolveUserEmail(user);
+  const bootstrapAdmin = isBootstrapAdminEmail(userEmail);
+
   if (!isFirebaseMode || !db) {
+    const role = bootstrapAdmin ? 'admin' : (user.role || 'teacher');
     return {
       uid: user.uid,
       displayName: user.displayName,
-      email: user.email,
+      email: userEmail || user.email,
       status: user.status || 'approved',
-      role: user.role || 'teacher',
-      isApproved: user.status === 'approved' || !user.status,
-      isAdmin: user.role === 'admin'
+      role,
+      personId: user.personId || null,
+      isApproved: true,
+      isAdmin: bootstrapAdmin || role === 'admin',
     };
   }
 
-  const userRef = doc(db, 'catechesis_users', user.uid);
-  const adminRef = doc(db, 'catechesis_admins', user.uid);
-  const liturgyAdminRef = doc(db, 'admins', user.uid);
-
-  let snap = null;
-  let isAdminDoc = false;
+  const buildFallbackProfile = (extra = {}) => ({
+    uid: user.uid,
+    email: userEmail || user.email || null,
+    displayName: user.displayName || (userEmail ? userEmail.split('@')[0] : '사용자'),
+    photoURL: user.photoURL || null,
+    status: bootstrapAdmin ? 'approved' : (extra.status || 'pending'),
+    role: bootstrapAdmin ? 'admin' : (extra.role || 'teacher'),
+    personId: extra.personId || null,
+    isApproved: bootstrapAdmin || extra.status === 'approved',
+    isAdmin: bootstrapAdmin || extra.role === 'admin',
+    ...extra,
+    // bootstrap 은 어떤 실패에서도 관리자 유지
+    ...(bootstrapAdmin
+      ? { status: 'approved', role: 'admin', isApproved: true, isAdmin: true }
+      : {}),
+  });
 
   try {
-    snap = await getDoc(userRef);
-  } catch (e) {
-    console.error('[Auth] catechesis_users 읽기 실패:', e);
-  }
+    const userRef = doc(db, 'catechesis_users', user.uid);
+    const adminRef = doc(db, 'catechesis_admins', user.uid);
+    const liturgyAdminRef = doc(db, 'admins', user.uid);
 
-  try {
-    const adminSnap = await getDoc(adminRef);
-    isAdminDoc = adminSnap.exists();
-  } catch (e) {
-    console.error('[Auth] catechesis_admins 읽기 실패 (규칙 미배포 가능):', e);
-  }
+    let snap = null;
+    let isAdminDoc = false;
 
-  // 전례 admins 에만 넣은 경우도 관리자로 인정 (임시 호환)
-  if (!isAdminDoc) {
     try {
-      const liturgySnap = await getDoc(liturgyAdminRef);
-      if (liturgySnap.exists()) isAdminDoc = true;
-    } catch (_) { /* ignore */ }
-  }
-
-  const now = new Date().toISOString();
-
-  if (!snap || !snap.exists()) {
-    const newProfile = {
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName || (user.email ? user.email.split('@')[0] : '사용자'),
-      photoURL: user.photoURL || null,
-      status: isAdminDoc ? 'approved' : 'pending',
-      role: isAdminDoc ? 'admin' : 'teacher',
-      requestedAt: now,
-      lastLoginAt: now,
-      ...(isAdminDoc ? { approvedAt: now } : {}),
-    };
-    try {
-      await setDoc(userRef, newProfile);
+      snap = await getDocPreferServer(userRef);
     } catch (e) {
-      console.error('[Auth] catechesis_users 생성 실패:', e);
+      console.error('[Auth] catechesis_users 읽기 실패:', e);
     }
-    return {
-      ...newProfile,
-      isApproved: newProfile.status === 'approved' || isAdminDoc,
-      isAdmin: isAdminDoc || newProfile.role === 'admin',
+
+    try {
+      const adminSnap = await getDocPreferServer(adminRef);
+      isAdminDoc = adminSnap.exists();
+    } catch (e) {
+      console.error('[Auth] catechesis_admins 읽기 실패 (규칙 미배포 가능):', e);
+    }
+
+    if (!isAdminDoc) {
+      try {
+        const liturgySnap = await getDocPreferServer(liturgyAdminRef);
+        if (liturgySnap.exists()) isAdminDoc = true;
+      } catch (_) { /* ignore */ }
+    }
+
+    if (bootstrapAdmin) isAdminDoc = true;
+
+    const now = new Date().toISOString();
+
+    if (!snap || !snap.exists()) {
+      const newProfile = {
+        uid: user.uid,
+        email: userEmail || user.email || null,
+        displayName: user.displayName || (userEmail ? userEmail.split('@')[0] : '사용자'),
+        photoURL: user.photoURL || null,
+        status: isAdminDoc ? 'approved' : 'pending',
+        role: isAdminDoc ? 'admin' : 'teacher',
+        personId: null,
+        requestedAt: now,
+        lastLoginAt: now,
+        ...(isAdminDoc ? { approvedAt: now } : {}),
+      };
+      try {
+        // merge:true — 읽기 실패 시 기존 admin 문서를 teacher 로 덮어쓰지 않음
+        await setDoc(userRef, newProfile, { merge: true });
+      } catch (e) {
+        console.error('[Auth] catechesis_users 생성 실패:', e);
+      }
+      if (isAdminDoc) {
+        try {
+          await setDoc(adminRef, {
+            email: userEmail || user.email || null,
+            adminSince: now,
+            source: bootstrapAdmin ? 'bootstrap' : 'sync',
+          }, { merge: true });
+        } catch (e) {
+          console.error('[Auth] catechesis_admins 생성 실패:', e);
+        }
+      }
+      return buildFallbackProfile({
+        ...newProfile,
+        isApproved: newProfile.status === 'approved' || isAdminDoc,
+        isAdmin: isAdminDoc || newProfile.role === 'admin',
+      });
+    }
+
+    const data = snap.data() || {};
+    let isAdmin = isAdminDoc || data.role === 'admin' || bootstrapAdmin;
+
+    const profilePatch = {
+      lastLoginAt: now,
+      displayName: user.displayName || data.displayName,
+      photoURL: user.photoURL || data.photoURL || null,
     };
-  }
+    if (userEmail && userEmail !== data.email) {
+      profilePatch.email = userEmail;
+    }
 
-  const data = snap.data();
-  const roleIsAdmin = data.role === 'admin';
-  const statusApproved = data.status === 'approved';
-  const isAdmin = isAdminDoc || roleIsAdmin;
-  const isApproved = statusApproved || isAdmin;
+    if (isAdmin && (data.status !== 'approved' || data.role !== 'admin')) {
+      profilePatch.status = 'approved';
+      profilePatch.role = 'admin';
+      profilePatch.approvedAt = data.approvedAt || now;
+    }
 
-  const profilePatch = {
-    lastLoginAt: now,
-    displayName: user.displayName || data.displayName,
-    photoURL: user.photoURL || data.photoURL || null,
-  };
+    try {
+      await setDoc(userRef, profilePatch, { merge: true });
+    } catch (e) {
+      console.error('[Auth] catechesis_users 업데이트 실패:', e);
+    }
 
-  // 관리자 문서가 있는데 users 가 pending 이면 승격 동기화
-  if (isAdminDoc && (!statusApproved || data.role !== 'admin')) {
-    profilePatch.status = 'approved';
-    profilePatch.role = 'admin';
-    profilePatch.approvedAt = data.approvedAt || now;
-  }
+    if (isAdmin) {
+      try {
+        await setDoc(adminRef, {
+          email: userEmail || data.email || user.email || null,
+          adminSince: data.approvedAt || now,
+          source: bootstrapAdmin ? 'bootstrap' : 'sync',
+        }, { merge: true });
+      } catch (e) {
+        console.error('[Auth] catechesis_admins 동기화 실패:', e);
+      }
+    }
 
-  try {
-    await updateDoc(userRef, profilePatch);
+    const merged = { ...data, ...profilePatch };
+    isAdmin = isAdmin || merged.role === 'admin' || bootstrapAdmin;
+    return buildFallbackProfile({
+      ...merged,
+      isApproved: merged.status === 'approved' || isAdmin,
+      isAdmin,
+    });
   } catch (e) {
-    console.error('[Auth] catechesis_users 업데이트 실패:', e);
+    console.error('[Auth] syncUserProfile 예외:', e);
+    return buildFallbackProfile();
   }
-
-  const merged = { ...data, ...profilePatch };
-  return {
-    ...merged,
-    isApproved: merged.status === 'approved' || isAdmin,
-    isAdmin,
-  };
 }
 
 /**
@@ -237,13 +319,16 @@ export function onAuthStateChanged(callback) {
           callback(user, profile);
         } catch (e) {
           console.error('[Auth] Profile sync error:', e);
+          const email = resolveUserEmail(user);
+          const bootstrapAdmin = isBootstrapAdminEmail(email);
           callback(user, {
             uid: user.uid,
-            email: user.email,
+            email: email || user.email,
             displayName: user.displayName,
-            status: 'pending',
-            isApproved: false,
-            isAdmin: false,
+            status: bootstrapAdmin ? 'approved' : 'pending',
+            role: bootstrapAdmin ? 'admin' : 'teacher',
+            isApproved: bootstrapAdmin,
+            isAdmin: bootstrapAdmin,
           });
         }
       } else {
@@ -325,6 +410,40 @@ export async function rejectUser(uid) {
     if (target) {
       target.status = 'rejected';
       saveLocalUsersList(list);
+    }
+  }
+}
+
+/**
+ * Google 계정 ↔ Person 연결 (본인 또는 관리자)
+ * @param {string} uid
+ * @param {string|null} personId
+ */
+export async function linkUserToPerson(uid, personId) {
+  const value = personId || null;
+  if (isFirebaseMode && db) {
+    const userRef = doc(db, 'catechesis_users', uid);
+    await updateDoc(userRef, {
+      personId: value,
+      personLinkedAt: value ? new Date().toISOString() : null,
+    });
+  } else {
+    const list = getLocalUsersList();
+    const target = list.find(u => u.uid === uid);
+    if (target) {
+      target.personId = value;
+      target.personLinkedAt = value ? new Date().toISOString() : null;
+      saveLocalUsersList(list);
+    }
+    if (localUser && localUser.uid === uid) {
+      localUser = { ...localUser, personId: value };
+      localStorage.setItem(LOCAL_STORAGE_KEY_USER, JSON.stringify(localUser));
+      const profile = {
+        ...localUser,
+        isApproved: localUser.status === 'approved',
+        isAdmin: localUser.role === 'admin',
+      };
+      localAuthListeners.forEach(cb => cb(localUser, profile));
     }
   }
 }

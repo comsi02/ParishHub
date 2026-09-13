@@ -30,3 +30,9 @@ ui-debug.log*
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# registration import temp
+sheet-export.csv
+registration-persons.json
+public/registration-persons.json
+public/registration-sheet.csv

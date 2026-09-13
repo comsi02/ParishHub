@@ -15,10 +15,28 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // 주일학교 앱 관리자 (catechesis_admins 컬렉션)
-    function isCatechesisAdmin() {
+    // 최초 관리자 부트스트랩 (콘솔 없이 첫 관리자 확보)
+    function isBootstrapCatechesisAdmin() {
       return isAuthenticated() &&
-        exists(/databases/$(database)/documents/catechesis_admins/$(request.auth.uid));
+        request.auth.token.email != null &&
+        request.auth.token.email.lower() in [
+          'stcomsi02@gmail.com'
+        ];
+    }
+
+    // users.role == admin 도 관리자로 인정 (승인만으로는 부족)
+    function hasCatechesisAdminRole() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // 주일학교 앱 관리자
+    function isCatechesisAdmin() {
+      return isBootstrapCatechesisAdmin() ||
+        hasCatechesisAdminRole() ||
+        (isAuthenticated() &&
+          exists(/databases/$(database)/documents/catechesis_admins/$(request.auth.uid)));
     }
 
     function isAnyAdmin() {
@@ -59,15 +77,20 @@ service cloud.firestore {
       allow read: if isAuthenticated() &&
         (request.auth.uid == uid || isCatechesisAdmin());
       allow create: if isAuthenticated() && request.auth.uid == uid;
-      allow update: if isAuthenticated() &&
-        (request.auth.uid == uid || isCatechesisAdmin());
+      // 본인은 role/status 변경 불가 (권한 상승 방지). 관리자·부트스트랩만 변경 가능.
+      allow update: if isCatechesisAdmin() || (
+        isAuthenticated() &&
+        request.auth.uid == uid &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['role', 'status', 'approvedAt', 'rejectedAt'])
+      );
     }
 
     match /catechesis_admins/{uid} {
       // 본인 문서 읽기 필수 (로그인 시 관리자 여부 확인)
       allow read: if isAuthenticated() &&
         (request.auth.uid == uid || isCatechesisAdmin());
-      allow write: if isCatechesisAdmin(); // 첫 관리자는 콘솔에서 추가
+      allow write: if isCatechesisAdmin();
     }
 
     // ─────────────────────────────────────────
@@ -101,6 +124,12 @@ service cloud.firestore {
     match /catechesis_settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isAnyAdmin();
+    }
+
+    // 등록 시트 임포트 Person (학부모·학생)
+    match /catechesis_persons/{personId} {
+      allow read: if isAuthenticated();
+      allow write: if isCatechesisAdmin();
     }
   }
 }

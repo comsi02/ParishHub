@@ -1,0 +1,8 @@
+# Repo-root clutter (Firebase CLI / temp exports)
+*.log
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+sheet-export.csv
+registration-persons.json
+.DS_Store
