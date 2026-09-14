@@ -217,7 +217,11 @@ class DataProvider {
   //  편의 헬퍼 - 학부모(Parent) 목록
   // ============================================================
   getParents() {
-    return this.getPersonsByRole('parent');
+    const leaderRoles = ['fathers_chair', 'mothers_chair', 'fathers_secretary', 'mothers_secretary'];
+    return this.getPersons().filter(p =>
+      p.roles?.includes('parent') ||
+      p.roles?.some(r => leaderRoles.includes(r))
+    );
   }
 
   getParentById(id) {
@@ -247,10 +251,18 @@ class DataProvider {
   }
 
   // ============================================================
-  //  편의 헬퍼 - 교사진 (역할이 teacher/principal/vice_principal/liturgy_teacher/acolyte_teacher 중 하나인 사람)
+  //  편의 헬퍼 - 교사진 (교사·교감·부교감·담당·총무·청소년분과장)
   // ============================================================
   getTeacherRoles() {
-    return ['principal', 'vice_principal', 'teacher', 'liturgy_teacher', 'acolyte_teacher'];
+    return [
+      'principal',
+      'vice_principal',
+      'youth_director',
+      'secretary',
+      'liturgy_teacher',
+      'acolyte_teacher',
+      'teacher',
+    ];
   }
 
   getTeachers() {
@@ -262,7 +274,15 @@ class DataProvider {
 
   /** 사람의 가장 높은(표시용) 교사 역할 반환 */
   getPrimaryTeacherRole(person) {
-    const priority = ['principal', 'vice_principal', 'liturgy_teacher', 'acolyte_teacher', 'teacher'];
+    const priority = [
+      'principal',
+      'vice_principal',
+      'youth_director',
+      'secretary',
+      'liturgy_teacher',
+      'acolyte_teacher',
+      'teacher',
+    ];
     for (const r of priority) {
       if (person.roles && person.roles.includes(r)) {
         return { role: r, label: PERSON_ROLES[r]?.label || r };

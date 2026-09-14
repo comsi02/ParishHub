@@ -13,16 +13,84 @@ import {
   getDocFromServer,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   getDocs,
-  query,
-  where
 } from 'firebase/firestore';
 import { auth, db } from './firebase-init.js';
 
 const isFirebaseMode = import.meta.env.VITE_PROVIDER === 'firebase';
 
-/** 최초 관리자 이메일 — 로그인 시 role=admin + catechesis_admins 자동 부여 */
+/** 계정 권한
+ * - 학생 / 신부님: 단독(+관리자만 추가 가능)
+ * - 학부모 + 교직원: 서로 중복 가능 (학부모 없는 교사도 가능)
+ * - 관리자: 가입된 누구에게나 추가 가능
+ */
+export const ACCOUNT_ROLES = {
+  student: { id: 'student', label: '학생' },
+  priest: { id: 'priest', label: '신부님' },
+  parent: { id: 'parent', label: '학부모' },
+  fathers_chair: { id: 'fathers_chair', label: '자부회장' },
+  mothers_chair: { id: 'mothers_chair', label: '자모회장' },
+  fathers_secretary: { id: 'fathers_secretary', label: '자부회총무' },
+  mothers_secretary: { id: 'mothers_secretary', label: '자모회총무' },
+  teacher: { id: 'teacher', label: '교사' },
+  principal: { id: 'principal', label: '교감' },
+  vice_principal: { id: 'vice_principal', label: '부교감' },
+  liturgy_teacher: { id: 'liturgy_teacher', label: '전례부교사' },
+  acolyte_teacher: { id: 'acolyte_teacher', label: '복사교사' },
+  secretary: { id: 'secretary', label: '총무' },
+  youth_director: { id: 'youth_director', label: '청소년분과장' },
+  admin: { id: 'admin', label: '관리자' },
+};
+
+const ACCOUNT_ROLE_IDS = Object.keys(ACCOUNT_ROLES);
+
+/** 단독 전용 역할 */
+export const EXCLUSIVE_ACCOUNT_ROLES = ['student', 'priest'];
+
+/** 대표 role 우선순위 (표시·하위호환용) */
+const PRIMARY_ROLE_PRIORITY = [
+  'admin',
+  'priest',
+  'principal',
+  'vice_principal',
+  'youth_director',
+  'secretary',
+  'fathers_chair',
+  'mothers_chair',
+  'fathers_secretary',
+  'mothers_secretary',
+  'liturgy_teacher',
+  'acolyte_teacher',
+  'teacher',
+  'parent',
+  'student',
+];
+
+/** 교직원(교사계열) 역할 — 학부모와 겸임 가능 */
+export const STAFF_ACCOUNT_ROLES = [
+  'teacher',
+  'principal',
+  'vice_principal',
+  'liturgy_teacher',
+  'acolyte_teacher',
+  'secretary',
+  'youth_director',
+];
+
+/** 자부회·자모회 임원 (학부모와 겸임 가능) */
+export const PARENT_LEADER_ROLES = [
+  'fathers_chair',
+  'mothers_chair',
+  'fathers_secretary',
+  'mothers_secretary',
+];
+
+/** 프로필 연결 없이 이용 가능한 역할 (관리자·신부님) */
+const PERSON_OPTIONAL_ROLES = new Set(['admin', 'priest']);
+
+/** 최초 관리자 이메일 — 로그인 시 admin + catechesis_admins 자동 부여 */
 const BOOTSTRAP_ADMIN_EMAILS = [
   'stcomsi02@gmail.com',
 ];
@@ -49,6 +117,127 @@ async function getDocPreferServer(ref) {
   }
 }
 
+/**
+ * 단일 role / roles[] / 혼합 문서를 정규화된 roles 배열로 변환
+ * @param {object|string|string[]|null|undefined} data
+ * @returns {string[]}
+ */
+export function normalizeAccountRoles(data) {
+  if (!data) return [];
+  if (typeof data === 'string') {
+    return ACCOUNT_ROLE_IDS.includes(data) ? [data] : [];
+  }
+  if (Array.isArray(data)) {
+    return [...new Set(data.filter(r => ACCOUNT_ROLE_IDS.includes(r)))];
+  }
+  const fromArray = Array.isArray(data.roles)
+    ? data.roles.filter(r => ACCOUNT_ROLE_IDS.includes(r))
+    : [];
+  if (fromArray.length) return [...new Set(fromArray)];
+  if (typeof data.role === 'string' && ACCOUNT_ROLE_IDS.includes(data.role)) {
+    return [data.role];
+  }
+  return [];
+}
+
+/** 표시·하위호환용 대표 role */
+export function primaryAccountRole(roles) {
+  const list = normalizeAccountRoles(roles);
+  for (const id of PRIMARY_ROLE_PRIORITY) {
+    if (list.includes(id)) return id;
+  }
+  return list[0] || 'none';
+}
+
+/**
+ * 역할 조합 규칙 적용
+ * - 학생 / 신부님: 단독만 (관리자 포함 겸임 불가)
+ * - 학부모 + 교직원 + 관리자: 자유 겸임
+ * @param {object|string|string[]} rolesInput
+ * @param {{ preferred?: string }} [opts] 방금 선택한 역할
+ * @returns {string[]}
+ */
+export function reconcileAccountRoles(rolesInput, opts = {}) {
+  let list = normalizeAccountRoles(rolesInput);
+  const preferred = opts.preferred;
+
+  if (preferred === 'student' || (list.includes('student') && preferred !== 'priest')) {
+    if (list.includes('student')) return ['student'];
+  }
+  if (preferred === 'priest' || list.includes('priest')) {
+    if (list.includes('priest')) return ['priest'];
+  }
+
+  // 학생·신부님은 학부모/교직원/관리자와 겸임 불가
+  list = list.filter(r => r !== 'student' && r !== 'priest');
+  // 자부·자모 임원이면 학부모도 함께 유지
+  if (list.some(r => PARENT_LEADER_ROLES.includes(r)) && !list.includes('parent')) {
+    list.push('parent');
+  }
+  return list;
+}
+
+export function hasAccountRole(data, role) {
+  return normalizeAccountRoles(data).includes(role);
+}
+
+export function isAccountAdmin(data) {
+  return hasAccountRole(data, 'admin');
+}
+
+export function isAccountStaff(data) {
+  const list = normalizeAccountRoles(data);
+  return list.some(r => STAFF_ACCOUNT_ROLES.includes(r));
+}
+
+/** 프로필 연결이 필요한지 — 관리자·신부님만이면 선택, 그 외(역할 비어 있음 포함)는 Person 필수 */
+export function rolesNeedPersonLink(roles) {
+  const list = reconcileAccountRoles(roles);
+  if (!list.length) return true;
+  return list.some(r => !PERSON_OPTIONAL_ROLES.has(r));
+}
+
+export function formatAccountRolesLabel(roles) {
+  const list = reconcileAccountRoles(roles);
+  if (!list.length) return '미지정';
+  return ACCOUNT_ROLE_IDS
+    .filter(id => list.includes(id))
+    .map(r => ACCOUNT_ROLES[r]?.label || r)
+    .join(' · ');
+}
+
+/** users 컬렉션에 저장할 역할 — 관리자만 */
+export function userDocRolesFromAdminFlag(wantAdmin) {
+  return wantAdmin ? ['admin'] : [];
+}
+
+function withRoleFields(rolesInput) {
+  const roles = reconcileAccountRoles(rolesInput);
+  return {
+    roles,
+    role: primaryAccountRole(roles),
+  };
+}
+
+function enrichProfile(base) {
+  const roles = reconcileAccountRoles(base);
+  const isAdmin = roles.includes('admin') || Boolean(base?.isAdmin);
+  const isStaff = roles.some(r => STAFF_ACCOUNT_ROLES.includes(r));
+  return {
+    ...base,
+    roles,
+    role: primaryAccountRole(roles),
+    isAdmin,
+    isApproved: Boolean(base?.isApproved || base?.status === 'approved' || isAdmin),
+    isStudent: roles.includes('student'),
+    isPriest: roles.includes('priest'),
+    isParent: roles.includes('parent')
+      || roles.some(r => PARENT_LEADER_ROLES.includes(r)),
+    isTeacher: isStaff || roles.includes('teacher'),
+    isStaff,
+  };
+}
+
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: 'select_account'
@@ -63,14 +252,16 @@ const localAuthListeners = [];
 
 function getLocalUsersList() {
   const data = localStorage.getItem(LOCAL_STORAGE_KEY_USERS_LIST);
-  if (data) return JSON.parse(data);
+  if (data) {
+    return JSON.parse(data).map(u => ({ ...u, ...withRoleFields(u) }));
+  }
   const initial = [
     {
       uid: 'demo-admin-01',
       email: 'admin@standrewkimlondon.ca',
       displayName: '관리자 신부님/교감',
       status: 'approved',
-      role: 'admin',
+      ...withRoleFields(['admin']),
       requestedAt: new Date().toISOString(),
       approvedAt: new Date().toISOString()
     },
@@ -79,7 +270,8 @@ function getLocalUsersList() {
       email: 'teacher@catechesis.local',
       displayName: '체칠리아 선생님',
       status: 'approved',
-      role: 'teacher',
+      ...withRoleFields(['teacher', 'parent']),
+      personId: 'demo-person-teacher',
       requestedAt: new Date().toISOString(),
       approvedAt: new Date().toISOString()
     },
@@ -88,7 +280,7 @@ function getLocalUsersList() {
       email: 'newbie@gmail.com',
       displayName: '신규 교사 지원자',
       status: 'pending',
-      role: 'teacher',
+      ...withRoleFields([]),
       requestedAt: new Date().toISOString(),
       approvedAt: null
     }
@@ -117,18 +309,18 @@ export async function signInWithGoogle() {
       throw error;
     }
   } else {
-    // Local demo mode simulation: toggle to teacher by default
     localUser = {
       uid: 'demo-teacher-01',
       displayName: '체칠리아 선생님',
       email: 'teacher@catechesis.local',
       photoURL: null,
       status: 'approved',
-      role: 'teacher',
+      ...withRoleFields(['teacher', 'parent']),
+      personId: 'demo-person-teacher',
       isDemo: true
     };
     localStorage.setItem(LOCAL_STORAGE_KEY_USER, JSON.stringify(localUser));
-    const profile = { ...localUser, isApproved: true, isAdmin: false };
+    const profile = enrichProfile({ ...localUser, isApproved: true });
     localAuthListeners.forEach(cb => cb(localUser, profile));
     return { user: localUser, profile };
   }
@@ -144,33 +336,31 @@ export async function syncUserProfile(user) {
   const bootstrapAdmin = isBootstrapAdminEmail(userEmail);
 
   if (!isFirebaseMode || !db) {
-    const role = bootstrapAdmin ? 'admin' : (user.role || 'teacher');
-    return {
+    return enrichProfile({
       uid: user.uid,
       displayName: user.displayName,
       email: userEmail || user.email,
       status: user.status || 'approved',
-      role,
+      ...withRoleFields(bootstrapAdmin ? ['admin'] : (user.roles || user.role || ['teacher'])),
       personId: user.personId || null,
       isApproved: true,
-      isAdmin: bootstrapAdmin || role === 'admin',
-    };
+      isAdmin: bootstrapAdmin || isAccountAdmin(user),
+    });
   }
 
-  const buildFallbackProfile = (extra = {}) => ({
+  const buildFallbackProfile = (extra = {}) => enrichProfile({
     uid: user.uid,
     email: userEmail || user.email || null,
     displayName: user.displayName || (userEmail ? userEmail.split('@')[0] : '사용자'),
     photoURL: user.photoURL || null,
     status: bootstrapAdmin ? 'approved' : (extra.status || 'pending'),
-    role: bootstrapAdmin ? 'admin' : (extra.role || 'teacher'),
+    ...withRoleFields(bootstrapAdmin ? ['admin'] : (extra.roles || extra.role || [])),
     personId: extra.personId || null,
     isApproved: bootstrapAdmin || extra.status === 'approved',
-    isAdmin: bootstrapAdmin || extra.role === 'admin',
+    isAdmin: bootstrapAdmin || isAccountAdmin(extra),
     ...extra,
-    // bootstrap 은 어떤 실패에서도 관리자 유지
     ...(bootstrapAdmin
-      ? { status: 'approved', role: 'admin', isApproved: true, isAdmin: true }
+      ? { status: 'approved', ...withRoleFields(['admin']), isApproved: true, isAdmin: true }
       : {}),
   });
 
@@ -207,20 +397,20 @@ export async function syncUserProfile(user) {
     const now = new Date().toISOString();
 
     if (!snap || !snap.exists()) {
+      const roleFields = withRoleFields(isAdminDoc ? ['admin'] : []);
       const newProfile = {
         uid: user.uid,
         email: userEmail || user.email || null,
         displayName: user.displayName || (userEmail ? userEmail.split('@')[0] : '사용자'),
         photoURL: user.photoURL || null,
         status: isAdminDoc ? 'approved' : 'pending',
-        role: isAdminDoc ? 'admin' : 'teacher',
+        ...roleFields,
         personId: null,
         requestedAt: now,
         lastLoginAt: now,
         ...(isAdminDoc ? { approvedAt: now } : {}),
       };
       try {
-        // merge:true — 읽기 실패 시 기존 admin 문서를 teacher 로 덮어쓰지 않음
         await setDoc(userRef, newProfile, { merge: true });
       } catch (e) {
         console.error('[Auth] catechesis_users 생성 실패:', e);
@@ -239,25 +429,53 @@ export async function syncUserProfile(user) {
       return buildFallbackProfile({
         ...newProfile,
         isApproved: newProfile.status === 'approved' || isAdminDoc,
-        isAdmin: isAdminDoc || newProfile.role === 'admin',
+        isAdmin: isAdminDoc || roleFields.roles.includes('admin'),
       });
     }
 
     const data = snap.data() || {};
-    let isAdmin = isAdminDoc || data.role === 'admin' || bootstrapAdmin;
+    let isAdmin = isAdminDoc || hasAccountRole(data, 'admin') || bootstrapAdmin;
+
+    // users 문서에는 관리자만 유지 (일반 역할은 Person)
+    const userRolesOnly = userDocRolesFromAdminFlag(isAdmin);
+
+    // Person.roles → 세션 권한 병합
+    let effectiveRoles = [...userRolesOnly];
+    const personId = data.personId || null;
+    if (personId) {
+      try {
+        const personSnap = await getDocPreferServer(doc(db, 'catechesis_persons', personId));
+        if (personSnap.exists()) {
+          const personRoles = normalizeAccountRoles(personSnap.data()?.roles || [])
+            .filter(r => r !== 'admin');
+          effectiveRoles = reconcileAccountRoles([...personRoles, ...userRolesOnly]);
+        }
+      } catch (e) {
+        console.warn('[Auth] Person 역할 로드 실패:', e?.code || e?.message || e);
+        // fallback: 구버전 users.roles
+        const legacy = normalizeAccountRoles(data).filter(r => r !== 'admin');
+        effectiveRoles = reconcileAccountRoles([...legacy, ...userRolesOnly]);
+      }
+    } else {
+      // 미연결: 구버전 users.roles 를 세션에만 반영 (문서는 admin만 기록)
+      const legacy = normalizeAccountRoles(data).filter(r => r !== 'admin');
+      if (legacy.length) {
+        effectiveRoles = reconcileAccountRoles([...legacy, ...userRolesOnly]);
+      }
+    }
 
     const profilePatch = {
       lastLoginAt: now,
       displayName: user.displayName || data.displayName,
       photoURL: user.photoURL || data.photoURL || null,
+      ...withRoleFields(userRolesOnly),
     };
     if (userEmail && userEmail !== data.email) {
       profilePatch.email = userEmail;
     }
 
-    if (isAdmin && (data.status !== 'approved' || data.role !== 'admin')) {
+    if (isAdmin && data.status !== 'approved') {
       profilePatch.status = 'approved';
-      profilePatch.role = 'admin';
       profilePatch.approvedAt = data.approvedAt || now;
     }
 
@@ -279,10 +497,11 @@ export async function syncUserProfile(user) {
       }
     }
 
-    const merged = { ...data, ...profilePatch };
-    isAdmin = isAdmin || merged.role === 'admin' || bootstrapAdmin;
+    const merged = { ...data, ...profilePatch, personId };
     return buildFallbackProfile({
       ...merged,
+      ...withRoleFields(effectiveRoles),
+      personId,
       isApproved: merged.status === 'approved' || isAdmin,
       isAdmin,
     });
@@ -321,15 +540,15 @@ export function onAuthStateChanged(callback) {
           console.error('[Auth] Profile sync error:', e);
           const email = resolveUserEmail(user);
           const bootstrapAdmin = isBootstrapAdminEmail(email);
-          callback(user, {
+          callback(user, enrichProfile({
             uid: user.uid,
             email: email || user.email,
             displayName: user.displayName,
             status: bootstrapAdmin ? 'approved' : 'pending',
-            role: bootstrapAdmin ? 'admin' : 'teacher',
+            ...withRoleFields(bootstrapAdmin ? ['admin'] : []),
             isApproved: bootstrapAdmin,
             isAdmin: bootstrapAdmin,
-          });
+          }));
         }
       } else {
         callback(null, null);
@@ -337,7 +556,9 @@ export function onAuthStateChanged(callback) {
     });
   } else {
     localAuthListeners.push(callback);
-    const profile = localUser ? { ...localUser, isApproved: localUser.status === 'approved', isAdmin: localUser.role === 'admin' } : null;
+    const profile = localUser
+      ? enrichProfile({ ...localUser, isApproved: localUser.status === 'approved' })
+      : null;
     setTimeout(() => callback(localUser, profile), 0);
     return () => {
       const idx = localAuthListeners.indexOf(callback);
@@ -354,7 +575,10 @@ export async function getAllUsers() {
     try {
       const colRef = collection(db, 'catechesis_users');
       const snap = await getDocs(colRef);
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return snap.docs.map(d => {
+        const data = { id: d.id, ...d.data() };
+        return { ...data, ...withRoleFields(data) };
+      });
     } catch (e) {
       console.error('[Auth] 사용자 목록 불러오기 실패:', e);
       return [];
@@ -364,33 +588,99 @@ export async function getAllUsers() {
   }
 }
 
+async function syncAdminDoc(uid, roles, email = null) {
+  if (!isFirebaseMode || !db) return;
+  const adminRef = doc(db, 'catechesis_admins', uid);
+  try {
+    if (roles.includes('admin')) {
+      await setDoc(adminRef, {
+        ...(email ? { email } : {}),
+        adminSince: new Date().toISOString(),
+        source: 'approve',
+      }, { merge: true });
+    } else {
+      await deleteDoc(adminRef);
+    }
+  } catch (e) {
+    // 권한 저장 본흐름을 막지 않음 (없는 문서 삭제 등)
+    if (e?.code !== 'not-found') {
+      console.warn('[Auth] catechesis_admins 동기화 경고:', e?.code || e?.message || e);
+    }
+  }
+}
+
 /**
- * 사용자를 승인합니다 (관리자용).
+ * 사용자를 승인합니다. users 에는 관리자 여부만 저장합니다.
  * @param {string} uid
- * @param {string} role 'teacher' | 'admin' | 'parent'
+ * @param {string|string[]|{ admin?: boolean }} rolesInput 관리자 플래그 또는 ['admin']
  */
-export async function approveUser(uid, role = 'teacher') {
+export async function approveUser(uid, rolesInput = []) {
+  const wantAdmin = typeof rolesInput === 'object' && !Array.isArray(rolesInput)
+    ? Boolean(rolesInput.admin)
+    : reconcileAccountRoles(rolesInput).includes('admin');
+  const roleFields = withRoleFields(userDocRolesFromAdminFlag(wantAdmin));
+  const approvedAt = new Date().toISOString();
+
   if (isFirebaseMode && db) {
     const userRef = doc(db, 'catechesis_users', uid);
+    const snap = await getDoc(userRef);
+    const email = snap.exists() ? snap.data()?.email : null;
     await updateDoc(userRef, {
       status: 'approved',
-      role: role,
-      approvedAt: new Date().toISOString()
+      ...roleFields,
+      approvedAt,
     });
-    if (role === 'admin') {
-      const adminRef = doc(db, 'catechesis_admins', uid);
-      await setDoc(adminRef, { adminSince: new Date().toISOString() }, { merge: true });
-    }
+    await syncAdminDoc(uid, roleFields.roles, email);
   } else {
     const list = getLocalUsersList();
     const target = list.find(u => u.uid === uid);
     if (target) {
       target.status = 'approved';
-      target.role = role;
-      target.approvedAt = new Date().toISOString();
+      Object.assign(target, roleFields);
+      target.approvedAt = approvedAt;
       saveLocalUsersList(list);
     }
   }
+}
+
+/**
+ * users 문서의 관리자 여부만 변경합니다.
+ * @param {string} uid
+ * @param {boolean} wantAdmin
+ */
+export async function updateUserAdminFlag(uid, wantAdmin) {
+  const roleFields = withRoleFields(userDocRolesFromAdminFlag(wantAdmin));
+
+  if (isFirebaseMode && db) {
+    const userRef = doc(db, 'catechesis_users', uid);
+    const snap = await getDoc(userRef);
+    const email = snap.exists() ? snap.data()?.email : null;
+    await updateDoc(userRef, roleFields);
+    await syncAdminDoc(uid, roleFields.roles, email);
+  } else {
+    const list = getLocalUsersList();
+    const target = list.find(u => u.uid === uid);
+    if (target) {
+      Object.assign(target, roleFields);
+      saveLocalUsersList(list);
+    }
+    if (localUser && localUser.uid === uid) {
+      localUser = { ...localUser, ...roleFields };
+      localStorage.setItem(LOCAL_STORAGE_KEY_USER, JSON.stringify(localUser));
+      localAuthListeners.forEach(cb => cb(localUser, enrichProfile({
+        ...localUser,
+        isApproved: localUser.status === 'approved',
+      })));
+    }
+  }
+}
+
+/**
+ * @deprecated 일반 역할은 Person에 저장하세요. 호환용으로 관리자만 users에 반영합니다.
+ */
+export async function updateUserRoles(uid, rolesInput) {
+  const wantAdmin = reconcileAccountRoles(rolesInput).includes('admin');
+  return updateUserAdminFlag(uid, wantAdmin);
 }
 
 /**
@@ -415,7 +705,7 @@ export async function rejectUser(uid) {
 }
 
 /**
- * Google 계정 ↔ Person 연결 (본인 또는 관리자)
+ * Google 계정 ↔ Person 연결 (관리자 전용)
  * @param {string} uid
  * @param {string|null} personId
  */
@@ -438,11 +728,10 @@ export async function linkUserToPerson(uid, personId) {
     if (localUser && localUser.uid === uid) {
       localUser = { ...localUser, personId: value };
       localStorage.setItem(LOCAL_STORAGE_KEY_USER, JSON.stringify(localUser));
-      const profile = {
+      const profile = enrichProfile({
         ...localUser,
         isApproved: localUser.status === 'approved',
-        isAdmin: localUser.role === 'admin',
-      };
+      });
       localAuthListeners.forEach(cb => cb(localUser, profile));
     }
   }
@@ -461,7 +750,7 @@ export function setLocalDemoUserRole(type) {
       email: 'newbie@gmail.com',
       photoURL: null,
       status: 'pending',
-      role: 'teacher',
+      ...withRoleFields([]),
       isDemo: true
     };
   } else if (type === 'teacher') {
@@ -471,7 +760,8 @@ export function setLocalDemoUserRole(type) {
       email: 'teacher@catechesis.local',
       photoURL: null,
       status: 'approved',
-      role: 'teacher',
+      ...withRoleFields(['teacher', 'parent']),
+      personId: 'demo-person-teacher',
       isDemo: true
     };
   } else if (type === 'admin') {
@@ -481,12 +771,14 @@ export function setLocalDemoUserRole(type) {
       email: 'pastor@standrewkimlondon.ca',
       photoURL: null,
       status: 'approved',
-      role: 'admin',
+      ...withRoleFields(['admin']),
       isDemo: true
     };
   }
   localStorage.setItem(LOCAL_STORAGE_KEY_USER, JSON.stringify(localUser));
-  const profile = localUser ? { ...localUser, isApproved: localUser.status === 'approved', isAdmin: localUser.role === 'admin' } : null;
+  const profile = localUser
+    ? enrichProfile({ ...localUser, isApproved: localUser.status === 'approved' })
+    : null;
   localAuthListeners.forEach(cb => cb(localUser, profile));
 }
 

@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   getDocs,
+  setDoc,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase-init.js';
@@ -149,17 +150,25 @@ export async function upsertPersons(persons) {
 }
 
 /**
- * 검색 (이름/세례명)
+ * 검색 (이름/세례명/이메일/전화)
+ * @param {string} query
+ * @param {{ role?: string, limit?: number|null }} [opts] limit null이면 전체
  */
-export function searchPersons(query, { role } = {}) {
+export function searchPersons(query, { role, limit = 50 } = {}) {
   const q = (query || '').trim().toLowerCase();
   let list = dataProvider.getPersons();
   if (role) list = list.filter(p => p.roles?.includes(role));
-  if (!q) return list.slice(0, 50);
-  return list.filter(p =>
-    (p.name || '').toLowerCase().includes(q) ||
-    (p.baptismalName || '').toLowerCase().includes(q)
-  ).slice(0, 50);
+  if (q) {
+    list = list.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.baptismalName || '').toLowerCase().includes(q) ||
+      (p.email || '').toLowerCase().includes(q) ||
+      String(p.phone || '').toLowerCase().includes(q)
+    );
+  }
+  list = list.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+  if (limit == null || limit < 0) return list;
+  return list.slice(0, limit);
 }
 
 export async function getPersonByIdAsync(id) {
@@ -170,4 +179,23 @@ export async function getPersonByIdAsync(id) {
     return dataProvider.getPersonById(id);
   }
   return null;
+}
+
+/**
+ * Person 일부 필드 패치 (로컬 + Firestore)
+ * @param {string} id
+ * @param {object} updates
+ */
+export async function patchPerson(id, updates) {
+  if (!id || !updates) return null;
+  const updated = dataProvider.updatePerson(id, {
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  });
+  if (!updated) return null;
+  if (isFirebaseMode && db) {
+    const { id: _omit, ...rest } = updated;
+    await setDoc(doc(db, PERSONS_COLLECTION, id), { ...rest, id }, { merge: true });
+  }
+  return updated;
 }

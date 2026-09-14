@@ -22,13 +22,20 @@ export const DEFAULT_SETTINGS = {
 //  2. 역할(Role) 상수 및 메타데이터
 // ============================================================
 export const PERSON_ROLES = {
-  student:          { label: '학생',           icon: '🧒', badgeClass: 'badge-grade' },
-  parent:           { label: '학부모',          icon: '👨‍👩‍👧', badgeClass: 'badge-present' },
-  teacher:          { label: '교사',            icon: '✝️', badgeClass: 'badge-sacrament' },
-  vice_principal:   { label: '부교감',          icon: '✝️', badgeClass: 'badge-grade' },
-  principal:        { label: '교감',            icon: '✝️', badgeClass: 'badge-sacrament' },
-  liturgy_teacher:  { label: '전례부선생님',    icon: '📖', badgeClass: 'badge-sacrament' },
-  acolyte_teacher:  { label: '복사담당선생님',  icon: '🕯️', badgeClass: 'badge-sacrament' },
+  student:          { label: '학생',              icon: '🧒', badgeClass: 'badge-grade' },
+  priest:           { label: '신부님',             icon: '✝️', badgeClass: 'badge-sacrament' },
+  parent:           { label: '학부모',             icon: '👨‍👩‍👧', badgeClass: 'badge-present' },
+  fathers_chair:    { label: '자부회장',           icon: '👔', badgeClass: 'badge-present' },
+  mothers_chair:    { label: '자모회장',           icon: '👗', badgeClass: 'badge-present' },
+  fathers_secretary:{ label: '자부회총무',         icon: '📋', badgeClass: 'badge-grade' },
+  mothers_secretary:{ label: '자모회총무',         icon: '📋', badgeClass: 'badge-grade' },
+  teacher:          { label: '교사',               icon: '✝️', badgeClass: 'badge-sacrament' },
+  principal:        { label: '교감',               icon: '✝️', badgeClass: 'badge-sacrament' },
+  vice_principal:   { label: '부교감',             icon: '✝️', badgeClass: 'badge-grade' },
+  liturgy_teacher:  { label: '전례부교사', icon: '📖', badgeClass: 'badge-sacrament' },
+  acolyte_teacher:  { label: '복사교사',   icon: '🕯️', badgeClass: 'badge-sacrament' },
+  secretary:        { label: '총무',               icon: '📋', badgeClass: 'badge-present' },
+  youth_director:   { label: '청소년분과장',       icon: '⛪', badgeClass: 'badge-sacrament' },
 };
 
 // ============================================================

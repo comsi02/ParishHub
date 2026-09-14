@@ -24,11 +24,17 @@ service cloud.firestore {
         ];
     }
 
-    // users.role == admin 도 관리자로 인정 (승인만으로는 부족)
+    // users.role == admin 또는 roles 배열에 admin 포함
     function hasCatechesisAdminRole() {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)).data.role == 'admin';
+        (
+          get(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)).data.role == 'admin' ||
+          (
+            'roles' in get(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)).data &&
+            get(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)).data.roles.hasAny(['admin'])
+          )
+        );
     }
 
     // 주일학교 앱 관리자
@@ -41,6 +47,18 @@ service cloud.firestore {
 
     function isAnyAdmin() {
       return isLiturgyAdmin() || isCatechesisAdmin();
+    }
+
+    // 승인 + 프로필(Person) 연결 완료 사용자 (관리자 예외)
+    function isCatechesisActiveUser() {
+      return isCatechesisAdmin() || (
+        isAuthenticated() &&
+        exists(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)).data.status == 'approved' &&
+        get(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)).data.keys().hasAll(['personId']) &&
+        get(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)).data.personId is string &&
+        get(/databases/$(database)/documents/catechesis_users/$(request.auth.uid)).data.personId.size() > 0
+      );
     }
 
     // 하위 호환: 기존 isAdmin() = 전례 관리자
@@ -76,13 +94,21 @@ service cloud.firestore {
     match /catechesis_users/{uid} {
       allow read: if isAuthenticated() &&
         (request.auth.uid == uid || isCatechesisAdmin());
-      allow create: if isAuthenticated() && request.auth.uid == uid;
-      // 본인은 role/status 변경 불가 (권한 상승 방지). 관리자·부트스트랩만 변경 가능.
+      allow create: if isAuthenticated() && request.auth.uid == uid
+        && (!('personId' in request.resource.data) || request.resource.data.personId == null)
+        && (
+          isBootstrapCatechesisAdmin() ||
+          (
+            (!('roles' in request.resource.data) || !request.resource.data.roles.hasAny(['admin'])) &&
+            (!('role' in request.resource.data) || request.resource.data.role != 'admin')
+          )
+        );
+      // 본인은 role/roles/status/personId 변경 불가. 프로필 연결·권한은 관리자만.
       allow update: if isCatechesisAdmin() || (
         isAuthenticated() &&
         request.auth.uid == uid &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['role', 'status', 'approvedAt', 'rejectedAt'])
+          .hasAny(['role', 'roles', 'status', 'approvedAt', 'rejectedAt', 'personId', 'personLinkedAt'])
       );
     }
 
@@ -97,38 +123,38 @@ service cloud.firestore {
     // 주일학교 데이터
     // ─────────────────────────────────────────
     match /catechesis_students/{studentId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isCatechesisActiveUser();
     }
 
     match /catechesis_parents/{parentId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isCatechesisActiveUser();
     }
 
     match /catechesis_teachers/{teacherId} {
-      allow read: if isAuthenticated();
+      allow read: if isCatechesisActiveUser();
       allow write: if isAnyAdmin();
     }
 
     match /catechesis_attendance/{attendanceId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isCatechesisActiveUser();
     }
 
     match /catechesis_activities/{activityId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isCatechesisActiveUser();
     }
 
     match /catechesis_grace_ledger/{ledgerId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isCatechesisActiveUser();
     }
 
     match /catechesis_settings/{settingId} {
-      allow read: if isAuthenticated();
+      allow read: if isCatechesisActiveUser();
       allow write: if isAnyAdmin();
     }
 
     // 등록 시트 임포트 Person (학부모·학생)
     match /catechesis_persons/{personId} {
-      allow read: if isAuthenticated();
+      allow read: if isCatechesisAdmin() || isCatechesisActiveUser();
       allow write: if isCatechesisAdmin();
     }
   }

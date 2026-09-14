@@ -2,24 +2,31 @@
 // church-catechesis 주일학교 & 은총표 관리 애플리케이션 진입점
 // v2 - 통합 Person 모델 + 자유 합반(Class) 구조 + Google 인증 및 관리자 승인 체계
 
-import { dataProvider } from './services/DataProvider.js';
-import { GRADES, GRADE_SORT_MAP, DEPARTMENTS, PERSON_ROLES, getRecentSaturday, AVAILABLE_SEASONS, getCurrentSeasonId } from './mock/sampleData.js';
+import { AVAILABLE_SEASONS, GRADE_SORT_MAP, PERSON_ROLES, getCurrentSeasonId, getRecentSaturday } from './mock/sampleData.js';
 import {
+  ACCOUNT_ROLES,
+  EXCLUSIVE_ACCOUNT_ROLES,
+  PARENT_LEADER_ROLES,
+  STAFF_ACCOUNT_ROLES,
+  approveUser,
+  formatAccountRolesLabel,
+  getAllUsers,
+  linkUserToPerson,
+  maskBaptismalName,
+  maskKoreanName,
+  maskTeacherName,
+  onAuthStateChanged,
+  reconcileAccountRoles,
+  rejectUser,
+  rolesNeedPersonLink,
+  setLocalDemoUserRole,
   signInWithGoogle,
   signOut,
-  onAuthStateChanged,
-  maskKoreanName,
-  maskBaptismalName,
-  maskTeacherName,
-  maskPhoneNumber,
-  getAllUsers,
-  approveUser,
-  rejectUser,
-  linkUserToPerson,
-  setLocalDemoUserRole
+  updateUserAdminFlag
 } from './services/auth.js';
+import { dataProvider } from './services/DataProvider.js';
+import { loadPersonsFromFirestore, patchPerson, searchPersons, upsertPersons } from './services/personStore.js';
 import { parseRegistrationCsv } from './services/registrationImport.js';
-import { upsertPersons, loadPersonsFromFirestore, searchPersons } from './services/personStore.js';
 
 // --- State ---
 let currentTab = 'dashboard';
@@ -29,19 +36,25 @@ let currentDirectoryView = 'students'; // 'students' | 'parents' | 'teachers' | 
 let currentUser = null;
 let currentUserProfile = null;
 
-const MORE_TABS = new Set(['stats', 'activities', 'students']);
-const ALL_TABS = new Set(['dashboard', 'schedule', 'attendance', 'stats', 'activities', 'grace', 'students']);
-
-function isUserApproved() {
-  if (currentUserProfile?.isApproved || currentUserProfile?.isAdmin) return true;
-  const email = (currentUser?.email || currentUserProfile?.email || '').toLowerCase();
-  return email === 'stcomsi02@gmail.com';
-}
+const MORE_TABS = new Set(['stats', 'activities', 'students', 'orgchart', 'admin']);
+const ALL_TABS = new Set(['dashboard', 'schedule', 'attendance', 'stats', 'activities', 'grace', 'students', 'orgchart', 'admin']);
 
 function isUserAdmin() {
   if (currentUserProfile?.isAdmin) return true;
   const email = (currentUser?.email || currentUserProfile?.email || '').toLowerCase();
   return email === 'stcomsi02@gmail.com';
+}
+
+/** 승인 + (필요 시) 프로필 연결 완료 시에만 사이트 이용 가능. 관리자·신부님은 예외. */
+function isUserApproved() {
+  if (isUserAdmin()) return true;
+  if (!currentUserProfile?.isApproved) return false;
+  if (!rolesNeedPersonLink(currentUserProfile)) return true;
+  return Boolean(currentUserProfile?.personId);
+}
+
+function hasPersonLinked() {
+  return Boolean(currentUserProfile?.personId);
 }
 
 // --- DOM References ---
@@ -97,6 +110,10 @@ function syncNavActiveState(tabName) {
 
 function switchToTab(tabName) {
   if (!ALL_TABS.has(tabName)) return;
+  if (tabName === 'admin' && !isUserAdmin()) {
+    showToast('가입 승인 관리는 관리자만 이용할 수 있습니다.', '🔒');
+    return;
+  }
   currentTab = tabName;
   tabPanels.forEach(p => p.classList.remove('active'));
   document.getElementById(`panel-${tabName}`)?.classList.add('active');
@@ -110,6 +127,8 @@ function switchToTab(tabName) {
   if (tabName === 'activities') renderActivities();
   if (tabName === 'grace') renderGraceBank();
   if (tabName === 'students') renderDirectory();
+  if (tabName === 'orgchart') renderOrgChart();
+  if (tabName === 'admin') renderAdminUsersPage();
 }
 
 // --- Helper Functions ---
@@ -402,11 +421,15 @@ function showUserDetail(type, id) {
       }
     }
 
-    // 특수 역할 뱃지들
+    // 특수 역할 뱃지들 — 대표 역할과 중복 제외
+    const primaryRoleId = primaryRole?.role;
     const specialRoleBadges = (person.roles || [])
-      .filter(r => ['liturgy_teacher', 'acolyte_teacher'].includes(r))
-      .map(r => `<span class="badge badge-sacrament" style="font-size: 0.78rem;">${PERSON_ROLES[r]?.label || r}</span>`)
-      .join(' ');
+      .filter(r => [
+        'liturgy_teacher', 'acolyte_teacher', 'secretary', 'youth_director',
+        'fathers_chair', 'mothers_chair', 'fathers_secretary', 'mothers_secretary',
+      ].includes(r) && r !== primaryRoleId)
+      .map(r => `<span class="badge ${PERSON_ROLES[r]?.badgeClass || 'badge-present'}" style="font-size:0.72rem; margin-right:0.25rem;">${PERSON_ROLES[r]?.label || r}</span>`)
+      .join('');
 
     gridEl.innerHTML = `
       <div class="detail-item">
@@ -541,24 +564,42 @@ function getAccessLockedHtml(tabTitle) {
         </button>
       </div>
     `;
-  } else {
-    const name = currentUserProfile?.displayName || currentUser.displayName || '회원';
-    const email = currentUserProfile?.email || currentUser.email || '';
+  }
+
+  const name = currentUserProfile?.displayName || currentUser.displayName || '회원';
+  const email = currentUserProfile?.email || currentUser.email || '';
+
+  if (currentUserProfile?.isApproved && !hasPersonLinked()) {
     return `
       <div class="access-locked-card pending">
-        <div class="locked-icon">⏳</div>
-        <h3>가입 승인 심사 중입니다</h3>
+        <div class="locked-icon">👤</div>
+        <h3>프로필 연결 대기 중입니다</h3>
         <p>
-          <strong>${name}</strong> (${email}) 님의 가입 신청이 접수되었습니다.<br/>
-          본당 주일학교 관리자(교장/교감/교사회)의 승인 완료 후 ${tabTitle} 기능을 정상적으로 이용하실 수 있습니다.
+          <strong>${name}</strong> (${email}) 님은 가입 승인은 되었지만,<br/>
+          관리자가 등록 멤버 프로필을 연결한 뒤에 ${tabTitle} 기능을 이용할 수 있습니다.<br/>
+          <span style="font-size:0.82rem; color:var(--text-muted);">연결이 끝나면 페이지를 새로고침해 주세요.</span>
         </p>
         <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
-          <span class="role-badge-tag role-badge-pending">상태: 승인 대기</span>
-          <span style="font-size: 0.8rem; color: var(--text-muted);">신청일: ${new Date(currentUserProfile?.requestedAt || Date.now()).toLocaleDateString('ko-KR')}</span>
+          <span class="role-badge-tag role-badge-pending">상태: 프로필 연결 대기</span>
         </div>
       </div>
     `;
   }
+
+  return `
+    <div class="access-locked-card pending">
+      <div class="locked-icon">⏳</div>
+      <h3>가입 승인 심사 중입니다</h3>
+      <p>
+        <strong>${name}</strong> (${email}) 님의 가입 신청이 접수되었습니다.<br/>
+        관리자가 승인하고 프로필을 연결한 뒤 ${tabTitle} 기능을 이용하실 수 있습니다.
+      </p>
+      <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+        <span class="role-badge-tag role-badge-pending">상태: 승인 대기</span>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">신청일: ${new Date(currentUserProfile?.requestedAt || Date.now()).toLocaleDateString('ko-KR')}</span>
+      </div>
+    </div>
+  `;
 }
 
 async function handleGoogleLogin() {
@@ -569,10 +610,12 @@ async function handleGoogleLogin() {
       btn.innerHTML = `<span>⏳ 로그인 중...</span>`;
     }
     const { user, profile } = await signInWithGoogle();
-    if (profile?.isApproved) {
+    if (profile?.isAdmin || (profile?.isApproved && profile?.personId)) {
       showToast(`환영합니다, ${user?.displayName || '선생님'}님!`, '✝️');
+    } else if (profile?.isApproved) {
+      showToast('승인은 완료되었습니다. 관리자의 프로필 연결 후 이용 가능합니다.', '👤');
     } else {
-      showToast(`가입 신청되었습니다. 관리자 승인 후 이용 가능합니다.`, '⏳');
+      showToast('가입 신청되었습니다. 관리자 승인·프로필 연결 후 이용 가능합니다.', '⏳');
     }
   } catch (err) {
     console.error(err);
@@ -607,17 +650,353 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-function parentPersonOptionsHtml(selectedId) {
-  const parents = dataProvider.getPersonsByRole('parent');
+let adminPersonSearchQuery = '';
+let adminGoogleSearchQuery = '';
+let adminMainTab = 'approve'; // approve | google | import
+let adminPersonRoleTab = 'parent'; // priest | teacher | parent | student
+let adminGoogleStatusFilter = 'all'; // all | pending | unlinked | linked
+let adminPageBound = false;
+/** @type {object[]} */
+let adminUsersCache = [];
+/** @type {Map<string, object>} */
+let adminUsersByPersonId = new Map();
+let adminPersonSearchComposing = false;
+
+const ADMIN_TEACHER_PERSON_ROLES = [
+  'principal',
+  'vice_principal',
+  'liturgy_teacher',
+  'acolyte_teacher',
+  'secretary',
+  'youth_director',
+  'teacher',
+];
+
+/** 교사 탭 안에서의 표시 그룹 순서 */
+const TEACHER_TAB_GROUPS = [
+  { id: 'principal', label: '교감' },
+  { id: 'vice_principal', label: '부교감' },
+  { id: 'liturgy_teacher', label: '전례부교사' },
+  { id: 'acolyte_teacher', label: '복사교사' },
+  { id: 'secretary', label: '총무' },
+  { id: 'youth_director', label: '청소년분과장' },
+  { id: 'teacher', label: '교사' },
+];
+
+/** 학부모 탭 — 자부회·자모회 임원 그룹 */
+const PARENT_TAB_GROUPS = [
+  { id: 'fathers_chair', label: '자부회장' },
+  { id: 'mothers_chair', label: '자모회장' },
+  { id: 'fathers_secretary', label: '자부회총무' },
+  { id: 'mothers_secretary', label: '자모회총무' },
+  { id: 'parent', label: '학부모' },
+];
+
+function personMatchesAdminRoleTab(person, roleTab, linkedUser = null) {
+  const fromPerson = person?.roles || [];
+  const fromAccount = linkedUser
+    ? reconcileAccountRoles(linkedUser).filter(r => r !== 'admin')
+    : [];
+  const roles = [...new Set([...fromPerson, ...fromAccount])];
+  if (roleTab === 'priest') return roles.includes('priest');
+  if (roleTab === 'student') return roles.includes('student');
+  if (roleTab === 'parent') {
+    return roles.includes('parent') || roles.some(r => PARENT_LEADER_ROLES.includes(r));
+  }
+  if (roleTab === 'teacher') return roles.some(r => ADMIN_TEACHER_PERSON_ROLES.includes(r));
+  return true;
+}
+
+function primaryTeacherTabRole(person, linkedUser = null) {
+  const roles = [
+    ...new Set([
+      ...(person?.roles || []),
+      ...(linkedUser ? reconcileAccountRoles(linkedUser).filter(r => r !== 'admin') : []),
+    ]),
+  ];
+  for (const g of TEACHER_TAB_GROUPS) {
+    if (roles.includes(g.id)) return g.id;
+  }
+  return 'teacher';
+}
+
+function primaryParentTabRole(person, linkedUser = null) {
+  const roles = [
+    ...new Set([
+      ...(person?.roles || []),
+      ...(linkedUser ? reconcileAccountRoles(linkedUser).filter(r => r !== 'admin') : []),
+    ]),
+  ];
+  for (const g of PARENT_TAB_GROUPS) {
+    if (roles.includes(g.id)) return g.id;
+  }
+  return 'parent';
+}
+
+/** Person.roles → 계정 권한 초안 */
+function suggestAccountRolesFromPerson(person) {
+  const pr = person?.roles || [];
+  if (pr.includes('student')) return reconcileAccountRoles(['student']);
+  if (pr.includes('priest')) return reconcileAccountRoles(['priest']);
+  const out = [];
+  if (pr.includes('parent')) out.push('parent');
+  PARENT_LEADER_ROLES.forEach(r => {
+    if (pr.includes(r)) out.push(r);
+  });
+  STAFF_ACCOUNT_ROLES.forEach(r => {
+    if (pr.includes(r)) out.push(r);
+  });
+  return reconcileAccountRoles(out.length ? out : ['teacher']);
+}
+
+function personRolesBadgesHtml(person) {
+  const roles = person?.roles || [];
+  if (!roles.length) return '<span style="color:var(--text-muted); font-size:0.78rem;">역할 미지정</span>';
+  return roles.map(r => {
+    const meta = PERSON_ROLES[r] || ACCOUNT_ROLES[r];
+    const label = meta?.label || r;
+    const cls = meta?.badgeClass || 'badge-present';
+    return `<span class="badge ${cls}" style="font-size:0.72rem; margin:0.1rem 0.2rem 0.1rem 0;">${escapeHtml(label)}</span>`;
+  }).join('');
+}
+
+/** 계정 권한 체크박스 */
+function accountRolesChecksHtml(ownerId, selectedRoles = [], {
+  defaultTeacher = false,
+  ownerAttr = 'data-uid',
+  allowAdmin = true,
+} = {}) {
+  const selected = new Set(reconcileAccountRoles(selectedRoles));
+  if (defaultTeacher && selected.size === 0) selected.add('teacher');
+  const exclusiveOn = selected.has('student')
+    ? 'student'
+    : selected.has('priest')
+      ? 'priest'
+      : null;
+
+  return Object.values(ACCOUNT_ROLES)
+    .filter(r => allowAdmin || r.id !== 'admin')
+    .map(r => {
+      const checked = selected.has(r.id) ? ' checked' : '';
+      const disabled = exclusiveOn && r.id !== exclusiveOn ? ' disabled' : '';
+      return `
+      <label style="display:inline-flex; align-items:center; gap:0.25rem; font-size:0.72rem; margin:0.12rem 0.4rem 0.12rem 0; white-space:nowrap; ${disabled ? 'opacity:0.45;' : ''}">
+        <input type="checkbox" class="admin-role-check" ${ownerAttr}="${escapeHtml(ownerId)}" value="${r.id}"${checked}${disabled} />
+        ${escapeHtml(r.label)}
+      </label>
+    `;
+    }).join('');
+}
+
+function cssAttrEquals(value) {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(String(value));
+  }
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function readSelectedAccountRolesByAttr(ownerAttr, ownerId, root = document) {
+  const scope = root || document;
+  // 카드 스코프면 attr 없이 읽고, 전역이면 안전하게 escape
+  const checks = scope.classList?.contains('admin-user-card')
+    ? scope.querySelectorAll('.admin-role-check')
+    : scope.querySelectorAll(`.admin-role-check[${ownerAttr}="${cssAttrEquals(ownerId)}"]`);
+  const raw = [...new Set([...checks].filter(c => c.checked).map(c => c.value))];
+  return reconcileAccountRoles(raw);
+}
+
+function readSelectedAccountRoles(uid, root = document) {
+  return readSelectedAccountRolesByAttr('data-uid', uid, root);
+}
+
+/** 계정 권한 → Person.roles (관리자 제외) */
+function accountRolesToPersonRoles(rolesInput) {
+  return reconcileAccountRoles(rolesInput).filter(r => r !== 'admin' && Boolean(PERSON_ROLES[r]));
+}
+
+/** 카드 내 등록 역할 뱃지 갱신 (전체 화면 리렌더 없음) */
+function refreshPersonCardRoleBadges(card, roles) {
+  if (!card) return;
+  const rows = card.querySelectorAll('.admin-user-card-row');
+  for (const row of rows) {
+    const label = row.querySelector('.admin-user-card-label');
+    if (label && label.textContent.trim() === '등록 역할') {
+      const labelHtml = label.outerHTML;
+      row.innerHTML = `${labelHtml}${personRolesBadgesHtml({ roles })}`;
+      return;
+    }
+  }
+}
+
+/**
+ * Person 역할 자동 저장 (화면 전환 없음)
+ * @returns {Promise<boolean>}
+ */
+async function autoSavePersonRolesFromCard(personId, card) {
+  if (!personId || !card) return false;
+  let roles = readSelectedAccountRolesByAttr('data-person-id', personId, card)
+    .filter(r => r !== 'admin');
+  if (!roles.length) {
+    showToast('역할은 하나 이상 필요합니다.', '⚠️');
+    const person = dataProvider.getPersonById(personId);
+    const restore = reconcileAccountRoles(person?.roles || []);
+    card.querySelectorAll('.admin-role-check').forEach(c => {
+      c.checked = restore.includes(c.value);
+      c.disabled = false;
+    });
+    const exclusive = restore.includes('student')
+      ? 'student'
+      : restore.includes('priest')
+        ? 'priest'
+        : null;
+    if (exclusive) {
+      card.querySelectorAll('.admin-role-check').forEach(c => {
+        if (c.value !== exclusive) {
+          c.disabled = true;
+          c.checked = false;
+        }
+      });
+    }
+    refreshPersonCardRoleBadges(card, restore);
+    return false;
+  }
+
+  const personRoles = accountRolesToPersonRoles(roles);
+  if (!personRoles.length) return false;
+
+  await patchPerson(personId, { roles: personRoles });
+  refreshPersonCardRoleBadges(card, personRoles);
+
+  const linked = adminUsersByPersonId.get(personId) || null;
+  if (linked) {
+    const wantAdmin = reconcileAccountRoles(linked).includes('admin');
+    try {
+      if (linked.status === 'approved') await updateUserAdminFlag(linked.uid, wantAdmin);
+      else await approveUser(linked.uid, { admin: wantAdmin });
+    } catch (e) {
+      console.warn('[admin] users admin sync:', e);
+    }
+    if (currentUser?.uid === linked.uid && currentUserProfile) {
+      currentUserProfile.roles = reconcileAccountRoles([
+        ...personRoles,
+        ...(wantAdmin ? ['admin'] : []),
+      ]);
+      currentUserProfile.isAdmin = wantAdmin;
+      currentUserProfile.isApproved = true;
+    }
+  }
+
+  showToast(`저장됨: ${formatAccountRolesLabel(personRoles)}`, '✅');
+  return true;
+}
+
+/** 체크박스 UI에 역할 배타 규칙 적용 (학생/신부님 선택 시 나머지 disabled) */
+function applyAccountRoleCheckRules(ownerAttr, ownerId, toggledRole, checked) {
+  const all = [...document.querySelectorAll(`.admin-role-check[${ownerAttr}="${cssAttrEquals(ownerId)}"]`)];
+  const setChecked = (value, on) => {
+    all.filter(c => c.value === value).forEach(c => { c.checked = on; });
+  };
+  const setDisabledExcept = (exceptValue, disabled) => {
+    all.forEach(c => {
+      if (c.value === exceptValue) {
+        c.disabled = false;
+      } else {
+        c.disabled = disabled;
+        if (disabled) c.checked = false;
+      }
+    });
+  };
+
+  if (checked && EXCLUSIVE_ACCOUNT_ROLES.includes(toggledRole)) {
+    setDisabledExcept(toggledRole, true);
+    setChecked(toggledRole, true);
+    return;
+  }
+
+  if (!checked && EXCLUSIVE_ACCOUNT_ROLES.includes(toggledRole)) {
+    all.forEach(c => { c.disabled = false; });
+    setChecked(toggledRole, false);
+    return;
+  }
+
+  if (checked && toggledRole === 'admin') {
+    EXCLUSIVE_ACCOUNT_ROLES.forEach(id => {
+      setChecked(id, false);
+      all.filter(c => c.value === id).forEach(c => { c.disabled = true; });
+    });
+    setChecked('admin', true);
+    return;
+  }
+
+  if (checked) {
+    EXCLUSIVE_ACCOUNT_ROLES.forEach(id => {
+      setChecked(id, false);
+      all.filter(c => c.value === id).forEach(c => { c.disabled = false; });
+    });
+    all.forEach(c => {
+      if (!EXCLUSIVE_ACCOUNT_ROLES.includes(c.value)) c.disabled = false;
+    });
+    setChecked(toggledRole, true);
+    // 자부·자모 임원 선택 시 학부모도 함께 표시
+    if (PARENT_LEADER_ROLES.includes(toggledRole)) setChecked('parent', true);
+    return;
+  }
+
+  setChecked(toggledRole, false);
+}
+
+function googleUserOptionsHtml(users, selectedUid, { currentPersonId } = {}) {
+  const opts = [`<option value="">— Google 계정 선택 —</option>`];
+  const sorted = users.slice().sort((a, b) =>
+    (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '', 'ko')
+  );
+  sorted.forEach(u => {
+    const linkedOther = u.personId && u.personId !== currentPersonId;
+    const status =
+      u.status === 'pending' ? '대기'
+        : u.status === 'rejected' ? '거절'
+          : linkedOther ? '다른 멤버 연결됨'
+            : u.personId === currentPersonId ? '연결됨'
+              : '미연결';
+    const label = `${u.displayName || '이름 없음'} · ${u.email || u.uid} (${status})`;
+    const sel = u.uid === selectedUid ? ' selected' : '';
+    opts.push(`<option value="${escapeHtml(u.uid)}"${sel}>${escapeHtml(label)}</option>`);
+  });
+  return opts.join('');
+}
+
+function personOptionsHtml(selectedId) {
+  const people = dataProvider.getPersons()
+    .slice()
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
   const opts = [
-    `<option value="">— 미연결 —</option>`,
-    ...parents.map(p => {
-      const label = `${p.name}${p.baptismalName ? ` (${p.baptismalName})` : ''}`;
+    `<option value="">— Person 선택 —</option>`,
+    ...people.map(p => {
+      const roleLabel = (p.roles || []).map(r => PERSON_ROLES[r]?.label || ACCOUNT_ROLES[r]?.label || r).join('/');
+      const label = `${p.name}${p.baptismalName ? ` (${p.baptismalName})` : ''}${roleLabel ? ` · ${roleLabel}` : ''}`;
       const sel = p.id === selectedId ? ' selected' : '';
       return `<option value="${escapeHtml(p.id)}"${sel}>${escapeHtml(label)}</option>`;
     }),
   ];
   return opts.join('');
+}
+
+function syncAdminMainTabUI() {
+  document.querySelectorAll('#adminMainTabs .pill-btn').forEach(btn => {
+    const on = btn.getAttribute('data-admin-main') === adminMainTab;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('.admin-main-panel').forEach(panel => {
+    const on = panel.getAttribute('data-admin-panel') === adminMainTab;
+    panel.hidden = !on;
+  });
+  document.querySelectorAll('#adminPersonRoleTabs .pill-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-role-tab') === adminPersonRoleTab);
+  });
+  document.querySelectorAll('#adminGoogleStatusFilter .pill-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-google-filter') === adminGoogleStatusFilter);
+  });
 }
 
 function renderRegistrationImportPreview() {
@@ -726,7 +1105,7 @@ function initRegistrationImportUI() {
       input.value = '';
       btnPreview.disabled = true;
       renderRegistrationImportPreview();
-      renderAdminUsersModal();
+      renderAdminUsersPage();
       renderDirectory();
     } catch (err) {
       console.error(err);
@@ -736,213 +1115,404 @@ function initRegistrationImportUI() {
   });
 }
 
-function renderLinkPersonResults(query) {
-  const box = document.getElementById('linkPersonResults');
-  if (!box) return;
-  const list = searchPersons(query, { role: 'parent' });
-  if (!list.length) {
-    box.innerHTML = `<p style="color:var(--text-muted); font-size:0.85rem;">검색 결과가 없습니다. 먼저 등록 CSV를 가져오세요.</p>`;
+async function renderAdminUsersPage() {
+  const lockedEl = document.getElementById('adminLockedNotice');
+  const contentEl = document.getElementById('adminProtectedContent');
+  if (!isUserAdmin()) {
+    if (contentEl) contentEl.style.display = 'none';
+    if (lockedEl) {
+      lockedEl.style.display = 'block';
+      lockedEl.innerHTML = getAccessLockedHtml('가입 승인 관리');
+    }
     return;
   }
-  box.innerHTML = list.map(p => {
-    const kids = (p.parentInfo?.childPersonIds || [])
-      .map(id => dataProvider.getPersonById(id)?.name)
-      .filter(Boolean)
-      .join(', ');
-    const linked = currentUserProfile?.personId === p.id;
-    return `
-      <button type="button" class="btn btn-secondary btn-sm btn-self-link-person" data-person-id="${escapeHtml(p.id)}"
-        style="display:block; width:100%; text-align:left; margin-bottom:0.4rem; padding:0.55rem 0.7rem;">
-        <strong>${escapeHtml(p.name)}</strong>
-        ${p.baptismalName ? `<span style="color:var(--text-muted);"> (${escapeHtml(p.baptismalName)})</span>` : ''}
-        ${kids ? `<div style="font-size:0.75rem; color:var(--text-muted);">자녀: ${escapeHtml(kids)}</div>` : ''}
-        ${linked ? '<div style="font-size:0.75rem; color:#15803d;">현재 연결됨</div>' : ''}
-      </button>
-    `;
-  }).join('');
+  if (lockedEl) lockedEl.style.display = 'none';
+  if (contentEl) contentEl.style.display = 'block';
 
-  box.querySelectorAll('.btn-self-link-person').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const personId = btn.getAttribute('data-person-id');
-      const uid = currentUser?.uid || currentUserProfile?.uid;
-      if (!uid || !personId) return;
-      try {
-        await linkUserToPerson(uid, personId);
-        if (currentUserProfile) currentUserProfile.personId = personId;
-        showToast('프로필이 연결되었습니다.', '✅');
-        renderLinkPersonModal();
-        updateLinkPersonButton();
-      } catch (err) {
-        console.error(err);
-        showToast('연결에 실패했습니다.', '❌');
-      }
-    });
-  });
-}
+  syncAdminMainTabUI();
+  initAdminPersonsPageControls();
 
-function renderLinkPersonModal() {
-  const currentEl = document.getElementById('linkPersonCurrent');
-  const unlinkBtn = document.getElementById('btnUnlinkPerson');
-  const search = document.getElementById('linkPersonSearch');
-  const personId = currentUserProfile?.personId;
-  const person = personId ? dataProvider.getPersonById(personId) : null;
-  if (currentEl) {
-    currentEl.innerHTML = person
-      ? `현재 연결: <strong>${escapeHtml(person.name)}</strong>${person.baptismalName ? ` (${escapeHtml(person.baptismalName)})` : ''}`
-      : '아직 연결된 멤버가 없습니다.';
+  // import 탭은 DOM만 유지
+  if (adminMainTab === 'import') return;
+
+  const personsList = document.getElementById('adminPersonsCardList');
+  const usersList = document.getElementById('adminUsersCardList');
+  const countEl = document.getElementById('adminPersonsCount');
+  const googleCountEl = document.getElementById('adminGoogleCount');
+  const searchInput = document.getElementById('adminPersonSearch');
+  const googleSearchInput = document.getElementById('adminGoogleSearch');
+  const searchWasFocused = searchInput && document.activeElement === searchInput;
+  const googleSearchWasFocused = googleSearchInput && document.activeElement === googleSearchInput;
+
+  if (searchInput && searchInput.value !== adminPersonSearchQuery) {
+    searchInput.value = adminPersonSearchQuery;
   }
-  if (unlinkBtn) unlinkBtn.style.display = personId ? 'inline-flex' : 'none';
-  renderLinkPersonResults(search?.value || '');
-}
-
-function updateLinkPersonButton() {
-  const btn = document.getElementById('btnOpenLinkPersonModal');
-  if (!btn) return;
-  const show = Boolean(currentUser && currentUserProfile?.isApproved);
-  btn.style.display = show ? 'inline-flex' : 'none';
-  if (show && !currentUserProfile?.personId) {
-    btn.textContent = '👤 프로필 연결 필요';
-  } else if (show) {
-    btn.textContent = '👤 내 프로필 연결';
+  if (googleSearchInput && googleSearchInput.value !== adminGoogleSearchQuery) {
+    googleSearchInput.value = adminGoogleSearchQuery;
   }
-}
 
-function initLinkPersonUI() {
-  const search = document.getElementById('linkPersonSearch');
-  const unlinkBtn = document.getElementById('btnUnlinkPerson');
-  search?.addEventListener('input', () => {
-    renderLinkPersonResults(search.value || '');
-  });
-  unlinkBtn?.addEventListener('click', async () => {
-    const uid = currentUser?.uid || currentUserProfile?.uid;
-    if (!uid) return;
-    if (!confirm('멤버 연결을 해제할까요?')) return;
-    try {
-      await linkUserToPerson(uid, null);
-      if (currentUserProfile) currentUserProfile.personId = null;
-      showToast('연결이 해제되었습니다.', 'ℹ️');
-      renderLinkPersonModal();
-      updateLinkPersonButton();
-    } catch (err) {
-      console.error(err);
-      showToast('연결 해제에 실패했습니다.', '❌');
-    }
-  });
-}
-
-async function renderAdminUsersModal() {
-  const tbody = document.getElementById('adminUsersTableBody');
-  const cardList = document.getElementById('adminUsersCardList');
-  if (!tbody) return;
-  const loadingMsg = '사용자 목록을 불러오는 중...';
-  tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${loadingMsg}</td></tr>`;
-  setMobileCards(cardList, emptyMobileCards(loadingMsg));
+  if (adminMainTab === 'approve' && personsList) {
+    setMobileCards(personsList, emptyMobileCards('등록 멤버를 불러오는 중...'));
+  }
+  if (adminMainTab === 'google' && usersList) {
+    setMobileCards(usersList, emptyMobileCards('Google 가입 목록을 불러오는 중...'));
+  }
 
   await loadPersonsFromFirestore();
   const users = await getAllUsers();
-  if (users.length === 0) {
-    const emptyMsg = '등록된 사용자가 없습니다.';
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
-    setMobileCards(cardList, emptyMobileCards(emptyMsg));
-    return;
-  }
+  adminUsersCache = users;
+  adminUsersByPersonId = new Map();
+  users.forEach(u => {
+    if (u.personId) adminUsersByPersonId.set(u.personId, u);
+  });
+  const usersByPersonId = adminUsersByPersonId;
 
-  const rows = users.map(u => {
-    const isPending = u.status === 'pending';
-    const isApproved = u.status === 'approved';
-    const statusBadge = isPending
-      ? '<span class="role-badge-tag role-badge-pending">승인 대기</span>'
-      : isApproved
-      ? '<span class="role-badge-tag role-badge-teacher">승인 완료</span>'
-      : '<span class="role-badge-tag" style="background:#fee2e2; color:#991b1b;">거절됨</span>';
+  if (adminMainTab === 'approve' && personsList) {
+    let persons = searchPersons(adminPersonSearchQuery, { limit: null })
+      .filter(p => personMatchesAdminRoleTab(p, adminPersonRoleTab, usersByPersonId.get(p.id) || null));
 
-    const reqDate = u.requestedAt ? new Date(u.requestedAt).toLocaleDateString('ko-KR') : '-';
-
-    let actionBtns = '';
-    if (isPending) {
-      actionBtns = `
-        <button class="btn btn-primary btn-sm btn-approve-user" data-uid="${u.uid}" data-role="teacher" style="padding: 0.25rem 0.55rem; font-size: 0.76rem;">
-          ✅ 교사 승인
-        </button>
-        <button class="btn btn-secondary btn-sm btn-approve-user" data-uid="${u.uid}" data-role="admin" style="padding: 0.25rem 0.55rem; font-size: 0.76rem; background: #fef3c7; color: #92400e; border-color: #fcd34d;">
-          🛡️ 관리자 승인
-        </button>
-        <button class="btn btn-secondary btn-sm btn-reject-user" data-uid="${u.uid}" style="padding: 0.25rem 0.55rem; font-size: 0.76rem; color: #dc2626;">
-          거절
-        </button>
-      `;
-    } else {
-      actionBtns = `
-        <span style="font-size: 0.78rem; color: var(--text-muted);">
-          ${u.role === 'admin' ? '🛡️ 관리자' : '✝️ 주일학교 교사'}
-        </span>
-      `;
+    if (countEl) {
+      const roleTotal = dataProvider.getPersons()
+        .filter(p => personMatchesAdminRoleTab(p, adminPersonRoleTab, usersByPersonId.get(p.id) || null)).length;
+      countEl.textContent = `${persons.length}명 표시 · 이 역할 ${roleTotal}명`;
     }
 
-    const roleBadge = `
-      <span class="badge ${u.role === 'admin' ? 'badge-sacrament' : 'badge-present'}" style="font-size: 0.74rem;">
-        ${u.role === 'admin' ? '관리자' : u.role === 'parent' ? '학부모' : '교사'}
-      </span>
-    `;
+    if (!persons.length) {
+      setMobileCards(personsList, emptyMobileCards(
+        adminPersonSearchQuery
+          ? '검색 결과가 없습니다.'
+          : '이 역할에 해당하는 등록 멤버가 없습니다. 「시트 가져오기」탭에서 Person을 등록하세요.'
+      ));
+    } else {
+      const renderPersonCard = (person) => {
+        const linked = usersByPersonId.get(person.id) || null;
+        // 역할 원본은 Person (Google 연동 여부 무관)
+        const personRoles = reconcileAccountRoles(person.roles || []);
+        const displayRoles = personRoles.length
+          ? personRoles
+          : suggestAccountRolesFromPerson(person);
+        const linkBadge = linked
+          ? `<span class="role-badge-tag role-badge-teacher">Google 연결됨</span>`
+          : `<span class="role-badge-tag role-badge-pending">Google 미연결</span>`;
+        const metaBits = [
+          person.baptismalName ? `세례명 ${person.baptismalName}` : null,
+          person.email || null,
+          person.phone || null,
+        ].filter(Boolean).map(escapeHtml).join(' · ');
 
-    const personSelect = `
-      <select class="admin-person-link" data-uid="${escapeHtml(u.uid)}" style="max-width: 160px; font-size: 0.75rem; padding: 0.25rem;">
-        ${parentPersonOptionsHtml(u.personId || '')}
-      </select>
-    `;
+        return `
+          <article class="mobile-data-card admin-user-card" data-person-id="${escapeHtml(person.id)}">
+            <div class="mobile-card-top">
+              <div>
+                <div class="mobile-card-title">${escapeHtml(person.name || '이름 없음')}</div>
+                <div class="mobile-card-sub">${metaBits || '연락처 미등록'}</div>
+              </div>
+              <div class="mobile-card-side">${linkBadge}</div>
+            </div>
+            <div class="admin-user-card-row">
+              <span class="admin-user-card-label" style="margin:0;">등록 역할</span>
+              ${personRolesBadgesHtml({ ...person, roles: displayRoles })}
+            </div>
+            ${linked ? `
+              <div class="admin-user-card-row">
+                <span class="admin-user-card-label" style="margin:0;">연결된 계정</span>
+                <span style="font-size:0.82rem;">${escapeHtml(linked.displayName || '')} · ${escapeHtml(linked.email || linked.uid)}</span>
+              </div>
+            ` : `
+              <p style="font-size:0.8rem; color:var(--text-muted); margin:0.55rem 0 0;">
+                역할은 Person에 저장됩니다. Google 연결은 「2️⃣ Google 가입」탭에서 하세요.
+              </p>
+            `}
+            <div class="admin-user-card-block">
+              <div class="admin-user-card-label">역할 (변경 시 자동 저장)</div>
+              <div class="admin-role-checks" data-person-id="${escapeHtml(person.id)}">
+                ${accountRolesChecksHtml(person.id, displayRoles, {
+                  defaultTeacher: displayRoles.length === 0,
+                  ownerAttr: 'data-person-id',
+                  allowAdmin: false,
+                })}
+              </div>
+            </div>
+            <div class="mobile-card-actions">
+              ${linked ? `
+                <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-person-id="${escapeHtml(person.id)}" data-uid="${escapeHtml(linked.uid)}">
+                  연결 해제
+                </button>
+              ` : ''}
+            </div>
+          </article>
+        `;
+      };
 
-    return {
-      table: `
-      <tr>
-        <td>
-          <div style="font-weight: 700;">${escapeHtml(u.displayName || '이름 없음')}</div>
-          <div style="font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(u.email || '-')}</div>
-        </td>
-        <td style="font-size: 0.8rem;">${reqDate}</td>
-        <td>${statusBadge}</td>
-        <td>${roleBadge}</td>
-        <td>${personSelect}</td>
-        <td>
-          <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
-            ${actionBtns}
-          </div>
-        </td>
-      </tr>
-    `,
-      card: `
-      <article class="mobile-data-card">
-        <div class="mobile-card-top">
-          <div>
-            <div class="mobile-card-title">${escapeHtml(u.displayName || '이름 없음')}</div>
-            <div class="mobile-card-sub">${escapeHtml(u.email || '-')}</div>
-          </div>
-          <div class="mobile-card-side">${statusBadge}</div>
-        </div>
-        <div class="mobile-card-meta">${roleBadge}<span class="mobile-card-points">신청 ${reqDate}</span></div>
-        <div class="mobile-card-meta" style="margin-top:0.35rem;">멤버 연결 ${personSelect}</div>
-        ${isPending ? `<div class="mobile-card-actions">${actionBtns}</div>` : `<div class="mobile-card-meta">${actionBtns}</div>`}
-      </article>
-    `
-    };
-  });
+      let listHtml = '';
+      if (adminPersonRoleTab === 'teacher') {
+        const grouped = new Map(TEACHER_TAB_GROUPS.map(g => [g.id, []]));
+        persons.forEach(p => {
+          const key = primaryTeacherTabRole(p, usersByPersonId.get(p.id) || null);
+          if (!grouped.has(key)) grouped.set(key, []);
+          grouped.get(key).push(p);
+        });
+        TEACHER_TAB_GROUPS.forEach(g => {
+          const groupPeople = grouped.get(g.id) || [];
+          if (!groupPeople.length) return;
+          groupPeople.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+          listHtml += `
+            <div class="admin-role-group">
+              <h4 class="admin-role-group-title">${escapeHtml(g.label)}
+                <span class="admin-role-group-count">${groupPeople.length}</span>
+              </h4>
+              <div class="admin-role-group-list">${groupPeople.map(renderPersonCard).join('')}</div>
+            </div>
+          `;
+        });
+      } else if (adminPersonRoleTab === 'parent') {
+        const grouped = new Map(PARENT_TAB_GROUPS.map(g => [g.id, []]));
+        persons.forEach(p => {
+          const key = primaryParentTabRole(p, usersByPersonId.get(p.id) || null);
+          if (!grouped.has(key)) grouped.set(key, []);
+          grouped.get(key).push(p);
+        });
+        PARENT_TAB_GROUPS.forEach(g => {
+          const groupPeople = grouped.get(g.id) || [];
+          if (!groupPeople.length) return;
+          groupPeople.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+          listHtml += `
+            <div class="admin-role-group">
+              <h4 class="admin-role-group-title">${escapeHtml(g.label)}
+                <span class="admin-role-group-count">${groupPeople.length}</span>
+              </h4>
+              <div class="admin-role-group-list">${groupPeople.map(renderPersonCard).join('')}</div>
+            </div>
+          `;
+        });
+      } else {
+        listHtml = persons.map(renderPersonCard).join('');
+      }
+      setMobileCards(personsList, listHtml);
+    }
+  }
 
-  tbody.innerHTML = rows.map(r => r.table).join('');
-  setMobileCards(cardList, rows.map(r => r.card).join(''));
+  if (adminMainTab === 'google' && usersList) {
+    const q = adminGoogleSearchQuery.trim().toLowerCase();
+    let list = users.slice().sort((a, b) =>
+      String(b.requestedAt || '').localeCompare(String(a.requestedAt || ''))
+    );
+    if (q) {
+      list = list.filter(u =>
+        (u.displayName || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q)
+      );
+    }
+    if (adminGoogleStatusFilter === 'pending') {
+      list = list.filter(u => u.status === 'pending');
+    } else if (adminGoogleStatusFilter === 'unlinked') {
+      list = list.filter(u => !u.personId);
+    } else if (adminGoogleStatusFilter === 'linked') {
+      list = list.filter(u => Boolean(u.personId));
+    }
 
-  const roots = [tbody, cardList];
-  bindInRoots(roots, '.btn-approve-user', async (e) => {
+    if (googleCountEl) {
+      googleCountEl.textContent = `${list.length}명 표시 · 전체 ${users.length}명`;
+    }
+
+    if (!list.length) {
+      setMobileCards(usersList, emptyMobileCards(
+        q || adminGoogleStatusFilter !== 'all'
+          ? '검색/필터 결과가 없습니다.'
+          : 'Google 가입 계정이 없습니다.'
+      ));
+    } else {
+      setMobileCards(usersList, list.map(u => {
+        const roles = reconcileAccountRoles(u);
+        const isAdminRole = roles.includes('admin');
+        const linkedPerson = u.personId ? dataProvider.getPersonById(u.personId) : null;
+        const statusBadge = u.status === 'pending'
+          ? '<span class="role-badge-tag role-badge-pending">승인 대기</span>'
+          : u.status === 'rejected'
+            ? '<span class="role-badge-tag" style="background:#fee2e2;color:#991b1b;">거절됨</span>'
+            : u.personId
+              ? '<span class="role-badge-tag role-badge-teacher">연결됨</span>'
+              : '<span class="role-badge-tag role-badge-pending">미연결</span>';
+        const reqDate = u.requestedAt ? new Date(u.requestedAt).toLocaleDateString('ko-KR') : '-';
+        const nonAdminRoles = linkedPerson
+          ? reconcileAccountRoles(linkedPerson.roles || []).filter(r => r !== 'admin')
+          : [];
+        const roleSummary = nonAdminRoles.length
+          ? formatAccountRolesLabel(nonAdminRoles)
+          : (linkedPerson ? 'Person 역할 미지정' : 'Person 미연결');
+
+        return `
+          <article class="mobile-data-card admin-user-card" data-uid="${escapeHtml(u.uid)}">
+            <div class="mobile-card-top">
+              <div>
+                <div class="mobile-card-title">${escapeHtml(u.displayName || '이름 없음')}</div>
+                <div class="mobile-card-sub">${escapeHtml(u.email || u.uid)}</div>
+              </div>
+              <div class="mobile-card-side">${statusBadge}</div>
+            </div>
+            <div class="admin-user-card-row">
+              <span class="mobile-card-points">신청 ${reqDate}</span>
+              <span class="badge badge-present" style="font-size:0.72rem;">${escapeHtml(roleSummary)}</span>
+              ${isAdminRole ? '<span class="badge badge-sacrament" style="font-size:0.72rem;">관리자</span>' : ''}
+            </div>
+            ${linkedPerson ? `
+              <div class="admin-user-card-row">
+                <span class="admin-user-card-label" style="margin:0;">현재 Person</span>
+                <span style="font-size:0.82rem;">${escapeHtml(linkedPerson.name)}${linkedPerson.baptismalName ? ` (${escapeHtml(linkedPerson.baptismalName)})` : ''}</span>
+              </div>
+            ` : ''}
+            <div class="admin-user-card-block">
+              <div class="admin-user-card-label">Person 매핑</div>
+              <select class="admin-person-pick admin-person-link" data-uid="${escapeHtml(u.uid)}">
+                ${personOptionsHtml(u.personId || '')}
+              </select>
+            </div>
+            <div class="admin-user-card-block">
+              <label class="admin-admin-toggle">
+                <input type="checkbox" class="admin-google-admin-check" data-uid="${escapeHtml(u.uid)}" ${isAdminRole ? 'checked' : ''} />
+                <span>관리자 권한 부여</span>
+              </label>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin:0.35rem 0 0;">학생·신부님 전용 계정에는 관리자를 함께 부여할 수 없습니다.</p>
+            </div>
+            <div class="mobile-card-actions">
+              <button type="button" class="btn btn-primary btn-sm btn-save-google-mapping" data-uid="${escapeHtml(u.uid)}">
+                💾 매핑·관리자 저장
+              </button>
+              ${u.personId ? `
+                <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-uid="${escapeHtml(u.uid)}">
+                  연결 해제
+                </button>
+              ` : ''}
+              ${u.status === 'pending' || u.status === 'rejected' ? `
+                <button type="button" class="btn btn-secondary btn-sm btn-reject-user" data-uid="${escapeHtml(u.uid)}" style="color:#dc2626;">
+                  거절
+                </button>
+              ` : ''}
+            </div>
+          </article>
+        `;
+      }).join(''));
+    }
+  }
+
+  const roots = [personsList, usersList].filter(Boolean);
+
+  bindInRoots(roots, '.admin-role-check', async (e) => {
+    const el = e.currentTarget;
+    const personId = el.getAttribute('data-person-id');
+    const uid = el.getAttribute('data-uid');
+    if (personId) {
+      applyAccountRoleCheckRules('data-person-id', personId, el.value, el.checked);
+      const card = el.closest('.admin-user-card');
+      if (!card || card.dataset.roleSaving === '1') return;
+      card.dataset.roleSaving = '1';
+      try {
+        await autoSavePersonRolesFromCard(personId, card);
+      } catch (err) {
+        console.error(err);
+        showToast(err?.message || '역할 저장에 실패했습니다.', '❌');
+      } finally {
+        delete card.dataset.roleSaving;
+      }
+    } else if (uid) {
+      applyAccountRoleCheckRules('data-uid', uid, el.value, el.checked);
+    }
+  }, 'change');
+
+  bindInRoots(roots, '.btn-save-google-mapping', async (e) => {
     const btn = e.currentTarget;
     const uid = btn.getAttribute('data-uid');
-    const role = btn.getAttribute('data-role') || 'teacher';
+    const card = btn.closest('.admin-user-card');
+    const personSel = card?.querySelector(`.admin-person-pick[data-uid="${cssAttrEquals(uid)}"]`)
+      || card?.querySelector('.admin-person-pick');
+    const personId = personSel?.value || '';
+    const wantAdmin = Boolean(card?.querySelector(`.admin-google-admin-check[data-uid="${cssAttrEquals(uid)}"]`)?.checked
+      || card?.querySelector('.admin-google-admin-check')?.checked);
+    const target = users.find(u => u.uid === uid);
+    if (!target) return;
+
+    // 학생·신부님 Person 에는 관리자 겸임 불가
+    if (wantAdmin && personId) {
+      const person = dataProvider.getPersonById(personId);
+      const pr = person?.roles || [];
+      if (pr.includes('student') || pr.includes('priest')) {
+        showToast('학생·신부님 Person에는 관리자 권한을 부여할 수 없습니다.', '⚠️');
+        return;
+      }
+    }
+
+    if (!personId && !wantAdmin && !target.personId && target.status === 'pending') {
+      showToast('Person을 선택하거나 관리자 권한을 체크한 뒤 저장하세요.', '⚠️');
+      return;
+    }
+
     try {
       btn.disabled = true;
-      await approveUser(uid, role);
-      showToast('사용자가 성공적으로 승인되었습니다!', '🎉');
-      renderAdminUsersModal();
+
+      if (personId) {
+        const previously = users.filter(u => u.personId === personId && u.uid !== uid);
+        for (const prev of previously) {
+          await linkUserToPerson(prev.uid, null);
+        }
+        await linkUserToPerson(uid, personId);
+
+        if (target.status === 'approved') await updateUserAdminFlag(uid, wantAdmin);
+        else await approveUser(uid, { admin: wantAdmin });
+      } else {
+        if (target.personId) await linkUserToPerson(uid, null);
+
+        if (wantAdmin) {
+          if (target.status === 'approved') await updateUserAdminFlag(uid, true);
+          else await approveUser(uid, { admin: true });
+        } else if (target.status === 'approved') {
+          await updateUserAdminFlag(uid, false);
+        }
+      }
+
+      if (currentUser?.uid === uid && currentUserProfile) {
+        currentUserProfile.personId = personId || null;
+        currentUserProfile.isApproved = true;
+        currentUserProfile.isAdmin = wantAdmin;
+        const person = personId ? dataProvider.getPersonById(personId) : null;
+        const personRoles = reconcileAccountRoles(person?.roles || []).filter(r => r !== 'admin');
+        currentUserProfile.roles = reconcileAccountRoles([
+          ...personRoles,
+          ...(wantAdmin ? ['admin'] : []),
+        ]);
+      }
+      showToast(
+        wantAdmin
+          ? (personId ? '매핑 및 관리자 권한이 저장되었습니다.' : '관리자 권한이 부여되었습니다.')
+          : (personId ? 'Person 매핑이 저장되었습니다.' : '관리자 권한이 해제되었습니다.'),
+        '🎉'
+      );
+      renderAdminUsersPage();
       updateAdminBadge();
     } catch (err) {
       console.error(err);
-      showToast('승인 처리에 실패하였습니다.', '❌');
+      showToast(err?.message || '매핑·관리자 저장에 실패했습니다.', '❌');
+      btn.disabled = false;
+    }
+  });
+
+  bindInRoots(roots, '.btn-unlink-person-google', async (e) => {
+    const btn = e.currentTarget;
+    const uid = btn.getAttribute('data-uid');
+    if (!uid) return;
+    if (!confirm('이 Google 계정과 Person 연결을 해제할까요?')) return;
+    try {
+      btn.disabled = true;
+      await linkUserToPerson(uid, null);
+      if (currentUser?.uid === uid && currentUserProfile) {
+        currentUserProfile.personId = null;
+      }
+      showToast('연결이 해제되었습니다.', 'ℹ️');
+      renderAdminUsersPage();
+      updateAdminBadge();
+    } catch (err) {
+      console.error(err);
+      showToast('연결 해제에 실패했습니다.', '❌');
+      btn.disabled = false;
     }
   });
 
@@ -954,7 +1524,7 @@ async function renderAdminUsersModal() {
         btn.disabled = true;
         await rejectUser(uid);
         showToast('사용자가 거절 처리되었습니다.', 'ℹ️');
-        renderAdminUsersModal();
+        renderAdminUsersPage();
         updateAdminBadge();
       } catch (err) {
         console.error(err);
@@ -963,33 +1533,89 @@ async function renderAdminUsersModal() {
     }
   });
 
-  bindInRoots(roots, '.admin-person-link', async (e) => {
-    const sel = e.currentTarget;
-    const uid = sel.getAttribute('data-uid');
-    const personId = sel.value || null;
-    try {
-      await linkUserToPerson(uid, personId);
-      showToast(personId ? '멤버가 연결되었습니다.' : '멤버 연결이 해제되었습니다.', '✅');
-      if (currentUser?.uid === uid && currentUserProfile) {
-        currentUserProfile.personId = personId;
-        updateLinkPersonButton();
-      }
-    } catch (err) {
-      console.error(err);
-      showToast('멤버 연결에 실패했습니다.', '❌');
-      renderAdminUsersModal();
-    }
-  }, 'change');
+  if (searchWasFocused && searchInput) {
+    const pos = searchInput.selectionStart ?? searchInput.value.length;
+    searchInput.focus();
+    try { searchInput.setSelectionRange(pos, pos); } catch (_) { /* ignore */ }
+  }
+  if (googleSearchWasFocused && googleSearchInput) {
+    const pos = googleSearchInput.selectionStart ?? googleSearchInput.value.length;
+    googleSearchInput.focus();
+    try { googleSearchInput.setSelectionRange(pos, pos); } catch (_) { /* ignore */ }
+  }
+}
+
+function initAdminPersonsPageControls() {
+  if (adminPageBound) return;
+  adminPageBound = true;
+
+  document.getElementById('adminMainTabs')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-admin-main]');
+    if (!btn) return;
+    adminMainTab = btn.getAttribute('data-admin-main') || 'approve';
+    renderAdminUsersPage();
+  });
+
+  document.getElementById('adminPersonRoleTabs')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-role-tab]');
+    if (!btn) return;
+    adminPersonRoleTab = btn.getAttribute('data-role-tab') || 'priest';
+    renderAdminUsersPage();
+  });
+
+  document.getElementById('adminGoogleStatusFilter')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-google-filter]');
+    if (!btn) return;
+    adminGoogleStatusFilter = btn.getAttribute('data-google-filter') || 'all';
+    renderAdminUsersPage();
+  });
+
+  const searchInput = document.getElementById('adminPersonSearch');
+  let searchTimer = null;
+  searchInput?.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      adminPersonSearchQuery = searchInput.value || '';
+      renderAdminUsersPage();
+    }, 180);
+  });
+
+  const googleSearchInput = document.getElementById('adminGoogleSearch');
+  let googleTimer = null;
+  googleSearchInput?.addEventListener('input', () => {
+    clearTimeout(googleTimer);
+    googleTimer = setTimeout(() => {
+      adminGoogleSearchQuery = googleSearchInput.value || '';
+      renderAdminUsersPage();
+    }, 180);
+  });
 }
 
 async function updateAdminBadge() {
   const users = await getAllUsers();
-  const pendingCount = users.filter(u => u.status === 'pending').length;
-  const badge = document.getElementById('pendingUsersBadge');
-  if (badge) {
+  const pendingCount = users.filter(u => {
+    if (u.status === 'pending') return true;
+    if (u.status === 'approved' && rolesNeedPersonLink(u) && !u.personId) return true;
+    return false;
+  }).length;
+  const ids = ['pendingUsersBadge', 'pendingUsersBadgeNav', 'pendingUsersBadgeMore'];
+  ids.forEach(id => {
+    const badge = document.getElementById(id);
+    if (!badge) return;
     badge.textContent = pendingCount;
     badge.style.display = pendingCount > 0 ? 'inline-flex' : 'none';
-  }
+  });
+}
+
+function setAdminNavVisible(show) {
+  const display = show ? 'inline-flex' : 'none';
+  const btnPage = document.getElementById('btnOpenAdminUsersPage');
+  const navTab = document.getElementById('navTabAdmin');
+  const moreItem = document.getElementById('navMoreAdmin');
+  if (btnPage) btnPage.style.display = display;
+  if (navTab) navTab.style.display = show ? '' : 'none';
+  if (moreItem) moreItem.style.display = show ? '' : 'none';
+  if (!show && currentTab === 'admin') switchToTab('dashboard');
 }
 
 function initAuthUI() {
@@ -1001,8 +1627,8 @@ function initAuthUI() {
   const userNameText = document.getElementById('userNameText');
   const userEmailText = document.getElementById('userEmailText');
   const userRoleBadge = document.getElementById('userRoleBadge');
-  const btnOpenAdminUsersModal = document.getElementById('btnOpenAdminUsersModal');
-  const btnOpenLinkPersonModal = document.getElementById('btnOpenLinkPersonModal');
+  const btnOpenAdminUsersPage = document.getElementById('btnOpenAdminUsersPage');
+  const btnRefreshAdminUsers = document.getElementById('btnRefreshAdminUsers');
   const demoRoleSelect = document.getElementById('demoRoleSelect');
   const envBadge = document.getElementById('envBadge');
 
@@ -1043,15 +1669,12 @@ function initAuthUI() {
     }
   });
 
-  btnOpenAdminUsersModal?.addEventListener('click', () => {
-    openModal('modalAdminUsers');
-    renderAdminUsersModal();
+  btnOpenAdminUsersPage?.addEventListener('click', () => {
+    switchToTab('admin');
   });
-
-  btnOpenLinkPersonModal?.addEventListener('click', async () => {
-    await loadPersonsFromFirestore();
-    openModal('modalLinkPerson');
-    renderLinkPersonModal();
+  btnRefreshAdminUsers?.addEventListener('click', () => {
+    renderAdminUsersPage();
+    updateAdminBadge();
   });
 
   onAuthStateChanged((user, profile) => {
@@ -1067,27 +1690,30 @@ function initAuthUI() {
       if (userEmailText) userEmailText.textContent = user.email || '';
 
       if (userRoleBadge) {
-        const email = (user.email || profile?.email || '').toLowerCase();
-        const forceAdmin = email === 'stcomsi02@gmail.com' || profile?.isAdmin;
+        const forceAdmin = isUserAdmin();
+        const rolesLabel = formatAccountRolesLabel(profile?.roles || profile);
         if (forceAdmin) {
-          userRoleBadge.textContent = '🛡️ 관리자';
+          userRoleBadge.textContent = rolesLabel.includes('관리자') ? `🛡️ ${rolesLabel}` : '🛡️ 관리자';
           userRoleBadge.className = 'role-badge-tag role-badge-admin';
-        } else if (profile?.isApproved) {
-          userRoleBadge.textContent = '✅ 교사';
+        } else if (profile?.isApproved && profile?.personId) {
+          userRoleBadge.textContent = rolesLabel !== '미지정' ? rolesLabel : '✅ 이용 가능';
           userRoleBadge.className = 'role-badge-tag role-badge-teacher';
+        } else if (profile?.isApproved) {
+          userRoleBadge.textContent = '👤 프로필 연결 대기';
+          userRoleBadge.className = 'role-badge-tag role-badge-pending';
         } else {
           userRoleBadge.textContent = '⏳ 승인 대기';
           userRoleBadge.className = 'role-badge-tag role-badge-pending';
         }
       }
 
-      if (btnOpenAdminUsersModal) {
+      if (btnOpenAdminUsersPage || document.getElementById('navTabAdmin')) {
         const email = (user.email || profile?.email || '').toLowerCase();
         const forceAdmin = email === 'stcomsi02@gmail.com' || profile?.isAdmin;
-        btnOpenAdminUsersModal.style.display = forceAdmin ? 'inline-flex' : 'none';
+        setAdminNavVisible(forceAdmin);
         if (forceAdmin) updateAdminBadge();
+        if (forceAdmin && currentTab === 'admin') renderAdminUsersPage();
       }
-      updateLinkPersonButton();
       loadPersonsFromFirestore().then(() => {
         if (currentTab === 'students') renderDirectory();
       }).catch(() => {});
@@ -1108,8 +1734,7 @@ function initAuthUI() {
     } else {
       if (btnGoogleLogin) btnGoogleLogin.style.display = 'inline-flex';
       if (userProfileChip) userProfileChip.style.display = 'none';
-      if (btnOpenAdminUsersModal) btnOpenAdminUsersModal.style.display = 'none';
-      updateLinkPersonButton();
+      setAdminNavVisible(false);
     }
 
     // Refresh current view based on permissions
@@ -1261,6 +1886,134 @@ function renderDDayProgress() {
 }
 
 // ============================================================
+//  주일학교 조직도 (한국 가톨릭 본당 일반 구성)
+//  지도신부 → 교감·청소년분과장 → 부교감 → 교사/전례부교사/복사교사/총무
+//  → 자모회·자부회(후원·봉사)
+// ============================================================
+function orgPeopleByRole(roleId) {
+  return dataProvider.getPersons()
+    .filter(p => (p.roles || []).includes(roleId))
+    .slice()
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+}
+
+function orgNodePeopleHtml(people, { approved, detailType = 'teacher' }) {
+  if (!people.length) {
+    return '<span class="org-node-empty">미배정</span>';
+  }
+  return people.map(p => {
+    const name = approved ? (p.name || '이름 없음') : maskTeacherName(p.name || '');
+    const baptismal = approved && p.baptismalName
+      ? `<span class="org-node-baptismal">(${escapeHtml(p.baptismalName)})</span>`
+      : '';
+    if (!approved) {
+      return `<span class="org-node-person">${escapeHtml(name)}</span>`;
+    }
+    const type = (p.roles || []).some(r => dataProvider.getTeacherRoles().includes(r) || r === 'priest')
+      ? 'teacher'
+      : (detailType || 'parent');
+    return `
+      <button type="button" class="org-node-person clickable-name"
+        data-detail-type="${escapeHtml(type)}" data-detail-id="${escapeHtml(p.id)}">
+        ${escapeHtml(name)}${baptismal}
+      </button>
+    `;
+  }).join('');
+}
+
+function orgNodeHtml({ title, roleIds, people, tone = 'default', approved, detailType = 'teacher' }) {
+  const list = people || roleIds.flatMap(id => orgPeopleByRole(id));
+  // 중복 제거 (겸임)
+  const seen = new Set();
+  const unique = list.filter(p => {
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
+  return `
+    <div class="org-node org-node-${tone}">
+      <div class="org-node-title">${escapeHtml(title)}</div>
+      <div class="org-node-people">${orgNodePeopleHtml(unique, { approved, detailType })}</div>
+    </div>
+  `;
+}
+
+function renderOrgChart() {
+  const el = document.getElementById('orgChart');
+  if (!el) return;
+  const approved = isUserApproved();
+
+  const priests = orgPeopleByRole('priest');
+  const principals = orgPeopleByRole('principal');
+  const vicePrincipals = orgPeopleByRole('vice_principal');
+  const youth = orgPeopleByRole('youth_director');
+  const teachers = orgPeopleByRole('teacher').filter(p => {
+    const r = p.roles || [];
+    // 전례부교사·복사교사만 있는 경우는 교사 칸에서 제외(담당 칸에 표시)
+    const onlySpecialty = !r.includes('teacher') && (
+      r.includes('liturgy_teacher') || r.includes('acolyte_teacher')
+    );
+    return !onlySpecialty;
+  });
+  const liturgy = orgPeopleByRole('liturgy_teacher');
+  const acolyte = orgPeopleByRole('acolyte_teacher');
+  const secretary = orgPeopleByRole('secretary');
+  const mothersChair = orgPeopleByRole('mothers_chair');
+  const mothersSec = orgPeopleByRole('mothers_secretary');
+  const fathersChair = orgPeopleByRole('fathers_chair');
+  const fathersSec = orgPeopleByRole('fathers_secretary');
+
+  el.innerHTML = `
+    <div class="org-tier org-tier-top">
+      ${orgNodeHtml({ title: '지도 신부님', people: priests, tone: 'priest', approved })}
+    </div>
+    <div class="org-connector" aria-hidden="true"></div>
+    <div class="org-tier org-tier-lead">
+      ${orgNodeHtml({ title: '주일학교 교감', people: principals, tone: 'lead', approved })}
+      ${orgNodeHtml({ title: '청소년분과장', people: youth, tone: 'youth', approved })}
+    </div>
+    <div class="org-connector" aria-hidden="true"></div>
+    <div class="org-tier">
+      ${orgNodeHtml({ title: '부교감', people: vicePrincipals, tone: 'lead', approved })}
+    </div>
+    <div class="org-connector" aria-hidden="true"></div>
+    <div class="org-tier org-tier-staff">
+      ${orgNodeHtml({ title: '교리교사', people: teachers, tone: 'staff', approved })}
+      ${orgNodeHtml({ title: '전례부교사', people: liturgy, tone: 'staff', approved })}
+      ${orgNodeHtml({ title: '복사교사', people: acolyte, tone: 'staff', approved })}
+      ${orgNodeHtml({ title: '총무', people: secretary, tone: 'staff', approved })}
+    </div>
+    <div class="org-connector org-connector-label" aria-hidden="true">
+      <span>후원 · 봉사</span>
+    </div>
+    <div class="org-tier org-tier-parents">
+      <div class="org-parent-group">
+        <div class="org-parent-group-title">자모회</div>
+        <div class="org-parent-group-nodes">
+          ${orgNodeHtml({ title: '자모회장', people: mothersChair, tone: 'parent', approved, detailType: 'parent' })}
+          ${orgNodeHtml({ title: '자모회총무', people: mothersSec, tone: 'parent', approved, detailType: 'parent' })}
+        </div>
+      </div>
+      <div class="org-parent-group">
+        <div class="org-parent-group-title">자부회</div>
+        <div class="org-parent-group-nodes">
+          ${orgNodeHtml({ title: '자부회장', people: fathersChair, tone: 'parent', approved, detailType: 'parent' })}
+          ${orgNodeHtml({ title: '자부회총무', people: fathersSec, tone: 'parent', approved, detailType: 'parent' })}
+        </div>
+      </div>
+    </div>
+  `;
+
+  el.querySelectorAll('[data-detail-type]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.getAttribute('data-detail-type');
+      const id = btn.getAttribute('data-detail-id');
+      if (type && id) showUserDetail(type, id);
+    });
+  });
+}
+
+// ============================================================
 //  TAB 1: Dashboard
 // ============================================================
 function renderDashboard() {
@@ -1405,15 +2158,20 @@ function renderDashboard() {
   if (teachersContainer) {
     teachersContainer.innerHTML = teachers.map(t => {
       const primaryRole = dataProvider.getPrimaryTeacherRole(t);
-      const roleBadgeClass = primaryRole?.role === 'principal' ? 'badge-sacrament' :
-                              primaryRole?.role === 'vice_principal' ? 'badge-grade' : 'badge-present';
+      const primaryRoleId = primaryRole?.role || 'teacher';
+      const roleBadgeClass = primaryRoleId === 'principal' ? 'badge-sacrament' :
+                              primaryRoleId === 'vice_principal' ? 'badge-grade' : 'badge-present';
       const parentBadge = isApproved && t.roles?.includes('parent')
         ? '<span class="badge badge-grade" style="font-size: 0.7rem; margin-left: 0.3rem;">👨‍👩‍👧 학부모</span>'
         : '';
+      // 우측 대표 역할과 겹치지 않는 겸임/담당만 뱃지로 표시
       const specialBadges = isApproved
         ? (t.roles || [])
-            .filter(r => ['liturgy_teacher', 'acolyte_teacher'].includes(r))
-            .map(r => `<span class="badge badge-sacrament" style="font-size: 0.65rem; margin-left: 0.2rem;">${PERSON_ROLES[r]?.icon || ''}</span>`)
+            .filter(r => [
+              'liturgy_teacher', 'acolyte_teacher', 'secretary', 'youth_director',
+              'fathers_chair', 'mothers_chair', 'fathers_secretary', 'mothers_secretary',
+            ].includes(r) && r !== primaryRoleId)
+            .map(r => `<span class="badge badge-sacrament" style="font-size: 0.65rem; margin-left: 0.2rem;">${PERSON_ROLES[r]?.icon || ''} ${PERSON_ROLES[r]?.label || r}</span>`)
             .join('')
         : '';
 
@@ -1914,6 +2672,10 @@ function renderParentsDirectory(search = '') {
     const p1TeacherBadge = isTeacher
       ? `<span class="badge badge-sacrament" style="font-size: 0.68rem; margin-left: 0.25rem;">${getPrimaryRoleLabel(p)}</span>`
       : '';
+    const parentLeaderBadges = (p.roles || [])
+      .filter(r => PARENT_LEADER_ROLES.includes(r))
+      .map(r => `<span class="badge ${PERSON_ROLES[r]?.badgeClass || 'badge-present'}" style="font-size: 0.68rem; margin-left: 0.25rem;">${PERSON_ROLES[r]?.label || r}</span>`)
+      .join('');
 
     // 배우자 정보
     let spouseCell = '<span style="color: var(--text-muted); font-size: 0.85rem;">—</span>';
@@ -1949,6 +2711,7 @@ function renderParentsDirectory(search = '') {
           <strong class="clickable-name" data-detail-type="parent" data-detail-id="${p.id}">${p.name}</strong>
           ${p.baptismalName ? `<span style="font-size: 0.82rem; color: var(--text-muted);">(${p.baptismalName})</span>` : ''}
           ${p1TeacherBadge}
+          ${parentLeaderBadges}
         </td>
         <td>${spouseCell}</td>
         <td><a href="tel:${p.phone}" style="color: var(--primary); font-weight: 600;">📞 ${p.phone || '-'}</a></td>
@@ -1965,6 +2728,7 @@ function renderParentsDirectory(search = '') {
               <strong class="clickable-name" data-detail-type="parent" data-detail-id="${p.id}">${p.name}</strong>
               ${p.baptismalName ? `<span style="font-weight: 600; color: var(--text-muted); font-size: 0.85rem;"> (${p.baptismalName})</span>` : ''}
               ${p1TeacherBadge}
+              ${parentLeaderBadges}
             </div>
             <div class="mobile-card-sub">${p.phone ? `📞 ${p.phone}` : ''}${spouseShort}</div>
           </div>
@@ -2001,8 +2765,9 @@ function renderTeachersDirectory(search = '') {
 
   const rows = filtered.map(t => {
     const primaryRole = dataProvider.getPrimaryTeacherRole(t);
-    const roleBadgeClass = primaryRole?.role === 'principal' ? 'badge-sacrament' :
-                            primaryRole?.role === 'vice_principal' ? 'badge-grade' : 'badge-present';
+    const primaryRoleId = primaryRole?.role || 'teacher';
+    const roleBadgeClass = primaryRoleId === 'principal' ? 'badge-sacrament' :
+                            primaryRoleId === 'vice_principal' ? 'badge-grade' : 'badge-present';
     const roleBadge = `<span class="badge ${roleBadgeClass}">${primaryRole?.label || '교사'}</span>`;
 
     // 담당 반
@@ -2013,11 +2778,18 @@ function renderTeachersDirectory(search = '') {
       ? assignedClasses.map(c => `<span class="badge badge-grade" style="font-size: 0.75rem;">${c.name}</span>`).join(' ')
       : '<span style="color: var(--text-muted); font-size: 0.82rem;">전체 관할</span>';
 
-    // 겸임 정보
+    // 겸임 정보 — 대표 역할과 중복되지 않게
     const dualRoles = [];
     if (t.roles?.includes('parent')) dualRoles.push('학부모 겸임');
-    if (t.roles?.includes('liturgy_teacher')) dualRoles.push('전례부');
-    if (t.roles?.includes('acolyte_teacher')) dualRoles.push('복사담당');
+    const extraRoleIds = [
+      'fathers_chair', 'mothers_chair', 'fathers_secretary', 'mothers_secretary',
+      'liturgy_teacher', 'acolyte_teacher', 'secretary', 'youth_director',
+    ];
+    extraRoleIds.forEach(r => {
+      if (t.roles?.includes(r) && r !== primaryRoleId) {
+        dualRoles.push(PERSON_ROLES[r]?.label || r);
+      }
+    });
     const dualHtml = dualRoles.length > 0
       ? dualRoles.map(r => `<span class="badge badge-grade" style="font-size: 0.7rem;">${r}</span>`).join(' ')
       : '<span style="color: var(--text-muted);">-</span>';
@@ -2934,7 +3706,6 @@ function initApp() {
   initTheme();
   initAuthUI();
   initRegistrationImportUI();
-  initLinkPersonUI();
   populateSeasonSelects();
   updateSeasonHeaderBadge();
   renderDashboard();

@@ -55,12 +55,9 @@
           </div>
         </div>
 
-        <button class="btn-admin-manage" id="btnOpenLinkPersonModal" style="display: none;" title="내 프로필 연결">
-          👤 내 프로필 연결
-        </button>
-
-        <button class="btn-admin-manage" id="btnOpenAdminUsersModal" style="display: none;" title="가입 신청 승인 관리">
-          🛡️ 가입 승인 관리
+        <button class="btn-admin-manage" id="btnOpenAdminUsersPage" style="display: none;" title="가입 승인 관리" aria-label="가입 승인 관리">
+          <span class="admin-btn-icon" aria-hidden="true">🛡️</span>
+          <span class="admin-btn-label">가입 승인 관리</span>
           <span class="badge" id="pendingUsersBadge" style="background: #ef4444; color: white; padding: 0.1rem 0.4rem; font-size: 0.65rem; border-radius: 99px; display: none;">0</span>
         </button>
 
@@ -97,6 +94,13 @@
       </button>
       <button class="nav-tab-btn" data-tab="students" type="button">
         👨‍👩‍👧 학생 및 학부모 명부
+      </button>
+      <button class="nav-tab-btn" data-tab="orgchart" type="button">
+        ✝ 조직도
+      </button>
+      <button class="nav-tab-btn" data-tab="admin" type="button" id="navTabAdmin" style="display: none;">
+        🛡️ 가입 승인
+        <span class="badge-count" id="pendingUsersBadgeNav" style="display: none;">0</span>
       </button>
     </div>
   </nav>
@@ -154,6 +158,21 @@
             <strong>학생 · 학부모 명부</strong>
             <span>명부 · 반 구성</span>
           </span>
+        </button>
+        <button class="nav-more-item" data-tab="orgchart" type="button">
+          <span class="nav-more-item-icon" aria-hidden="true">✝</span>
+          <span class="nav-more-item-text">
+            <strong>주일학교 조직도</strong>
+            <span>교감 · 교사 · 자모회 · 자부회</span>
+          </span>
+        </button>
+        <button class="nav-more-item" data-tab="admin" type="button" id="navMoreAdmin" style="display: none;">
+          <span class="nav-more-item-icon" aria-hidden="true">🛡️</span>
+          <span class="nav-more-item-text">
+            <strong>가입 승인 관리</strong>
+            <span>권한 · 프로필 연결 · 등록 가져오기</span>
+          </span>
+          <span class="badge-count" id="pendingUsersBadgeMore" style="display: none;">0</span>
         </button>
       </div>
     </div>
@@ -895,6 +914,117 @@
       </div>
     </section>
 
+    <!-- TAB: 주일학교 조직도 -->
+    <section class="tab-panel" id="panel-orgchart">
+      <div class="data-table-container org-chart-card org-chart-page">
+        <div class="org-chart-header">
+          <h3 class="org-chart-title">✝ 주일학교 조직도</h3>
+          <p class="org-chart-desc">
+            한국 가톨릭 본당 주일학교의 일반적 구성입니다. 지도 신부님 아래 교사회(교감·부교감·교사)가 교육을 이끌고,
+            청소년분과장이 청소년 사목을 담당하며, 자모회·자부회가 후원·봉사를 맡습니다.
+          </p>
+        </div>
+        <div id="orgChart" class="org-chart" aria-label="주일학교 조직도"></div>
+      </div>
+    </section>
+
+    <!-- TAB: Admin — 가입 승인 · 등록 관리 (전체 페이지) -->
+    <section class="tab-panel" id="panel-admin">
+      <div id="adminLockedNotice" style="display: none;"></div>
+      <div id="adminProtectedContent">
+        <div class="toolbar admin-page-toolbar">
+          <div class="toolbar-group admin-page-heading">
+            <h2 class="admin-page-title" id="adminUsersPageTitle">🛡️ 가입 승인 관리</h2>
+            <p class="admin-page-lead">권한 부여, Google 계정 매핑, 등록 시트 가져오기를 탭으로 나눠 관리합니다.</p>
+          </div>
+          <div class="toolbar-group">
+            <button class="btn btn-secondary btn-sm" type="button" id="btnRefreshAdminUsers">🔄 새로고침</button>
+          </div>
+        </div>
+
+        <div class="pill-group admin-main-tabs" id="adminMainTabs" role="tablist" aria-label="가입 승인 관리 메뉴">
+          <button type="button" class="pill-btn active" role="tab" data-admin-main="approve" aria-selected="true">1️⃣ 가입 승인</button>
+          <button type="button" class="pill-btn" role="tab" data-admin-main="google" aria-selected="false">2️⃣ Google 가입</button>
+          <button type="button" class="pill-btn" role="tab" data-admin-main="import" aria-selected="false">3️⃣ 시트 가져오기</button>
+        </div>
+
+        <!-- Tab 1: 가입 승인 (Person by role) -->
+        <div class="admin-main-panel" id="adminMainPanelApprove" data-admin-panel="approve">
+          <section class="admin-page-section" aria-labelledby="adminPersonsHeading">
+            <h3 class="admin-section-title" id="adminPersonsHeading">가입 승인 · 권한 부여</h3>
+            <p class="admin-section-desc">
+              등록 멤버의 <strong>역할은 Person에 저장</strong>됩니다 (Google 연동 없이도 저장 가능).
+              Google 연결·관리자 권한은 「Google 가입」탭에서 설정하세요.
+              <strong>교사·교감·담당</strong> 탭에는 교사·교감·부교감·전례부교사·복사교사·총무·청소년분과장이,
+              <strong>학부모</strong> 탭에는 학부모와 자부회장·자모회장·자부회총무·자모회총무가 표시됩니다.
+            </p>
+            <div class="pill-group admin-role-tabs" id="adminPersonRoleTabs" role="tablist" aria-label="역할 구분">
+              <button type="button" class="pill-btn" data-role-tab="priest">신부님</button>
+              <button type="button" class="pill-btn" data-role-tab="teacher">교사·교감·담당</button>
+              <button type="button" class="pill-btn active" data-role-tab="parent">학부모·자부·자모</button>
+              <button type="button" class="pill-btn" data-role-tab="student">학생</button>
+            </div>
+            <div class="admin-persons-toolbar">
+              <input
+                type="search"
+                id="adminPersonSearch"
+                class="search-input admin-person-search"
+                placeholder="이름, 세례명, 이메일, 전화 검색..."
+                autocomplete="off"
+              />
+              <span class="admin-persons-count" id="adminPersonsCount"></span>
+            </div>
+            <div class="mobile-card-list admin-users-card-list" id="adminPersonsCardList" aria-label="등록 멤버 목록"></div>
+          </section>
+        </div>
+
+        <!-- Tab 2: Google 가입 → Person 매핑 -->
+        <div class="admin-main-panel" id="adminMainPanelGoogle" data-admin-panel="google" hidden>
+          <section class="admin-page-section" aria-labelledby="adminUsersHeading">
+            <h3 class="admin-section-title" id="adminUsersHeading">Google 가입 계정 · Person 매핑</h3>
+            <p class="admin-section-desc">
+              Google 가입 계정에 Person을 연결하고, <strong>관리자 권한만</strong> 부여·해제할 수 있습니다. 교사·학부모 등 일반 권한은 「가입 승인」탭에서 설정하세요.
+            </p>
+            <div class="admin-persons-toolbar">
+              <input
+                type="search"
+                id="adminGoogleSearch"
+                class="search-input admin-person-search"
+                placeholder="이름, 이메일 검색..."
+                autocomplete="off"
+              />
+              <div class="pill-group" id="adminGoogleStatusFilter" role="group" aria-label="상태 필터">
+                <button type="button" class="pill-btn active" data-google-filter="all">전체</button>
+                <button type="button" class="pill-btn" data-google-filter="pending">대기</button>
+                <button type="button" class="pill-btn" data-google-filter="unlinked">미연결</button>
+                <button type="button" class="pill-btn" data-google-filter="linked">연결됨</button>
+              </div>
+              <span class="admin-persons-count" id="adminGoogleCount"></span>
+            </div>
+            <div class="mobile-card-list admin-users-card-list" id="adminUsersCardList" aria-label="Google 가입 목록"></div>
+          </section>
+        </div>
+
+        <!-- Tab 3: 시트 가져오기 -->
+        <div class="admin-main-panel" id="adminMainPanelImport" data-admin-panel="import" hidden>
+          <section class="admin-page-section" aria-labelledby="adminImportHeading">
+            <h3 class="admin-section-title" id="adminImportHeading">📋 주일학교 등록 시트 가져오기</h3>
+            <p class="admin-section-desc">
+              Google 시트에서 바로 가져오거나 CSV 파일을 업로드하세요. 재임포트 키는 email|name 해시이며, Google 계정 자동 매칭에는 이메일을 쓰지 않습니다.
+            </p>
+            <div class="admin-import-actions">
+              <button type="button" class="btn btn-primary btn-sm" id="btnFetchRegistrationSheet">시트에서 바로 가져오기</button>
+              <span class="admin-import-or">또는 CSV</span>
+              <input type="file" id="registrationCsvInput" accept=".csv,text/csv" class="admin-csv-input" />
+              <button type="button" class="btn btn-secondary btn-sm" id="btnPreviewRegistrationCsv" disabled>미리보기</button>
+              <button type="button" class="btn btn-primary btn-sm" id="btnApplyRegistrationCsv" disabled>확정 저장</button>
+            </div>
+            <div id="registrationImportPreview" class="admin-import-preview"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- App Footer -->
@@ -1313,82 +1443,6 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-close="modalUserDetail">닫기</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal 6: Admin User Approval Management (회원 가입 및 권한 승인 관리) -->
-  <div class="modal-backdrop" id="modalAdminUsers">
-    <div class="modal-content" style="max-width: 760px;">
-      <div class="modal-header">
-        <h3 id="adminUsersModalTitle">🛡️ 회원·등록 관리</h3>
-        <button class="modal-close-btn" data-close="modalAdminUsers">&times;</button>
-      </div>
-      <div class="modal-body">
-        <section style="margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border-color, #e5e7eb);">
-          <h4 style="margin: 0 0 0.5rem; font-size: 1rem;">📋 주일학교 등록 시트 가져오기</h4>
-          <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0 0 0.75rem;">
-            Google 시트에서 바로 가져오거나, CSV 파일을 업로드하세요. 재임포트 키는 email|name 해시이며, Google 계정 자동 매칭에는 이메일을 쓰지 않습니다.
-          </p>
-          <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem;">
-            <button type="button" class="btn btn-primary btn-sm" id="btnFetchRegistrationSheet">시트에서 바로 가져오기</button>
-            <span style="font-size: 0.78rem; color: var(--text-muted);">또는 CSV</span>
-            <input type="file" id="registrationCsvInput" accept=".csv,text/csv" style="font-size: 0.85rem; max-width: 100%;" />
-            <button type="button" class="btn btn-secondary btn-sm" id="btnPreviewRegistrationCsv" disabled>미리보기</button>
-            <button type="button" class="btn btn-primary btn-sm" id="btnApplyRegistrationCsv" disabled>확정 저장</button>
-          </div>
-          <div id="registrationImportPreview" style="font-size: 0.82rem; color: var(--text-muted); min-height: 1.2rem;"></div>
-        </section>
-
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-          Google 로그인 사용자를 승인하고, 등록 Person(학부모)과 연결할 수 있습니다.
-        </p>
-        <div class="data-table-container">
-          <div class="data-view-desktop">
-            <table class="data-table" id="adminUsersTable">
-              <thead>
-                <tr>
-                  <th>사용자</th>
-                  <th>신청 일시</th>
-                  <th>상태</th>
-                  <th>부여 역할</th>
-                  <th>멤버 연결</th>
-                  <th>관리</th>
-                </tr>
-              </thead>
-              <tbody id="adminUsersTableBody">
-                <!-- Dynamically populated -->
-              </tbody>
-            </table>
-          </div>
-          <div class="mobile-card-list" id="adminUsersCardList" aria-label="사용자 승인 카드"></div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-close="modalAdminUsers">닫기</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal 7: Link my Google account to a Person -->
-  <div class="modal-backdrop" id="modalLinkPerson">
-    <div class="modal-content" style="max-width: 480px;">
-      <div class="modal-header">
-        <h3>내 프로필 연결</h3>
-        <button class="modal-close-btn" data-close="modalLinkPerson">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-          등록 시트의 학부모 이름·세례명으로 검색해 Google 계정과 연결하세요.
-        </p>
-        <div id="linkPersonCurrent" style="font-size: 0.85rem; margin-bottom: 0.75rem;"></div>
-        <label for="linkPersonSearch" style="display:block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem;">이름 / 세례명 검색</label>
-        <input type="search" id="linkPersonSearch" placeholder="예: 송영택" style="width: 100%; padding: 0.5rem 0.65rem; margin-bottom: 0.75rem; border: 1px solid var(--border-color, #d1d5db); border-radius: 6px;" />
-        <div id="linkPersonResults" style="max-height: 240px; overflow-y: auto;"></div>
-      </div>
-      <div class="modal-footer" style="display:flex; gap:0.5rem; justify-content:flex-end; flex-wrap:wrap;">
-        <button type="button" class="btn btn-secondary" id="btnUnlinkPerson" style="display:none;">연결 해제</button>
-        <button type="button" class="btn btn-secondary" data-close="modalLinkPerson">닫기</button>
       </div>
     </div>
   </div>
