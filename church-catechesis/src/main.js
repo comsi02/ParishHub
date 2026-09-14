@@ -2256,16 +2256,16 @@ function renderAttendance() {
         <div>
           <div class="att-card-header">
             <div class="student-profile-wrap">
-              <div class="avatar">${st.name.charAt(0)}</div>
               <div>
                 <div class="student-main-name">
-                  <span class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${st.name}</span>
-                  <span class="badge badge-grade">${si.grade || '-'}</span>
+                  <span class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${escapeHtml(st.name)}${st.baptismalName ? `(${escapeHtml(st.baptismalName)})` : ''}</span>
+                  <span class="badge badge-grade">${escapeHtml(si.grade || '-')}</span>
                 </div>
                 <div class="baptismal-sub">
-                  ${st.baptismalName ? `세례명: ${st.baptismalName}` : '세례명 미등록'}
-                  ${si.feastDay ? `• 축일: ${si.feastDay}` : ''}
-                  <span style="color: var(--text-subtle); margin-left: 0.3rem;">${className !== si.grade ? className : ''}</span>
+                  ${si.feastDay ? `축일 ${escapeHtml(si.feastDay)}` : ''}
+                  ${className && className !== si.grade
+                    ? `${si.feastDay ? ' · ' : ''}${escapeHtml(className)}`
+                    : ''}
                 </div>
               </div>
             </div>
@@ -2273,9 +2273,9 @@ function renderAttendance() {
               <span class="coin">🪙</span> ${st.totalGracePoints} P
             </span>
           </div>
-          <div style="margin-top: 0.6rem;">
-            ${depts || '<span style="font-size: 0.72rem; color: var(--text-muted);">활동 부서 없음</span>'}
-          </div>
+          ${depts
+            ? `<div class="att-card-depts">${depts}</div>`
+            : ''}
         </div>
 
         <div>
