@@ -757,16 +757,31 @@ body {
 /* Feast Day Card */
 .feast-celebration-card { background: linear-gradient(135deg,#fffdf7 0%,#fefbf0 50%,#fef9ee 100%); border: 1.5px solid #fde68a; border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow-sm); transition: var(--transition); }
 :root[data-theme="dark"] .feast-celebration-card { background: linear-gradient(135deg,#1f2937 0%,#182234 100%); border-color: rgba(245,158,11,0.3); }
-.feast-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap; }
+.feast-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap; }
+.feast-header-main { display: flex; align-items: flex-start; gap: 0.75rem; min-width: 0; flex: 1; }
+.feast-header-emoji { font-size: 1.6rem; line-height: 1; margin-top: 0.15rem; }
+.feast-header-text { min-width: 0; flex: 1; }
+.feast-month-nav { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.25rem; }
+.feast-month-nav h3 { font-size: 1.05rem; font-weight: 700; color: #92400e; margin: 0; flex: 1; min-width: 10rem; text-align: center; }
 :root[data-theme="dark"] .feast-header h3 { color: #fde68a !important; }
+#feastCongratsMessage { font-size: 0.82rem; color: #b45309; margin-top: 0.1rem; }
 :root[data-theme="dark"] #feastCongratsMessage { color: #fcd34d !important; }
-.feast-students-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 0.85rem; }
-.feast-student-item { background: rgba(255,255,255,0.92); border: 1.5px solid #fde68a; border-radius: var(--radius-md); padding: 0.75rem 0.95rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; box-shadow: 0 1px 3px rgba(194,120,3,0.06); transition: var(--transition); }
-.feast-student-item:hover { background: #ffffff; transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-:root[data-theme="dark"] .feast-student-item { background: rgba(30,41,59,0.9); border-color: rgba(245,158,11,0.3); }
-:root[data-theme="dark"] .feast-student-item:hover { background: #273549; }
-:root[data-theme="dark"] .feast-student-item .clickable-name { color: #fde68a !important; }
-.feast-date-badge { display: inline-flex; align-items: center; gap: 0.25rem; background: #fef3c7; color: #92400e; font-weight: 800; font-size: 0.78rem; padding: 0.22rem 0.55rem; border-radius: var(--radius-full); border: 1px solid #fde68a; white-space: nowrap; }
+.btn-feast-month { border: 1px solid #fcd34d; background: #ffffff; color: #92400e; font-size: 0.78rem; font-weight: 700; padding: 0.32rem 0.7rem; border-radius: var(--radius-full); cursor: pointer; transition: var(--transition); white-space: nowrap; font-family: inherit; }
+.btn-feast-month:hover { background: #fef3c7; transform: translateY(-1px); }
+:root[data-theme="dark"] .btn-feast-month { background: rgba(30,41,59,0.9); color: #fde68a; border-color: rgba(245,158,11,0.4); }
+:root[data-theme="dark"] .btn-feast-month:hover { background: #273549; }
+.feast-count-badge { background: #ffffff; color: #b45309; border: 1px solid #fcd34d; font-weight: 700; padding: 0.25rem 0.65rem; }
+:root[data-theme="dark"] .feast-count-badge { background: rgba(30,41,59,0.9); color: #fde68a; border-color: rgba(245,158,11,0.4); }
+.feast-students-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 1rem; }
+.feast-student-card { background: rgba(255,255,255,0.92); border-color: #fde68a; }
+.feast-student-card:hover { border-color: #f59e0b; }
+:root[data-theme="dark"] .feast-student-card { background: rgba(30,41,59,0.9); border-color: rgba(245,158,11,0.3); }
+:root[data-theme="dark"] .feast-student-card:hover { border-color: rgba(245,158,11,0.55); background: #273549; }
+:root[data-theme="dark"] .feast-student-card .clickable-name { color: #fde68a !important; }
+.feast-name-masked { color: var(--text-muted); cursor: default; }
+.feast-empty-state { grid-column: 1 / -1; background: rgba(255,255,255,0.7); padding: 1rem; border-radius: 8px; font-size: 0.85rem; color: #92400e; text-align: center; }
+:root[data-theme="dark"] .feast-empty-state { background: rgba(30,41,59,0.7); color: #fcd34d; }
+.feast-date-badge { display: inline-flex; align-items: center; gap: 0.25rem; background: #fef3c7; color: #92400e; font-weight: 800; font-size: 0.78rem; padding: 0.28rem 0.6rem; border-radius: var(--radius-full); border: 1px solid #fde68a; white-space: nowrap; flex-shrink: 0; }
 :root[data-theme="dark"] .feast-date-badge { background: rgba(245,158,11,0.2); color: #fde68a; border-color: rgba(245,158,11,0.4); }
 
 /* Theme Toggle */
@@ -1166,6 +1181,8 @@ body {
   .attendance-grid { grid-template-columns: 1fr; }
   .feast-celebration-card { padding: 1rem; }
   .feast-students-grid { grid-template-columns: 1fr; }
+  .feast-month-nav { justify-content: space-between; }
+  .feast-month-nav h3 { flex: 1 1 100%; order: -1; text-align: left; }
   .honor-students-list { grid-template-columns: 1fr; }
 
   .data-table-container { -webkit-overflow-scrolling: touch; }

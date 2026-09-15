@@ -57,6 +57,9 @@ let currentGraceGradeFilter = 'all';
 let currentDirectoryView = 'students'; // 'students' | 'parents' | 'teachers' | 'classes'
 let currentUser = null;
 let currentUserProfile = null;
+/** 축일 안내에서 보는 연·월 (0-based month) */
+let feastViewYear = new Date().getFullYear();
+let feastViewMonth = new Date().getMonth();
 
 const MORE_TABS = new Set(['stats', 'activities', 'students', 'orgchart', 'admin']);
 const ALL_TABS = new Set(['dashboard', 'schedule', 'attendance', 'stats', 'activities', 'grace', 'students', 'orgchart', 'admin']);
@@ -2109,6 +2112,93 @@ function renderOrgChart() {
 // ============================================================
 //  TAB 1: Dashboard
 // ============================================================
+function shiftFeastViewMonth(delta) {
+  const cursor = new Date(feastViewYear, feastViewMonth + delta, 1);
+  feastViewYear = cursor.getFullYear();
+  feastViewMonth = cursor.getMonth();
+  renderFeastCelebration(dataProvider.getStudents(), isUserApproved());
+}
+
+function renderFeastCelebration(students = dataProvider.getStudents(), isApproved = isUserApproved()) {
+  const monthNum = feastViewMonth + 1;
+  const monthKey = String(monthNum).padStart(2, '0');
+  const now = new Date();
+  const isCurrentMonth = feastViewYear === now.getFullYear() && feastViewMonth === now.getMonth();
+
+  const feastHeaderTitle = document.getElementById('feastHeaderTitle');
+  if (feastHeaderTitle) {
+    feastHeaderTitle.textContent = isCurrentMonth
+      ? `이번 달(${monthNum}월) 축일을 맞이한 친구들`
+      : `${feastViewYear}년 ${monthNum}월 축일 친구들`;
+  }
+
+  const feastMsg = document.getElementById('feastCongratsMessage');
+  if (feastMsg) {
+    feastMsg.textContent = isCurrentMonth
+      ? '🎉 주님의 은총 속에서 영명축일을 맞이한 모든 친구들을 진심으로 축하합니다! 주님의 축복과 사랑이 늘 함께하시길 기도합니다. ✝️'
+      : `${monthNum}월 영명축일 대상 학생을 미리 확인할 수 있습니다.`;
+  }
+
+  const feastStudents = students
+    .filter(s => s.studentInfo?.feastDay?.startsWith(monthKey))
+    .slice()
+    .sort((a, b) => a.studentInfo.feastDay.localeCompare(b.studentInfo.feastDay));
+
+  const feastGrid = document.getElementById('feastStudentsGrid');
+  const feastCountBadge = document.getElementById('feastCountBadge');
+  if (!feastGrid || !feastCountBadge) return;
+
+  if (feastStudents.length === 0) {
+    feastCountBadge.textContent = '0명';
+    feastGrid.innerHTML = `
+      <div class="feast-empty-state">
+        ${monthNum}월에는 축일 대상 학생이 없습니다.
+      </div>
+    `;
+    return;
+  }
+
+  feastCountBadge.textContent = `${feastStudents.length}명 축하 👏`;
+  feastGrid.innerHTML = feastStudents.map(st => {
+    const si = st.studentInfo || {};
+    const [m, d] = String(si.feastDay || '').split('-');
+    const displayName = isApproved ? st.name : maskKoreanName(st.name);
+    const baptismalPart = isApproved
+      ? (st.baptismalName ? `(${escapeHtml(st.baptismalName)})` : '')
+      : maskBaptismalName(st.baptismalName);
+    const nameMarkup = isApproved
+      ? `<span class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${escapeHtml(displayName)}${baptismalPart}</span>`
+      : `<span class="feast-name-masked" title="로그인 후 상세 확인 가능">${escapeHtml(displayName)}${baptismalPart}</span>`;
+    const depts = (si.departments || []).map(dept => `<span class="dept-tag">${escapeHtml(dept)}</span>`).join('');
+    const className = getClassNameForGrade(si.grade);
+    const dayLabel = (m && d)
+      ? `📅 ${parseInt(m, 10)}월 ${parseInt(d, 10)}일`
+      : '📅 축일';
+
+    return `
+      <div class="student-att-card feast-student-card" data-student-id="${st.id}">
+        <div>
+          <div class="att-card-header">
+            <div class="student-profile-wrap">
+              <div>
+                <div class="student-main-name">
+                  ${nameMarkup}
+                  <span class="badge badge-grade">${escapeHtml(si.grade || '-')}</span>
+                </div>
+                <div class="baptismal-sub">
+                  ${className && className !== si.grade ? escapeHtml(className) : '영명축일'}
+                </div>
+              </div>
+            </div>
+            <span class="feast-date-badge">${dayLabel}</span>
+          </div>
+          ${depts ? `<div class="att-card-depts">${depts}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderDashboard() {
   renderDDayProgress();
 
@@ -2133,63 +2223,7 @@ function renderDashboard() {
     activity: activitiesToday.length
   });
 
-  // --- 이번 달 축일 대상자 ---
-  const now = new Date();
-  const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-  const monthNum = now.getMonth() + 1;
-
-  const feastHeaderTitle = document.getElementById('feastHeaderTitle');
-  if (feastHeaderTitle) feastHeaderTitle.textContent = `🎂 이번 달(${monthNum}월) 축일을 맞이한 친구들`;
-
-  const feastStudents = students.filter(s => s.studentInfo?.feastDay?.startsWith(currentMonth));
-  feastStudents.sort((a, b) => a.studentInfo.feastDay.localeCompare(b.studentInfo.feastDay));
-
-  const feastGrid = document.getElementById('feastStudentsGrid');
-  const feastCountBadge = document.getElementById('feastCountBadge');
-  if (feastGrid && feastCountBadge) {
-    if (feastStudents.length === 0) {
-      feastCountBadge.textContent = '0명';
-      feastGrid.innerHTML = `
-        <div style="grid-column: 1 / -1; background: rgba(255,255,255,0.7); padding: 0.85rem; border-radius: 8px; font-size: 0.85rem; color: #92400e; text-align: center;">
-          이번 달(${monthNum}월)에는 축일 대상 학생이 없습니다.
-        </div>
-      `;
-    } else {
-      feastCountBadge.textContent = `${feastStudents.length}명 축하 👏`;
-      feastGrid.innerHTML = feastStudents.map(st => {
-        const [m, d] = st.studentInfo.feastDay.split('-');
-        const displayName = isApproved ? st.name : maskKoreanName(st.name);
-        const displayBaptismal = isApproved
-          ? `(${st.baptismalName || '세례명'})`
-          : maskBaptismalName(st.baptismalName);
-        const avatarInitial = isApproved ? st.name.charAt(0) : '🎉';
-        const nameMarkup = isApproved
-          ? `<span class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${displayName}</span>`
-          : `<span style="color: var(--text-muted); cursor: default;" title="로그인 후 상세 확인 가능">${displayName}</span>`;
-
-        return `
-          <div class="feast-student-item">
-            <div style="display: flex; align-items: center; gap: 0.65rem;">
-              <div class="avatar" style="width: 38px; height: 38px; font-size: 0.95rem; background: #fef3c7; color: #b45309; border: 1px solid #fcd34d;">
-                ${avatarInitial}
-              </div>
-              <div>
-                <div style="font-weight: 700; font-size: 0.92rem;">
-                  ${nameMarkup}
-                  <span style="font-size: 0.8rem; font-weight: normal; color: #92400e;">${displayBaptismal}</span>
-                </div>
-                <div style="font-size: 0.74rem; color: var(--text-muted);">
-                  <span class="badge badge-grade" style="font-size: 0.68rem; padding: 0.1rem 0.35rem;">${st.studentInfo.grade}</span>
-                  ${(st.studentInfo.departments || []).length > 0 ? `• ${st.studentInfo.departments[0]}` : ''}
-                </div>
-              </div>
-            </div>
-            <span class="feast-date-badge">📅 ${parseInt(m, 10)}월 ${parseInt(d, 10)}일</span>
-          </div>
-        `;
-      }).join('');
-    }
-  }
+  renderFeastCelebration(students, isApproved);
 
   // --- TOP 5 은총표 랭킹 ---
   const sortedStudents = [...students].sort((a, b) => b.totalGracePoints - a.totalGracePoints);
@@ -3643,6 +3677,9 @@ if (attDatePicker) {
 }
 const actDateInput = document.getElementById('actDate');
 if (actDateInput) actDateInput.value = getTodayDateString();
+
+document.getElementById('btnFeastPrevMonth')?.addEventListener('click', () => shiftFeastViewMonth(-1));
+document.getElementById('btnFeastNextMonth')?.addEventListener('click', () => shiftFeastViewMonth(1));
 
 // Attendance grade filter
 document.querySelectorAll('#attGradeFilterGroup .pill-btn').forEach(btn => {

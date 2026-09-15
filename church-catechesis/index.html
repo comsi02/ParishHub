@@ -308,22 +308,24 @@
       <!-- Feast Day Celebration Banner -->
       <div class="feast-celebration-card" id="feastCelebrationCard">
         <div class="feast-header">
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <span style="font-size: 1.6rem;">🎂</span>
-            <div>
-              <h3 style="font-size: 1.05rem; font-weight: 700; color: #92400e;" id="feastHeaderTitle">
-                이번 달 축일을 맞이한 친구들
-              </h3>
-              <p style="font-size: 0.82rem; color: #b45309; margin-top: 0.1rem;" id="feastCongratsMessage">
+          <div class="feast-header-main">
+            <span class="feast-header-emoji" aria-hidden="true">🎂</span>
+            <div class="feast-header-text">
+              <div class="feast-month-nav">
+                <button type="button" class="btn-feast-month" id="btnFeastPrevMonth" aria-label="이전 달 축일">
+                  ‹ 이전달
+                </button>
+                <h3 id="feastHeaderTitle">이번 달 축일을 맞이한 친구들</h3>
+                <button type="button" class="btn-feast-month" id="btnFeastNextMonth" aria-label="다음 달 축일">
+                  다음달 ›
+                </button>
+              </div>
+              <p id="feastCongratsMessage">
                 🎉 주님의 은총 속에서 영명축일을 맞이한 모든 친구들을 진심으로 축하합니다! 주님의 축복과 사랑이 늘 함께하시길 기도합니다. ✝️
               </p>
             </div>
           </div>
-          <span class="badge"
-            style="background: #ffffff; color: #b45309; border: 1px solid #fcd34d; font-weight: 700; padding: 0.25rem 0.65rem;"
-            id="feastCountBadge">
-            0명
-          </span>
+          <span class="badge feast-count-badge" id="feastCountBadge">0명</span>
         </div>
         <div class="feast-students-grid" id="feastStudentsGrid">
           <!-- Dynamically populated -->
