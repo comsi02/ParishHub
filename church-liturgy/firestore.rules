@@ -156,7 +156,19 @@ service cloud.firestore {
     // 등록 시트 임포트 Person (학부모·학생)
     match /catechesis_persons/{personId} {
       allow read: if isCatechesisAdmin() || isCatechesisActiveUser();
-      allow write: if isCatechesisAdmin();
+      allow write: if isCatechesisAdmin() || isCatechesisActiveUser();
+    }
+
+    // 주일학교 학사 일정
+    match /catechesis_schedules/{scheduleId} {
+      allow read: if isCatechesisAdmin() || isCatechesisActiveUser();
+      allow write: if isCatechesisActiveUser();
+    }
+
+    // 주일학교 반 구성
+    match /catechesis_classes/{classId} {
+      allow read: if isCatechesisAdmin() || isCatechesisActiveUser();
+      allow write: if isCatechesisActiveUser();
     }
   }
 }

@@ -25,7 +25,29 @@ import {
   updateUserAdminFlag
 } from './services/auth.js';
 import { dataProvider } from './services/DataProvider.js';
-import { loadPersonsFromFirestore, patchPerson, searchPersons, upsertPersons } from './services/personStore.js';
+import { loadPersonsFromFirestore, patchPerson, searchPersons, upsertPersons, allocatePersonId } from './services/personStore.js';
+import {
+  loadSchedulesFromFirestore,
+  saveSchedule,
+  updateSchedule as updateScheduleRemote,
+  removeSchedule,
+  resetSeasonSchedules,
+  toggleScheduleHasSchool,
+} from './services/scheduleStore.js';
+import {
+  loadClassesFromFirestore,
+  saveClass,
+  updateClass as updateClassRemote,
+  removeClass,
+} from './services/classStore.js';
+import {
+  loadOpsFromFirestore,
+  recordAttendanceRemote,
+  recordAttendanceBatch,
+  recordActivityRemote,
+  addBonusPointsRemote,
+  ensureSettingsInFirestore,
+} from './services/opsStore.js';
 import { parseRegistrationCsv } from './services/registrationImport.js';
 
 // --- State ---
@@ -120,13 +142,69 @@ function switchToTab(tabName) {
   syncNavActiveState(tabName);
   closeNavMore();
 
-  if (tabName === 'dashboard') renderDashboard();
-  if (tabName === 'schedule') renderSchedule();
-  if (tabName === 'attendance') renderAttendance();
-  if (tabName === 'stats') renderStats();
-  if (tabName === 'activities') renderActivities();
-  if (tabName === 'grace') renderGraceBank();
-  if (tabName === 'students') renderDirectory();
+  if (tabName === 'dashboard') {
+    loadOpsFromFirestore()
+      .then(() => renderDashboard())
+      .catch((err) => {
+        console.error(err);
+        renderDashboard();
+      });
+    return;
+  }
+  if (tabName === 'schedule') {
+    loadSchedulesFromFirestore()
+      .then(() => renderSchedule())
+      .catch((err) => {
+        console.error(err);
+        renderSchedule();
+      });
+    return;
+  }
+  if (tabName === 'attendance') {
+    loadOpsFromFirestore()
+      .then(() => renderAttendance())
+      .catch((err) => {
+        console.error(err);
+        renderAttendance();
+      });
+    return;
+  }
+  if (tabName === 'stats') {
+    loadOpsFromFirestore()
+      .then(() => renderStats())
+      .catch((err) => {
+        console.error(err);
+        renderStats();
+      });
+    return;
+  }
+  if (tabName === 'activities') {
+    loadOpsFromFirestore()
+      .then(() => renderActivities())
+      .catch((err) => {
+        console.error(err);
+        renderActivities();
+      });
+    return;
+  }
+  if (tabName === 'grace') {
+    loadOpsFromFirestore()
+      .then(() => renderGraceBank())
+      .catch((err) => {
+        console.error(err);
+        renderGraceBank();
+      });
+    return;
+  }
+  if (tabName === 'students') {
+    Promise.all([loadPersonsFromFirestore(), loadClassesFromFirestore()])
+      .then(() => renderDirectory())
+      .catch((err) => {
+        console.error(err);
+        renderDirectory();
+      });
+    return;
+  }
   if (tabName === 'orgchart') renderOrgChart();
   if (tabName === 'admin') renderAdminUsersPage();
 }
@@ -1717,6 +1795,21 @@ function initAuthUI() {
       loadPersonsFromFirestore().then(() => {
         if (currentTab === 'students') renderDirectory();
       }).catch(() => {});
+      loadSchedulesFromFirestore().then(() => {
+        if (currentTab === 'dashboard') renderDashboard();
+        if (currentTab === 'schedule') renderSchedule();
+        if (currentTab === 'attendance') renderAttendance();
+      }).catch(() => {});
+      loadClassesFromFirestore().then(() => {
+        if (currentTab === 'students') renderDirectory();
+      }).catch(() => {});
+      Promise.all([loadOpsFromFirestore(), ensureSettingsInFirestore()]).then(() => {
+        if (currentTab === 'dashboard') renderDashboard();
+        if (currentTab === 'attendance') renderAttendance();
+        if (currentTab === 'stats') renderStats();
+        if (currentTab === 'activities') renderActivities();
+        if (currentTab === 'grace') renderGraceBank();
+      }).catch(() => {});
 
       if (user.photoURL) {
         if (userAvatarImg) {
@@ -2294,18 +2387,23 @@ function renderAttendance() {
 
   // 출석 버튼 이벤트 (원클릭으로 출석 체크 완료)
   attendanceGrid.querySelectorAll('.btn-att-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const studentId = btn.getAttribute('data-id');
       const newStatus = btn.getAttribute('data-status');
       if (schoolDay === false) {
         const ok = confirm('선택한 날짜는 학사 일정 상 휴교일입니다. 그래도 출석을 기록할까요?');
         if (!ok) return;
       }
-      dataProvider.recordAttendance({ date: selectedDate, studentId, status: newStatus, recordedBy: '담당 선생님' });
-      showToast(`${newStatus} 체크 완료 (은총표 자동 반영)`, '✅');
-      renderAttendance();
-      renderDashboard();
-      renderStats();
+      try {
+        await recordAttendanceRemote({ date: selectedDate, studentId, status: newStatus, recordedBy: '담당 선생님' });
+        showToast(`${newStatus} 체크 완료 (은총표 자동 반영)`, '✅');
+        renderAttendance();
+        renderDashboard();
+        renderStats();
+      } catch (err) {
+        console.error(err);
+        showToast('출석 저장에 실패했습니다.', '⚠️');
+      }
     });
   });
 }
@@ -2887,11 +2985,15 @@ function renderClassesView() {
     btn.addEventListener('click', () => openEditClassModal(btn.getAttribute('data-id')));
   });
   grid.querySelectorAll('.btn-delete-class').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (confirm('이 반을 삭제하시겠습니까?')) {
-        dataProvider.deleteClass(btn.getAttribute('data-id'));
+    btn.addEventListener('click', async () => {
+      if (!confirm('이 반을 삭제하시겠습니까?')) return;
+      try {
+        await removeClass(btn.getAttribute('data-id'));
         showToast('반이 삭제되었습니다.', '🗑️');
         renderClassesView();
+      } catch (err) {
+        console.error(err);
+        showToast(err?.message || '반 삭제에 실패했습니다.', '❌');
       }
     });
   });
@@ -2951,7 +3053,7 @@ document.getElementById('btnOpenAddClassModal')?.addEventListener('click', () =>
   openModal('modalAddClass');
 });
 
-document.getElementById('addClassForm')?.addEventListener('submit', (e) => {
+document.getElementById('addClassForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const editId = document.getElementById('editClassId').value;
   const name = document.getElementById('newClassName').value.trim();
@@ -2959,17 +3061,27 @@ document.getElementById('addClassForm')?.addEventListener('submit', (e) => {
   const grades = Array.from(document.querySelectorAll('#classGradeCheckboxes input[type="checkbox"]:checked')).map(cb => cb.value);
   const teacherPersonIds = Array.from(document.querySelectorAll('.class-teacher-check:checked')).map(cb => cb.value);
 
-  if (editId) {
-    dataProvider.updateClass(editId, { name, grades, teacherPersonIds, notes });
-    showToast(`"${name}" 반 정보가 수정되었습니다.`, '✏️');
-  } else {
-    dataProvider.addClass({ name, grades, teacherPersonIds, notes });
-    showToast(`"${name}" 반이 추가되었습니다!`, '🏫');
+  if (!name) {
+    showToast('반 이름을 입력해 주세요.', '⚠️');
+    return;
   }
-  closeModal('modalAddClass');
-  document.getElementById('addClassForm').reset();
-  renderClassesView();
-  renderDashboard();
+
+  try {
+    if (editId) {
+      await updateClassRemote(editId, { name, grades, teacherPersonIds, notes });
+      showToast(`"${name}" 반 정보가 수정되었습니다.`, '✏️');
+    } else {
+      await saveClass({ name, grades, teacherPersonIds, notes });
+      showToast(`"${name}" 반이 추가되었습니다!`, '🏫');
+    }
+    closeModal('modalAddClass');
+    document.getElementById('addClassForm').reset();
+    renderClassesView();
+    renderDashboard();
+  } catch (err) {
+    console.error(err);
+    showToast(err?.message || '반 저장에 실패했습니다. Firestore 권한을 확인하세요.', '❌');
+  }
 });
 
 // ============================================================
@@ -3312,13 +3424,18 @@ function renderSchedule() {
   const roots = [tbody, cardList];
 
   // Toggle school button
-  bindInRoots(roots, '.btn-toggle-school', (e) => {
+  bindInRoots(roots, '.btn-toggle-school', async (e) => {
     const btn = e.currentTarget;
     if (!requireScheduleEditPermission('수업/휴교 전환')) return;
     const id = btn.getAttribute('data-id');
-    dataProvider.toggleScheduleHasSchool(id);
-    renderSchedule();
-    renderDashboard();
+    try {
+      await toggleScheduleHasSchool(id);
+      renderSchedule();
+      renderDashboard();
+    } catch (err) {
+      console.error(err);
+      showToast('수업/휴교 전환 저장에 실패했습니다.', '⚠️');
+    }
   });
 
   // Edit button
@@ -3341,16 +3458,20 @@ function renderSchedule() {
   });
 
   // Delete button
-  bindInRoots(roots, '.btn-delete-schedule', (e) => {
+  bindInRoots(roots, '.btn-delete-schedule', async (e) => {
     const btn = e.currentTarget;
     if (!requireScheduleEditPermission('일정 삭제')) return;
     const id = btn.getAttribute('data-id');
     const sch = dataProvider.getScheduleById(id);
-    if (sch && confirm(`"${sch.title}" 일정을 삭제하시겠습니까?`)) {
-      dataProvider.deleteSchedule(id);
+    if (!sch || !confirm(`"${sch.title}" 일정을 삭제하시겠습니까?`)) return;
+    try {
+      await removeSchedule(id);
       showToast('일정이 삭제되었습니다.', '🗑️');
       renderSchedule();
       renderDashboard();
+    } catch (err) {
+      console.error(err);
+      showToast(err?.message || '일정 삭제에 실패했습니다.', '❌');
     }
   });
 }
@@ -3389,7 +3510,7 @@ document.getElementById('newScheduleType')?.addEventListener('change', (e) => {
 });
 
 // 학사 일정 폼 제출 (추가 / 수정)
-document.getElementById('addScheduleForm')?.addEventListener('submit', (e) => {
+document.getElementById('addScheduleForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!requireScheduleEditPermission('일정 저장')) return;
   const id = document.getElementById('editScheduleId')?.value;
@@ -3405,36 +3526,46 @@ document.getElementById('addScheduleForm')?.addEventListener('submit', (e) => {
     return;
   }
 
-  if (id) {
-    dataProvider.updateSchedule(id, { seasonId, date, title, type, hasSchool, notes });
-    showToast(`✅ "${title}" 일정이 수정되었습니다.`, '📅');
-  } else {
-    dataProvider.addSchedule({ seasonId, date, title, type, hasSchool, notes });
-    showToast(`✅ "${title}" 일정이 등록되었습니다.`, '📅');
+  try {
+    if (id) {
+      await updateScheduleRemote(id, { seasonId, date, title, type, hasSchool, notes });
+      showToast(`✅ "${title}" 일정이 수정되었습니다.`, '📅');
+    } else {
+      await saveSchedule({ seasonId, date, title, type, hasSchool, notes });
+      showToast(`✅ "${title}" 일정이 등록되었습니다.`, '📅');
+    }
+    closeModal('modalAddSchedule');
+    renderSchedule();
+    renderDashboard();
+  } catch (err) {
+    console.error(err);
+    showToast(err?.message || '일정 저장에 실패했습니다. Firestore 권한을 확인하세요.', '❌');
   }
-
-  closeModal('modalAddSchedule');
-  renderSchedule();
-  renderDashboard();
 });
 
 // 시즌 일정 초기화 (학사 일정만 — 출석/학생/은총 유지)
-document.getElementById('btnResetSeasonSchedules')?.addEventListener('click', () => {
+document.getElementById('btnResetSeasonSchedules')?.addEventListener('click', async () => {
   if (!requireScheduleEditPermission('시즌 일정 초기화')) return;
   const seasonId = document.getElementById('scheduleSeasonFilter')?.value || getCurrentSeasonId();
   if (seasonId === 'all') {
     showToast('시즌을 선택한 뒤 초기화해 주세요.', '⚠️');
     return;
   }
-  if (confirm(`${seasonId} 시즌 학사 일정을 기본 샘플로 초기화합니까?\n(출석·학생·은총 데이터는 유지됩니다)`)) {
-    const count = dataProvider.resetSeasonSchedules(seasonId);
+  if (!confirm(`${seasonId} 시즌 학사 일정을 기본 샘플로 초기화해 Firestore에 저장할까요?\n(출석·학생·은총 데이터는 유지됩니다)`)) {
+    return;
+  }
+  try {
+    const count = await resetSeasonSchedules(seasonId);
     showToast(count > 0
-      ? `${seasonId} 학사 일정 ${count}건으로 복구했습니다.`
+      ? `${seasonId} 학사 일정 ${count}건으로 복구·저장했습니다.`
       : `${seasonId} 기본 시드가 없어 일정을 비웠습니다.`, '⚡');
     renderSchedule();
     renderDashboard();
     renderStats();
     renderAttendance();
+  } catch (err) {
+    console.error(err);
+    showToast(err?.message || '시즌 일정 초기화에 실패했습니다.', '❌');
   }
 });
 
@@ -3537,7 +3668,7 @@ document.getElementById('graceSearchInput')?.addEventListener('input', () => ren
 document.getElementById('directorySearchInput')?.addEventListener('input', () => renderDirectory());
 
 // 전원 출석
-document.getElementById('btnMarkAllPresent')?.addEventListener('click', () => {
+document.getElementById('btnMarkAllPresent')?.addEventListener('click', async () => {
   const selectedDate = attDatePicker.value || getTodayDateString();
   if (dataProvider.isSchoolDay(selectedDate) === false) {
     const ok = confirm('선택한 날짜는 학사 일정 상 휴교일입니다. 그래도 전원 출석을 기록할까요?');
@@ -3545,13 +3676,22 @@ document.getElementById('btnMarkAllPresent')?.addEventListener('click', () => {
   }
   const students = dataProvider.getStudents();
   const filtered = students.filter(st => matchGradeGroup(st.studentInfo?.grade || '', currentAttGradeFilter));
-  filtered.forEach(st => {
-    dataProvider.recordAttendance({ date: selectedDate, studentId: st.id, status: '출석', massAttended: true, recordedBy: '교사회 일괄 체크' });
-  });
-  showToast(`${filtered.length}명 전원 출석(+미사) 체크 완료!`, '🎉');
-  renderAttendance();
-  renderDashboard();
-  renderStats();
+  try {
+    await recordAttendanceBatch(filtered.map(st => ({
+      date: selectedDate,
+      studentId: st.id,
+      status: '출석',
+      massAttended: true,
+      recordedBy: '교사회 일괄 체크',
+    })));
+    showToast(`${filtered.length}명 전원 출석(+미사) 체크 완료!`, '🎉');
+    renderAttendance();
+    renderDashboard();
+    renderStats();
+  } catch (err) {
+    console.error(err);
+    showToast('전원 출석 저장에 실패했습니다.', '⚠️');
+  }
 });
 
 // Activity dept -> points
@@ -3562,18 +3702,23 @@ document.getElementById('actDeptSelect')?.addEventListener('change', (e) => {
 });
 
 // Activity form
-document.getElementById('activityForm')?.addEventListener('submit', (e) => {
+document.getElementById('activityForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const date = document.getElementById('actDate').value;
   const studentId = document.getElementById('actStudentSelect').value;
   const department = document.getElementById('actDeptSelect').value;
   const roleDetail = document.getElementById('actRoleDetail').value;
   const points = Number(document.getElementById('actPoints').value);
-  dataProvider.recordActivity({ date, studentId, department, roleDetail, pointsEarned: points, recordedBy: '담당 교사' });
-  showToast(`활동 봉사 기록 및 은총표 +${points} P 적립 완료`, '🕊️');
-  document.getElementById('actRoleDetail').value = '';
-  renderActivities();
-  renderDashboard();
+  try {
+    await recordActivityRemote({ date, studentId, department, roleDetail, pointsEarned: points, recordedBy: '담당 교사' });
+    showToast(`활동 봉사 기록 및 은총표 +${points} P 적립 완료`, '🕊️');
+    document.getElementById('actRoleDetail').value = '';
+    renderActivities();
+    renderDashboard();
+  } catch (err) {
+    console.error(err);
+    showToast('활동 저장에 실패했습니다.', '⚠️');
+  }
 });
 
 // Bonus points modal
@@ -3585,18 +3730,23 @@ document.getElementById('btnOpenBonusModal')?.addEventListener('click', () => {
   openModal('modalBonusPoints');
 });
 
-document.getElementById('bonusPointsForm')?.addEventListener('submit', (e) => {
+document.getElementById('bonusPointsForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const studentId = document.getElementById('bonusStudentSelect').value;
   const amount = Number(document.getElementById('bonusAmount').value);
   const reason = document.getElementById('bonusReason').value;
   const issuer = document.getElementById('bonusIssuer').value;
-  dataProvider.addBonusPoints({ studentId, amount, reason, issuedBy: issuer });
-  showToast(`은총표 ${amount >= 0 ? '+' : ''}${amount} P 처리 완료!`, '🪙');
-  closeModal('modalBonusPoints');
-  renderGraceBank();
-  renderDashboard();
-  renderDirectory();
+  try {
+    await addBonusPointsRemote({ studentId, amount, reason, issuedBy: issuer });
+    showToast(`은총표 ${amount >= 0 ? '+' : ''}${amount} P 처리 완료!`, '🪙');
+    closeModal('modalBonusPoints');
+    renderGraceBank();
+    renderDashboard();
+    renderDirectory();
+  } catch (err) {
+    console.error(err);
+    showToast('은총표 저장에 실패했습니다.', '⚠️');
+  }
 });
 
 // Add Student modal
@@ -3608,7 +3758,7 @@ document.getElementById('btnOpenAddStudentModal')?.addEventListener('click', () 
   openModal('modalAddStudent');
 });
 
-document.getElementById('addStudentForm')?.addEventListener('submit', (e) => {
+document.getElementById('addStudentForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('newStudentName').value.trim();
   const baptismalName = document.getElementById('newStudentBaptismal').value.trim();
@@ -3621,23 +3771,35 @@ document.getElementById('addStudentForm')?.addEventListener('submit', (e) => {
   const notes = document.getElementById('newStudentNotes').value.trim();
   const departments = Array.from(document.querySelectorAll('#deptCheckboxes input[type="checkbox"]:checked')).map(cb => cb.value);
 
-  dataProvider.addStudent({
-    name, baptismalName, grade, gender, feastDay,
-    parentPersonIds: parentId ? [parentId] : [],
-    firstCommunion, confirmation, departments, notes,
-  });
-  showToast(`${name} 학생이 성공적으로 등록되었습니다!`, '🎉');
-  closeModal('modalAddStudent');
-  document.getElementById('addStudentForm').reset();
-  renderDirectory();
-  renderDashboard();
-  renderAttendance();
+  try {
+    const newStudent = dataProvider.addStudent({
+      id: allocatePersonId(),
+      name, baptismalName, grade, gender, feastDay,
+      parentPersonIds: parentId ? [parentId] : [],
+      firstCommunion, confirmation, departments, notes,
+    });
+    const toSave = [newStudent];
+    if (parentId) {
+      const parent = dataProvider.getPersonById(parentId);
+      if (parent) toSave.push(parent);
+    }
+    await upsertPersons(toSave);
+    showToast(`${name} 학생이 성공적으로 등록되었습니다!`, '🎉');
+    closeModal('modalAddStudent');
+    document.getElementById('addStudentForm').reset();
+    renderDirectory();
+    renderDashboard();
+    renderAttendance();
+  } catch (err) {
+    console.error(err);
+    showToast('학생 등록 저장에 실패했습니다.', '⚠️');
+  }
 });
 
 // Add Parent modal
 document.getElementById('btnOpenAddParentModal')?.addEventListener('click', () => openModal('modalAddParent'));
 
-document.getElementById('addParentForm')?.addEventListener('submit', (e) => {
+document.getElementById('addParentForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('newParentName').value.trim();
   const baptismalName = document.getElementById('newParentBaptismal').value.trim();
@@ -3649,33 +3811,60 @@ document.getElementById('addParentForm')?.addEventListener('submit', (e) => {
   const parent2IsTeacher = document.getElementById('newParent2IsTeacher').checked;
   const address = document.getElementById('newParentAddress').value.trim();
 
-  // 학부모 1 등록
-  const newParent1 = dataProvider.addParent({ name, baptismalName, phone, isTeacher, address });
+  try {
+    const newParent1 = dataProvider.addParent({
+      id: allocatePersonId(),
+      name, baptismalName, phone, isTeacher, address,
+    });
+    const toSave = [newParent1];
 
-  // 학부모 2가 있는 경우 별도 등록 후 배우자 연결
-  if (parent2Name) {
-    const newParent2 = dataProvider.addParent({
-      name: parent2Name, baptismalName: parent2Baptismal,
-      phone: parent2Phone, isTeacher: parent2IsTeacher, address,
-      spousePersonId: newParent1.id,
-    });
-    // 배우자 ID 상호 연결
-    dataProvider.updatePerson(newParent1.id, {
-      parentInfo: { ...newParent1.parentInfo, spousePersonId: newParent2.id }
-    });
+    if (parent2Name) {
+      const newParent2 = dataProvider.addParent({
+        id: allocatePersonId(),
+        name: parent2Name, baptismalName: parent2Baptismal,
+        phone: parent2Phone, isTeacher: parent2IsTeacher, address,
+        spousePersonId: newParent1.id,
+      });
+      const linked1 = dataProvider.updatePerson(newParent1.id, {
+        parentInfo: { ...newParent1.parentInfo, spousePersonId: newParent2.id }
+      });
+      toSave[0] = linked1 || dataProvider.getPersonById(newParent1.id);
+      toSave.push(newParent2);
+    }
+
+    await upsertPersons(toSave);
+    showToast(`${name} 학부모님이 성공적으로 등록되었습니다!`, '🎉');
+    closeModal('modalAddParent');
+    document.getElementById('addParentForm').reset();
+    renderDirectory();
+  } catch (err) {
+    console.error(err);
+    showToast('학부모 등록 저장에 실패했습니다.', '⚠️');
   }
-
-  showToast(`${name} 학부모님이 성공적으로 등록되었습니다!`, '🎉');
-  closeModal('modalAddParent');
-  document.getElementById('addParentForm').reset();
-  renderDirectory();
 });
 
 // Reset data
-btnResetData?.addEventListener('click', () => {
-  if (confirm('모든 데이터를 초기 샘플 데이터로 복구하시겠습니까?')) {
+btnResetData?.addEventListener('click', async () => {
+  const isFirebase = dataProvider.mode === 'firebase';
+  const msg = isFirebase
+    ? '로컬 캐시를 비우고 Firestore에서 다시 불러올까요? (원격 데이터는 삭제되지 않습니다)'
+    : '모든 데이터를 초기 샘플 데이터로 복구하시겠습니까?';
+  if (!confirm(msg)) return;
+
+  try {
     dataProvider.resetToDefaults();
-    showToast('샘플 데이터로 초기화되었습니다.', '🔄');
+    if (isFirebase) {
+      await Promise.all([
+        loadPersonsFromFirestore(),
+        loadSchedulesFromFirestore(),
+        loadClassesFromFirestore(),
+        loadOpsFromFirestore(),
+        ensureSettingsInFirestore(),
+      ]);
+      showToast('Firestore 데이터를 다시 불러왔습니다.', '🔄');
+    } else {
+      showToast('샘플 데이터로 초기화되었습니다.', '🔄');
+    }
     renderDashboard();
     renderSchedule();
     renderAttendance();
@@ -3683,6 +3872,9 @@ btnResetData?.addEventListener('click', () => {
     renderActivities();
     renderGraceBank();
     renderDirectory();
+  } catch (err) {
+    console.error(err);
+    showToast('데이터 초기화/재로딩에 실패했습니다.', '⚠️');
   }
 });
 

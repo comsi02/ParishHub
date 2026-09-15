@@ -42,7 +42,12 @@ export function resolvePersonIdsForUpsert(persons) {
 
   persons.forEach(p => {
     const key = p.importKey || p.id;
-    let id = p.importKey ? idByImportKey.get(p.importKey) : null;
+    let id = null;
+    if (p.importKey) {
+      id = idByImportKey.get(p.importKey) || null;
+    } else if (p.id) {
+      id = p.id;
+    }
     if (!id) id = allocatePersonId();
     if (key) idByImportKey.set(key, id);
     if (p.importKey) idByImportKey.set(p.importKey, id);

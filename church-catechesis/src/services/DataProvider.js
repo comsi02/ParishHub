@@ -24,7 +24,7 @@ class DataProvider {
   //  초기화
   // ============================================================
   initLocalStorage() {
-    const DATA_VERSION = '2026_09_v10_schedule_sync';
+    const DATA_VERSION = '2026_09_v13_ops_firestore';
     if (localStorage.getItem('catechesis_data_version') !== DATA_VERSION) {
       this.resetToDefaults();
       localStorage.setItem('catechesis_data_version', DATA_VERSION);
@@ -32,15 +32,17 @@ class DataProvider {
   }
 
   resetToDefaults() {
+    const isFirebase = this.mode === 'firebase';
     localStorage.setItem('catechesis_settings', JSON.stringify(DEFAULT_SETTINGS));
-    localStorage.setItem('catechesis_persons', JSON.stringify(INITIAL_PERSONS));
-    localStorage.setItem('catechesis_classes', JSON.stringify(INITIAL_CLASSES));
-    localStorage.setItem('catechesis_attendance', JSON.stringify(INITIAL_ATTENDANCE));
-    localStorage.setItem('catechesis_activities', JSON.stringify(INITIAL_ACTIVITIES));
-    localStorage.setItem('catechesis_grace_ledger', JSON.stringify(INITIAL_GRACE_LEDGER));
-    localStorage.setItem('catechesis_schedules', JSON.stringify(INITIAL_SCHEDULES));
+    localStorage.setItem('catechesis_persons', JSON.stringify(isFirebase ? [] : INITIAL_PERSONS));
+    localStorage.setItem('catechesis_classes', JSON.stringify(isFirebase ? [] : INITIAL_CLASSES));
+    localStorage.setItem('catechesis_attendance', JSON.stringify(isFirebase ? [] : INITIAL_ATTENDANCE));
+    localStorage.setItem('catechesis_activities', JSON.stringify(isFirebase ? [] : INITIAL_ACTIVITIES));
+    localStorage.setItem('catechesis_grace_ledger', JSON.stringify(isFirebase ? [] : INITIAL_GRACE_LEDGER));
+    // firebase 모드는 Firestore가 원본 — 로컬 샘플로 덮지 않음
+    localStorage.setItem('catechesis_schedules', JSON.stringify(isFirebase ? [] : INITIAL_SCHEDULES));
     localStorage.setItem('catechesis_initialized', 'true');
-    localStorage.setItem('catechesis_data_version', '2026_09_v10_schedule_sync');
+    localStorage.setItem('catechesis_data_version', '2026_09_v13_ops_firestore');
   }
 
   _getItem(key) {
@@ -120,7 +122,7 @@ class DataProvider {
   addPerson(personData) {
     const persons = this.getPersons();
     const newPerson = {
-      id: 'person-' + Date.now(),
+      id: personData.id || ('person-' + Date.now()),
       name: personData.name || '',
       baptismalName: personData.baptismalName || '',
       phone: personData.phone || '',
@@ -167,6 +169,7 @@ class DataProvider {
   /** 학생 추가 (편의 메서드) */
   addStudent(studentData) {
     const newPerson = this.addPerson({
+      id: studentData.id,
       name: studentData.name,
       baptismalName: studentData.baptismalName || '',
       phone: '',
@@ -231,6 +234,7 @@ class DataProvider {
   /** 학부모 추가 (편의 메서드) */
   addParent(parentData) {
     return this.addPerson({
+      id: parentData.id,
       name: parentData.name,
       baptismalName: parentData.baptismalName || '',
       phone: parentData.phone || '',
@@ -327,18 +331,21 @@ class DataProvider {
     let points = 0;
     if (status === '출석') points = settings.attendancePoints || 10;
 
+    const safeKey = `${date}_${studentId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const attId = `att_${safeKey}`;
+    const ledgerId = `gl_att_${safeKey}`;
+
     const existIdx = attendance.findIndex(
-      a => a.date === date && (a.studentPersonId === studentId || a.studentId === studentId)
+      a => a.id === attId || (a.date === date && (a.studentPersonId === studentId || a.studentId === studentId))
     );
-    const attId = existIdx !== -1 ? attendance[existIdx].id : 'att-' + Date.now();
 
     const record = {
       id: attId,
       date,
-      studentPersonId: studentId,  // v2 key
-      studentId: studentId,         // 하위 호환
+      studentPersonId: studentId,
+      studentId,
       status,
-      massAttended: (status === '출석'), // 출석 체크 시 자동 미사 참례 인정
+      massAttended: (status === '출석'),
       pointsEarned: points,
       recordedBy,
     };
@@ -347,16 +354,19 @@ class DataProvider {
     else attendance.push(record);
     this._setItem('catechesis_attendance', attendance);
 
-    // 은총표 원장 동기화
+    // 은총표 원장 동기화 (출석 항목은 안정적 id)
     ledger = ledger.filter(
       l => !(
-        (l.studentPersonId === studentId || l.studentId === studentId) &&
-        l.date === date && l.type === '출석'
+        l.id === ledgerId ||
+        (
+          (l.studentPersonId === studentId || l.studentId === studentId) &&
+          l.date === date && l.type === '출석'
+        )
       )
     );
     if (points > 0) {
       ledger.push({
-        id: 'gl-att-' + Date.now(),
+        id: ledgerId,
         studentPersonId: studentId,
         studentId: studentId,
         date,
@@ -367,7 +377,7 @@ class DataProvider {
       });
     }
     this._setItem('catechesis_grace_ledger', ledger);
-    return record;
+    return { record, ledgerId, ledgerRemoved: points <= 0 };
   }
 
   // ============================================================
@@ -379,20 +389,21 @@ class DataProvider {
     return all.filter(a => a.date === date);
   }
 
-  recordActivity({ date, studentId, department, roleDetail = '', pointsEarned = null, recordedBy = '선생님' }) {
+  recordActivity({ date, studentId, department, roleDetail = '', pointsEarned = null, recordedBy = '선생님', id = null }) {
     const activities = this._getItem('catechesis_activities');
     const ledger = this._getItem('catechesis_grace_ledger');
     const settings = this.getSettings();
 
     const points = pointsEarned !== null ? Number(pointsEarned) : (settings.activityPoints[department] || 10);
-    const newId = 'act-' + Date.now();
+    const newId = id || ('act-' + Date.now());
+    const ledgerId = `gl_${newId}`;
 
     const record = { id: newId, date, studentPersonId: studentId, studentId, department, roleDetail, pointsEarned: points, recordedBy };
     activities.push(record);
     this._setItem('catechesis_activities', activities);
 
-    ledger.push({
-      id: 'gl-act-' + Date.now(),
+    const ledgerEntry = {
+      id: ledgerId,
       studentPersonId: studentId,
       studentId,
       date,
@@ -400,9 +411,10 @@ class DataProvider {
       amount: points,
       reason: `${department} 봉사 활동 (${roleDetail || '활동 참례'})`,
       issuedBy: recordedBy,
-    });
+    };
+    ledger.push(ledgerEntry);
     this._setItem('catechesis_grace_ledger', ledger);
-    return record;
+    return { record, ledgerEntry };
   }
 
   // ============================================================
@@ -414,11 +426,11 @@ class DataProvider {
     return ledger.filter(l => l.studentPersonId === studentId || l.studentId === studentId);
   }
 
-  addBonusPoints({ studentId, amount, reason, issuedBy = '교감 선생님' }) {
+  addBonusPoints({ studentId, amount, reason, issuedBy = '교감 선생님', id = null }) {
     const ledger = this._getItem('catechesis_grace_ledger');
     const today = this._localDateISO();
     const entry = {
-      id: 'gl-bonus-' + Date.now(),
+      id: id || ('gl-bonus-' + Date.now()),
       studentPersonId: studentId,
       studentId,
       date: today,
