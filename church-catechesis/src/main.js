@@ -2606,8 +2606,8 @@ function renderDDayProgress() {
 }
 
 // ============================================================
-//  주일학교 조직도 (한국 가톨릭 본당 일반 구성)
-//  지도신부 → 교감·청소년분과장 → 부교감 → 교사/전례부교사/복사교사/총무
+//  주일학교 조직도
+//  담당 신부님 → (교감 → 부교감 | 청소년분과장) → 교리/전례/복사/총무
 //  → 자모회·자부회(후원·봉사)
 // ============================================================
 function orgPeopleByRole(roleId) {
@@ -2674,7 +2674,6 @@ function renderOrgChart() {
     ...orgPeopleByRole('assistant_teacher'),
   ].filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i).filter(p => {
     const r = p.roles || [];
-    // 전례부교사·복사교사만 있는 경우는 교사 칸에서 제외(담당 칸에 표시)
     const onlySpecialty = !r.includes('teacher') && !r.includes('assistant_teacher') && (
       r.includes('liturgy_teacher') || r.includes('acolyte_teacher')
     );
@@ -2690,16 +2689,24 @@ function renderOrgChart() {
 
   el.innerHTML = `
     <div class="org-tier org-tier-top">
-      ${orgNodeHtml({ title: '지도 신부님', people: priests, tone: 'priest', approved })}
+      ${orgNodeHtml({ title: '담당 신부님', people: priests, tone: 'priest', approved })}
     </div>
     <div class="org-connector" aria-hidden="true"></div>
-    <div class="org-tier org-tier-lead">
-      ${orgNodeHtml({ title: '주일학교 교감', people: principals, tone: 'lead', approved })}
-      ${orgNodeHtml({ title: '청소년분과장', people: youth, tone: 'youth', approved })}
+    <div class="org-branch" aria-hidden="true">
+      <div class="org-branch-stem"></div>
+      <div class="org-branch-bar"></div>
     </div>
-    <div class="org-connector" aria-hidden="true"></div>
-    <div class="org-tier">
-      ${orgNodeHtml({ title: '부교감', people: vicePrincipals, tone: 'lead', approved })}
+    <div class="org-tier org-tier-split">
+      <div class="org-branch-col org-branch-col-school">
+        <div class="org-connector org-connector-short" aria-hidden="true"></div>
+        ${orgNodeHtml({ title: '교감', people: principals, tone: 'lead', approved })}
+        <div class="org-connector" aria-hidden="true"></div>
+        ${orgNodeHtml({ title: '부교감', people: vicePrincipals, tone: 'lead', approved })}
+      </div>
+      <div class="org-branch-col org-branch-col-youth">
+        <div class="org-connector org-connector-short" aria-hidden="true"></div>
+        ${orgNodeHtml({ title: '청소년분과장', people: youth, tone: 'youth', approved })}
+      </div>
     </div>
     <div class="org-connector" aria-hidden="true"></div>
     <div class="org-tier org-tier-staff">

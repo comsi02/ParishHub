@@ -1731,6 +1731,53 @@ body {
   height: 0.85rem;
   background: var(--border);
   margin: 0.15rem 0;
+  flex-shrink: 0;
+}
+.org-connector-short {
+  height: 0.55rem;
+}
+.org-branch {
+  width: min(100%, 40rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+}
+.org-branch-stem {
+  width: 2px;
+  height: 0.35rem;
+  background: var(--border);
+}
+.org-branch-bar {
+  width: 72%;
+  max-width: 26rem;
+  height: 2px;
+  background: var(--border);
+}
+.org-tier-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 2rem;
+  align-items: start;
+  width: 100%;
+  max-width: 44rem;
+  justify-items: center;
+}
+.org-branch-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  align-self: start;
+}
+.org-branch-col-school,
+.org-branch-col-youth {
+  max-width: 16rem;
+}
+.org-tier-staff {
+  width: 100%;
+  max-width: 44rem;
 }
 .org-connector-label {
   width: auto;
@@ -1759,11 +1806,23 @@ body {
   padding: 0.55rem 0.65rem;
   text-align: center;
 }
+.org-node-priest,
+.org-node-lead,
+.org-node-youth {
+  width: 16rem;
+  min-width: 16rem;
+  max-width: 16rem;
+  /* 세로 flex 컬럼에서 basis가 높이로 잡히지 않도록 auto */
+  flex: 0 0 auto;
+  height: auto;
+  align-self: center;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  box-sizing: border-box;
+}
 .org-node-priest {
   border-color: #c4b5fd;
   background: color-mix(in srgb, #8b5cf6 8%, var(--surface));
-  max-width: 16rem;
-  flex: 0 1 16rem;
 }
 .org-node-lead {
   border-color: #93c5fd;
@@ -1844,14 +1903,28 @@ body {
   gap: 0.75rem;
 }
 .org-tier-staff .org-node {
-  flex: 1 1 7.5rem;
-  max-width: 11rem;
+  flex: 1 1 7rem;
+  max-width: 10.5rem;
 }
 
 @media (max-width: 767px) {
   .org-chart { padding: 0.85rem 0.65rem 1rem; }
+  .org-tier-split {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+  .org-branch-bar { width: 40%; }
+  .org-branch-col-school,
+  .org-branch-col-youth { max-width: none; }
   .org-node { flex: 1 1 calc(50% - 0.4rem); max-width: none; }
-  .org-node-priest { flex: 1 1 100%; max-width: none; }
+  .org-node-priest,
+  .org-node-lead,
+  .org-node-youth {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 100%;
+  }
   .org-tier-staff .org-node { flex: 1 1 calc(50% - 0.4rem); max-width: none; }
   .org-parent-group { flex: 1 1 100%; max-width: none; }
 }
