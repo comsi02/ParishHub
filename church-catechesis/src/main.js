@@ -448,6 +448,23 @@ function getTeachingDutyIds(roles = []) {
   return TEACHING_DUTY_IDS.filter(id => roles.includes(id));
 }
 
+/** 역할별 뱃지 색상 클래스 */
+const STAFF_ROLE_BADGE_CLASS = {
+  priest: 'badge-role-priest',
+  youth_director: 'badge-role-youth',
+  principal: 'badge-role-principal',
+  vice_principal: 'badge-role-vice',
+  teacher: 'badge-role-catechesis',
+  liturgy_teacher: 'badge-role-liturgy',
+  acolyte_teacher: 'badge-role-acolyte',
+  secretary: 'badge-role-secretary',
+  assistant_teacher: 'badge-role-assistant',
+};
+
+function staffRoleBadgeClass(roleId, fallback = 'badge-present') {
+  return STAFF_ROLE_BADGE_CLASS[roleId] || fallback;
+}
+
 /** 텍스트용 (반 배정 셀렉트 등) — 복수면 "교리 · 전례부" */
 function formatStaffRoleLabel(person) {
   const roles = person?.roles || [];
@@ -470,10 +487,10 @@ function formatStaffRoleLabel(person) {
 }
 
 /** 교사회/명부용 — 교리·전례부·복사를 각각 별도 뱃지로 */
-function formatStaffRoleBadgesHtml(person, { badgeClass = 'badge-present' } = {}) {
+function formatStaffRoleBadgesHtml(person) {
   const roles = person?.roles || [];
   if (roles.includes('priest')) {
-    return `<span class="badge badge-sacrament">${PERSON_ROLES.priest?.label || '신부님'}</span>`;
+    return `<span class="badge ${staffRoleBadgeClass('priest')}">${PERSON_ROLES.priest?.label || '신부님'}</span>`;
   }
 
   const leadPriority = [
@@ -488,20 +505,19 @@ function formatStaffRoleBadgesHtml(person, { badgeClass = 'badge-present' } = {}
   const badges = [];
 
   if (leadId) {
-    const leadClass = (leadId === 'principal' || leadId === 'youth_director')
-      ? 'badge-sacrament'
-      : leadId === 'vice_principal'
-        ? 'badge-grade'
-        : badgeClass;
-    badges.push(`<span class="badge ${leadClass}">${PERSON_ROLES[leadId]?.label || leadId}</span>`);
+    badges.push(
+      `<span class="badge ${staffRoleBadgeClass(leadId)}">${PERSON_ROLES[leadId]?.label || leadId}</span>`
+    );
   }
 
   dutyIds.forEach(id => {
-    badges.push(`<span class="badge badge-sacrament">${TEACHING_DUTY_SHORT[id]}</span>`);
+    badges.push(
+      `<span class="badge ${staffRoleBadgeClass(id)}">${TEACHING_DUTY_SHORT[id]}</span>`
+    );
   });
 
   if (!badges.length) {
-    badges.push(`<span class="badge ${badgeClass}">교사</span>`);
+    badges.push(`<span class="badge badge-present">교사</span>`);
   }
 
   return `<span class="staff-role-badges">${badges.join('')}</span>`;
@@ -3024,7 +3040,7 @@ function renderDashboard() {
               'secretary', 'youth_director',
               'fathers_chair', 'mothers_chair', 'fathers_secretary', 'mothers_secretary',
             ].includes(r) && r !== primaryRoleId)
-            .map(r => `<span class="badge badge-sacrament" style="font-size: 0.65rem; margin-left: 0.2rem;">${PERSON_ROLES[r]?.icon || ''} ${PERSON_ROLES[r]?.label || r}</span>`)
+            .map(r => `<span class="badge ${staffRoleBadgeClass(r, 'badge-sacrament')}" style="font-size: 0.65rem; margin-left: 0.2rem;">${PERSON_ROLES[r]?.icon || ''} ${PERSON_ROLES[r]?.label || r}</span>`)
             .join('')
         : '';
 
@@ -4049,19 +4065,19 @@ function renderStats() {
 
         return `
           <div class="honor-student-card">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span style="font-size: 1.2rem;">${s.isPerfect ? '👑' : '⭐'}</span>
-              <div>
-                <div style="font-weight: 700; font-size: 0.88rem; color: var(--text-main);">
+            <div class="honor-student-card-main">
+              <span class="honor-student-card-icon" aria-hidden="true">${s.isPerfect ? '👑' : '⭐'}</span>
+              <div class="honor-student-card-info">
+                <div class="honor-student-card-name">
                   ${student.name}
-                  <span style="font-size: 0.75rem; color: var(--text-muted);">(${student.baptismalName || '-'})</span>
+                  <span class="honor-student-card-baptismal">(${student.baptismalName || '-'})</span>
                 </div>
-                <div style="font-size: 0.72rem; color: var(--text-muted);">
+                <div class="honor-student-card-meta">
                   ${student.studentInfo?.grade || '-'} • ${s.attendedWeeks}/${s.totalWeeks}주 출석 (${s.rate}%)
                 </div>
               </div>
             </div>
-            <div>${badge}</div>
+            <div class="honor-student-card-badge">${badge}</div>
           </div>
         `;
       }).join('');
@@ -4500,16 +4516,20 @@ document.getElementById('btnMarkAllPresent')?.addEventListener('click', async ()
     return;
   }
   const selectedDate = attDatePicker.value || getTodayDateString();
-  if (dataProvider.isSchoolDay(selectedDate) === false) {
-    const ok = confirm('선택한 날짜는 학사 일정 상 휴교일입니다. 그래도 전원 출석을 기록할까요?');
-    if (!ok) return;
-  }
   const students = dataProvider.getStudents();
   const filtered = students.filter(st => matchAttendanceClass(st, currentAttClassFilter));
   if (!filtered.length) {
     showToast('선택한 반에 출석 처리할 학생이 없습니다.', '⚠️');
     return;
   }
+
+  const isHoliday = dataProvider.isSchoolDay(selectedDate) === false;
+  let confirmMsg = `${selectedDate}\n선택 반 ${filtered.length}명을 전원 출석(+미사) 처리할까요?`;
+  if (isHoliday) {
+    confirmMsg = `선택한 날짜는 학사 일정 상 휴교일입니다.\n\n${confirmMsg}`;
+  }
+  if (!confirm(confirmMsg)) return;
+
   try {
     await recordAttendanceBatch(filtered.map(st => ({
       date: selectedDate,

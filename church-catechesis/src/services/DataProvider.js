@@ -562,9 +562,13 @@ class DataProvider {
       .filter(a => targetStudentIdSet.has(a.studentPersonId || a.studentId));
 
     // 학사 일정 수업일 우선, 없으면 출석 기록 날짜로 주차 산정
-    const schoolDates = this.getSchoolDates(seasonId);
+    // 미래 날짜는 통계에서 제외 (오늘까지)
+    const todayStr = this._localDateISO();
+    const schoolDatesAll = this.getSchoolDates(seasonId);
     const attendanceDates = Array.from(new Set(seasonAttendance.map(a => a.date))).sort();
-    const sortedDates = schoolDates.length > 0 ? schoolDates : attendanceDates;
+    const schoolDates = schoolDatesAll.filter(d => d <= todayStr);
+    const sortedDates = (schoolDatesAll.length > 0 ? schoolDatesAll : attendanceDates)
+      .filter(d => d <= todayStr);
     const totalWeeks = sortedDates.length;
     const schoolDateSet = new Set(sortedDates);
 

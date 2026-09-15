@@ -671,11 +671,32 @@ body {
 .badge-sacrament  { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; }
 .badge-single-parent { background: #fdf2f8; color: #9d174d; border: 1px solid #fbcfe8; }
 
+/* 교사회 역할별 색상 */
+.badge-role-priest     { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+.badge-role-youth      { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.badge-role-principal  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.badge-role-vice       { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+.badge-role-catechesis { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.badge-role-liturgy    { background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; }
+.badge-role-acolyte    { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.badge-role-secretary  { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; }
+.badge-role-assistant  { background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; }
+
 :root[data-theme="dark"] .badge-present { background: rgba(34,197,94,0.12); color: #4ade80; border-color: rgba(34,197,94,0.25); }
 :root[data-theme="dark"] .badge-late    { background: rgba(245,158,11,0.12); color: #fbbf24; border-color: rgba(245,158,11,0.25); }
 :root[data-theme="dark"] .badge-absent  { background: rgba(239,68,68,0.12); color: #f87171; border-color: rgba(239,68,68,0.25); }
 :root[data-theme="dark"] .badge-grade   { background: rgba(59,130,246,0.12); color: #60a5fa; border-color: rgba(59,130,246,0.25); }
 :root[data-theme="dark"] .badge-sacrament { background: rgba(139,92,246,0.12); color: #c084fc; border-color: rgba(139,92,246,0.25); }
+
+:root[data-theme="dark"] .badge-role-priest     { background: rgba(139,92,246,0.16); color: #c4b5fd; border-color: rgba(139,92,246,0.35); }
+:root[data-theme="dark"] .badge-role-youth      { background: rgba(16,185,129,0.14); color: #6ee7b7; border-color: rgba(16,185,129,0.32); }
+:root[data-theme="dark"] .badge-role-principal  { background: rgba(59,130,246,0.14); color: #93c5fd; border-color: rgba(59,130,246,0.32); }
+:root[data-theme="dark"] .badge-role-vice       { background: rgba(99,102,241,0.14); color: #a5b4fc; border-color: rgba(99,102,241,0.32); }
+:root[data-theme="dark"] .badge-role-catechesis { background: rgba(249,115,22,0.14); color: #fdba74; border-color: rgba(249,115,22,0.32); }
+:root[data-theme="dark"] .badge-role-liturgy    { background: rgba(236,72,153,0.14); color: #f9a8d4; border-color: rgba(236,72,153,0.32); }
+:root[data-theme="dark"] .badge-role-acolyte    { background: rgba(245,158,11,0.14); color: #fcd34d; border-color: rgba(245,158,11,0.32); }
+:root[data-theme="dark"] .badge-role-secretary  { background: rgba(20,184,166,0.14); color: #5eead4; border-color: rgba(20,184,166,0.32); }
+:root[data-theme="dark"] .badge-role-assistant  { background: rgba(148,163,184,0.14); color: #cbd5e1; border-color: rgba(148,163,184,0.3); }
 
 /* Dept Tags */
 .dept-tag { display: inline-block; background: var(--surface-subtle); color: var(--text-muted); border: 1px solid var(--border); padding: 0.1rem 0.5rem; border-radius: var(--radius-full); font-size: 0.72rem; font-weight: 600; margin-right: 0.25rem; margin-bottom: 0.2rem; }
@@ -1105,7 +1126,10 @@ body {
   font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem;
 }
 .stats-card-body {
-  padding: 1.25rem 1.35rem; flex: 1; display: flex; flex-direction: column; justify-content: center;
+  padding: 1.25rem 1.35rem; flex: 1; display: flex; flex-direction: column; justify-content: flex-start;
+}
+#statsWeeklyTable td {
+  vertical-align: top;
 }
 
 .stats-legend {
@@ -1188,18 +1212,78 @@ body {
 :root[data-theme="dark"] .class-rank-bar-fill { background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%); }
 
 /* Honor Roll List */
-.honor-students-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 0.75rem; }
+.honor-students-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 0.75rem;
+}
 .honor-student-card {
-  background: var(--surface-subtle); border: 1.5px solid var(--border); border-radius: var(--radius-md);
-  padding: 0.75rem 0.9rem; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  background: var(--surface-subtle);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  min-width: 0;
   transition: var(--transition);
+}
+.honor-student-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.honor-student-card-icon {
+  font-size: 1.2rem;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+.honor-student-card-info {
+  min-width: 0;
+  flex: 1;
+}
+.honor-student-card-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text-main);
+  line-height: 1.35;
+  word-break: keep-all;
+}
+.honor-student-card-baptismal {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.honor-student-card-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+  line-height: 1.35;
+}
+.honor-student-card-badge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 .honor-student-card:hover { border-color: var(--primary-border); background: var(--surface); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 :root[data-theme="dark"] .honor-student-card { background: var(--surface-subtle); border-color: var(--border); }
 :root[data-theme="dark"] .honor-student-card:hover { background: var(--surface-hover); }
-.honor-badge-perfect { background: #fef9ee; color: #92400e; border: 1px solid #fde68a; font-weight: 800; font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: var(--radius-full); }
+.honor-badge-perfect,
+.honor-badge-good {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  font-weight: 800;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  max-width: 100%;
+}
+.honor-badge-perfect { background: #fef9ee; color: #92400e; border: 1px solid #fde68a; }
 :root[data-theme="dark"] .honor-badge-perfect { background: rgba(245,158,11,0.2); color: #fde68a; border-color: rgba(245,158,11,0.4); }
-.honor-badge-good { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-weight: 800; font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: var(--radius-full); }
+.honor-badge-good { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
 :root[data-theme="dark"] .honor-badge-good { background: rgba(59,130,246,0.2); color: #93c5fd; border-color: rgba(59,130,246,0.4); }
 
 /* Footer */
