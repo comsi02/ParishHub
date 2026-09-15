@@ -34,7 +34,8 @@ export const ACCOUNT_ROLES = {
   mothers_chair: { id: 'mothers_chair', label: '자모회장' },
   fathers_secretary: { id: 'fathers_secretary', label: '자부회총무' },
   mothers_secretary: { id: 'mothers_secretary', label: '자모회총무' },
-  teacher: { id: 'teacher', label: '교사' },
+  teacher: { id: 'teacher', label: '교리교사' },
+  assistant_teacher: { id: 'assistant_teacher', label: '부교사' },
   principal: { id: 'principal', label: '교감' },
   vice_principal: { id: 'vice_principal', label: '부교감' },
   liturgy_teacher: { id: 'liturgy_teacher', label: '전례부교사' },
@@ -64,6 +65,7 @@ const PRIMARY_ROLE_PRIORITY = [
   'liturgy_teacher',
   'acolyte_teacher',
   'teacher',
+  'assistant_teacher',
   'parent',
   'student',
 ];
@@ -71,6 +73,7 @@ const PRIMARY_ROLE_PRIORITY = [
 /** 교직원(교사계열) 역할 — 학부모와 겸임 가능 */
 export const STAFF_ACCOUNT_ROLES = [
   'teacher',
+  'assistant_teacher',
   'principal',
   'vice_principal',
   'liturgy_teacher',
@@ -78,6 +81,21 @@ export const STAFF_ACCOUNT_ROLES = [
   'secretary',
   'youth_director',
 ];
+
+/** 교사 선택 시 UI에 노출하는 직책 (저장되는 실제 role id) */
+export const TEACHER_DUTY_ROLES = [
+  { id: 'teacher', label: '교리교사' },
+  { id: 'liturgy_teacher', label: '전례부교사' },
+  { id: 'acolyte_teacher', label: '복사교사' },
+  { id: 'principal', label: '교감' },
+  { id: 'vice_principal', label: '부교감' },
+  { id: 'secretary', label: '총무' },
+  { id: 'youth_director', label: '청소년분과장' },
+  { id: 'assistant_teacher', label: '부교사' },
+];
+
+/** UI 전용: 교사 카테고리 게이트 (DB에 저장하지 않음) */
+export const STAFF_ROLE_GATE = '_staff';
 
 /** 자부회·자모회 임원 (학부모와 겸임 가능) */
 export const PARENT_LEADER_ROLES = [
@@ -158,7 +176,7 @@ export function primaryAccountRole(roles) {
  * @returns {string[]}
  */
 export function reconcileAccountRoles(rolesInput, opts = {}) {
-  let list = normalizeAccountRoles(rolesInput);
+  let list = normalizeAccountRoles(rolesInput).filter(r => r !== STAFF_ROLE_GATE);
   const preferred = opts.preferred;
 
   if (preferred === 'student' || (list.includes('student') && preferred !== 'priest')) {
@@ -173,6 +191,10 @@ export function reconcileAccountRoles(rolesInput, opts = {}) {
   // 자부·자모 임원이면 학부모도 함께 유지
   if (list.some(r => PARENT_LEADER_ROLES.includes(r)) && !list.includes('parent')) {
     list.push('parent');
+  }
+  // 교사 게이트만 있고 직책이 없으면 교리교사로 보정
+  if (opts.ensureStaffDefault && list.some(r => STAFF_ACCOUNT_ROLES.includes(r)) === false && opts.staffGateOn) {
+    list.push('teacher');
   }
   return list;
 }

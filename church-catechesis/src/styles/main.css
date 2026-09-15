@@ -779,7 +779,37 @@ body {
 .checkbox-group { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.3rem; }
 .checkbox-item { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.84rem; color: var(--text-main); background: var(--surface-subtle); padding: 0.3rem 0.7rem; border-radius: var(--radius-full); border: 1px solid var(--border); cursor: pointer; transition: var(--transition); }
 .checkbox-item:hover { border-color: var(--primary-border); background: var(--primary-soft); }
-:root[data-theme="dark"] .checkbox-item { background: var(--surface-subtle); border-color: var(--border); color: var(--text-main); }
+.checkbox-item-block {
+  width: 100%;
+  min-height: 38px;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+:root[data-theme="dark"] .checkbox-item {
+  background: var(--surface-subtle);
+  border-color: var(--border);
+  color: var(--text-main);
+}
+:root[data-theme="dark"] .checkbox-item-block {
+  background: var(--surface);
+  color: var(--text-main);
+}
+:root[data-theme="dark"] .checkbox-item:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-border);
+  color: var(--text-main);
+}
+:root[data-theme="dark"] .form-control::placeholder,
+:root[data-theme="dark"] .search-input::placeholder,
+:root[data-theme="dark"] textarea.form-control::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+:root[data-theme="dark"] .modal-body small,
+:root[data-theme="dark"] .modal-body .form-label + small {
+  color: #94a3b8;
+}
 
 /* Toast */
 .toast-container { position: fixed; bottom: 1.75rem; right: 1.75rem; z-index: 200; display: flex; flex-direction: column; gap: 0.6rem; }
@@ -798,6 +828,46 @@ body {
 .detail-item-full { grid-column: 1 / -1; }
 .detail-label { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.03em; }
 .detail-value { font-size: 0.92rem; font-weight: 700; color: var(--text-main); }
+.detail-callout {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+.detail-callout-title {
+  color: #1e40af;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.82rem;
+}
+.detail-callout .detail-value,
+.detail-callout .detail-value .clickable-name {
+  color: var(--text-main);
+}
+:root[data-theme="dark"] .detail-callout {
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.35);
+}
+:root[data-theme="dark"] .detail-callout-title {
+  color: #93c5fd;
+}
+:root[data-theme="dark"] .detail-callout .detail-value {
+  color: var(--text-main);
+}
+:root[data-theme="dark"] .detail-callout .clickable-name {
+  color: #93c5fd;
+}
+:root[data-theme="dark"] .detail-callout .badge-grade {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.35);
+}
+.detail-grace-points {
+  color: #b45309;
+  font-weight: 700;
+}
+:root[data-theme="dark"] .detail-grace-points {
+  color: #fbbf24;
+}
 
 /* Feast Day Card */
 .feast-celebration-card { background: linear-gradient(135deg,#fffdf7 0%,#fefbf0 50%,#fef9ee 100%); border: 1.5px solid #fde68a; border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow-sm); transition: var(--transition); }
@@ -857,9 +927,26 @@ body {
 .role-badge-admin   { background: #fef9ee; color: #92400e; border: 1px solid #fde68a; }
 .role-badge-teacher { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
 .role-badge-pending { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.role-badge-rejected { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 :root[data-theme="dark"] .role-badge-admin   { background: rgba(245,158,11,0.15); color: #fde68a; border-color: rgba(245,158,11,0.3); }
 :root[data-theme="dark"] .role-badge-teacher { background: rgba(59,130,246,0.15); color: #93c5fd; border-color: rgba(59,130,246,0.3); }
 :root[data-theme="dark"] .role-badge-pending { background: rgba(245,158,11,0.15); color: #fbbf24; border-color: rgba(245,158,11,0.3); }
+:root[data-theme="dark"] .role-badge-rejected { background: rgba(248,113,113,0.15); color: #fca5a5; border-color: rgba(248,113,113,0.3); }
+
+.btn-delete-class {
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+:root[data-theme="dark"] .btn-delete-class {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
+}
 
 .btn-admin-manage { display: inline-flex; align-items: center; gap: 0.35rem; background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: white; border: none; padding: 0.35rem 0.8rem; border-radius: var(--radius-full); font-size: 0.78rem; font-weight: 800; cursor: pointer; box-shadow: 0 2px 6px rgba(43,84,126,0.22); transition: var(--transition); font-family: 'Noto Sans KR', sans-serif; }
 .btn-admin-manage:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(43,84,126,0.3); }
@@ -1504,9 +1591,58 @@ body {
 }
 .admin-role-checks {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.15rem 0.1rem;
+  flex-direction: column;
+  gap: 0.45rem;
   max-width: 100%;
+}
+.admin-role-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+}
+.admin-role-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.55rem;
+  align-items: center;
+}
+.admin-role-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.admin-role-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.admin-role-subpanel {
+  margin-left: 0.15rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+.admin-role-subpanel[hidden] {
+  display: none !important;
+}
+.admin-role-subpanel-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+:root[data-theme="dark"] .admin-role-subpanel {
+  background: var(--surface);
+  border-color: var(--border);
+}
+:root[data-theme="dark"] .admin-role-option {
+  color: var(--text-main);
 }
 .admin-person-link {
   width: 100%;

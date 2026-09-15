@@ -150,6 +150,66 @@ class DataProvider {
     return null;
   }
 
+  /**
+   * Person 삭제 + 배우자/자녀/학부모/반 교사 링크 정리
+   * @param {string} id
+   * @returns {{ deleted: object|null, touched: object[], touchedClasses: object[] }}
+   */
+  deletePerson(id) {
+    const persons = this.getPersons();
+    const target = persons.find(p => p.id === id);
+    if (!target) return { deleted: null, touched: [], touchedClasses: [] };
+
+    const touched = [];
+    const next = persons
+      .filter(p => p.id !== id)
+      .map(p => {
+        let changed = false;
+        let copy = p;
+
+        if (p.parentInfo) {
+          const childPersonIds = (p.parentInfo.childPersonIds || []).filter(cid => cid !== id);
+          const spousePersonId = p.parentInfo.spousePersonId === id ? null : p.parentInfo.spousePersonId;
+          if (childPersonIds.length !== (p.parentInfo.childPersonIds || []).length
+            || spousePersonId !== p.parentInfo.spousePersonId) {
+            copy = {
+              ...copy,
+              parentInfo: { ...copy.parentInfo, childPersonIds, spousePersonId },
+            };
+            changed = true;
+          }
+        }
+
+        if (p.studentInfo?.parentPersonIds) {
+          const parentPersonIds = p.studentInfo.parentPersonIds.filter(pid => pid !== id);
+          if (parentPersonIds.length !== p.studentInfo.parentPersonIds.length) {
+            copy = {
+              ...copy,
+              studentInfo: { ...copy.studentInfo, parentPersonIds },
+            };
+            changed = true;
+          }
+        }
+
+        if (changed) touched.push(copy);
+        return copy;
+      });
+
+    this._setItem('catechesis_persons', next);
+
+    const touchedClasses = [];
+    const classes = this.getClasses().map(cls => {
+      const teacherPersonIds = (cls.teacherPersonIds || []).filter(tid => tid !== id);
+      if (teacherPersonIds.length === (cls.teacherPersonIds || []).length) return cls;
+      const updated = { ...cls, teacherPersonIds };
+      touchedClasses.push(updated);
+      return updated;
+    });
+    this._setItem('catechesis_classes', classes);
+
+    return { deleted: target, touched, touchedClasses };
+  }
+
   // ============================================================
   //  편의 헬퍼 - 학생(Student) 목록 (은총표 자동 계산 포함)
   // ============================================================
@@ -254,6 +314,28 @@ class DataProvider {
     });
   }
 
+  /** 교사 추가 (편의 메서드) — 학부모/학생 없이 교사만 등록 */
+  addTeacher(teacherData) {
+    const dutyRoles = (teacherData.roles || []).filter(r => this.getTeacherRoles().includes(r));
+    const roles = dutyRoles.length ? dutyRoles : ['teacher'];
+    return this.addPerson({
+      id: teacherData.id,
+      name: teacherData.name,
+      baptismalName: teacherData.baptismalName || '',
+      phone: teacherData.phone || '',
+      email: teacherData.email || '',
+      address: teacherData.address || '',
+      roles,
+      teacherInfo: {
+        assignedClassIds: teacherData.assignedClassIds || [],
+        specialRole: teacherData.specialRole || null,
+      },
+      parentInfo: null,
+      studentInfo: null,
+      notes: teacherData.notes || '',
+    });
+  }
+
   // ============================================================
   //  편의 헬퍼 - 교사진 (교사·교감·부교감·담당·총무·청소년분과장)
   // ============================================================
@@ -266,6 +348,7 @@ class DataProvider {
       'liturgy_teacher',
       'acolyte_teacher',
       'teacher',
+      'assistant_teacher',
     ];
   }
 
@@ -279,6 +362,7 @@ class DataProvider {
   /** 사람의 가장 높은(표시용) 교사 역할 반환 */
   getPrimaryTeacherRole(person) {
     const priority = [
+      'priest',
       'principal',
       'vice_principal',
       'youth_director',
@@ -286,6 +370,7 @@ class DataProvider {
       'liturgy_teacher',
       'acolyte_teacher',
       'teacher',
+      'assistant_teacher',
     ];
     for (const r of priority) {
       if (person.roles && person.roles.includes(r)) {

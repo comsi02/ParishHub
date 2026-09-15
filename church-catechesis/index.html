@@ -14,8 +14,7 @@
   <header class="app-header">
     <div class="header-inner">
       <a href="#" class="brand">
-        <div class="brand-symbol"
-          style="background: white; border: 1px solid var(--border); padding: 2px; overflow: hidden;">
+        <div class="brand-symbol brand-symbol-logo">
           <img src="/favicon.png" alt="St. Andrew Kim Parish Logo"
             style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;" />
         </div>
@@ -399,11 +398,6 @@
             </div>
           </div>
           <div class="toolbar-group">
-            <div class="pill-group" id="attGradeFilterGroup" role="group" aria-label="학년별 필터">
-              <button type="button" class="pill-btn active" data-grade-filter="all">전체 학년</button>
-            </div>
-          </div>
-          <div class="toolbar-group">
             <button class="btn btn-secondary btn-sm" id="btnMarkAllPresent">
               ✨ 전원 출석 완료
             </button>
@@ -554,11 +548,17 @@
             <input type="text" id="directorySearchInput" class="search-input" placeholder="이름, 세례명 검색..." />
           </div>
           <div class="toolbar-group" id="directoryActionBtns">
-            <button class="btn btn-primary btn-sm" id="btnOpenAddStudentModal">
+            <button class="btn btn-primary btn-sm" id="btnOpenAddFamilyModal">
+              + 신규 가족 등록
+            </button>
+            <button class="btn btn-secondary btn-sm" id="btnOpenAddStudentModal">
               + 새 학생 등록
             </button>
             <button class="btn btn-secondary btn-sm" id="btnOpenAddParentModal">
               + 새 학부모 등록
+            </button>
+            <button class="btn btn-primary btn-sm" id="btnOpenAddTeacherModal" style="display: none;">
+              + 새 교사 등록
             </button>
           </div>
         </div>
@@ -1227,14 +1227,15 @@
     </div>
   </div>
 
-  <!-- Modal 3: Add Student Modal -->
+  <!-- Modal 3: Add / Edit Student Modal -->
   <div class="modal-backdrop" id="modalAddStudent">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>+ 새 학생 등록</h3>
+        <h3 id="modalStudentTitle">+ 새 학생 등록</h3>
         <button class="modal-close-btn" data-close="modalAddStudent">&times;</button>
       </div>
       <form id="addStudentForm">
+        <input type="hidden" id="editStudentId" value="" />
         <div class="modal-body">
           <div class="form-grid-2">
             <div class="form-group">
@@ -1323,24 +1324,25 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-close="modalAddStudent">취소</button>
-          <button type="submit" class="btn btn-primary">학생 등록</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitStudentForm">학생 등록</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal 4: Add Parent Modal -->
+  <!-- Modal 4: Add / Edit Parent Modal -->
   <div class="modal-backdrop" id="modalAddParent">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>+ 새 학부모 등록</h3>
+        <h3 id="modalParentTitle">+ 새 학부모 등록</h3>
         <button class="modal-close-btn" data-close="modalAddParent">&times;</button>
       </div>
       <form id="addParentForm">
+        <input type="hidden" id="editParentId" value="" />
         <div class="modal-body">
           <div
             style="background: var(--surface-subtle); padding: 0.85rem; border-radius: 8px; margin-bottom: 0.85rem; border: 1px solid var(--border);">
-            <div style="font-weight: 700; font-size: 0.9rem; color: var(--primary); margin-bottom: 0.5rem;">
+            <div style="font-weight: 700; font-size: 0.9rem; color: var(--primary); margin-bottom: 0.5rem;" id="parentPrimaryHeading">
               👤 학부모 1 (필수)
             </div>
             <div class="form-grid-2">
@@ -1359,8 +1361,7 @@
                 <input type="tel" id="newParentPhone" class="form-control" placeholder="예: 416-555-0101" required />
               </div>
               <div class="form-group" style="margin-bottom: 0.35rem; display: flex; align-items: flex-end;">
-                <label class="checkbox-item"
-                  style="width: 100%; height: 38px; justify-content: center; background: white; border: 1px solid var(--border);">
+                <label class="checkbox-item checkbox-item-block">
                   <input type="checkbox" id="newParentIsTeacher" />
                   ✝ 본당 주일학교 교사 겸임
                 </label>
@@ -1368,13 +1369,13 @@
             </div>
           </div>
 
-          <div
+          <div id="parentSpouseCreateBlock"
             style="background: var(--surface-subtle); padding: 0.85rem; border-radius: 8px; margin-bottom: 0.85rem; border: 1px solid var(--border);">
             <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-main); margin-bottom: 0.2rem;">
               👤 학부모 2 (선택)
             </div>
             <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-bottom: 0.5rem;">
-              * 한 분만 등록하시는 경우 비워두시면 됩니다.
+              * 한 분만 등록하시는 경우 비워두시면 됩니다. (수정 모드에서는 숨김)
             </small>
             <div class="form-grid-2">
               <div class="form-group" style="margin-bottom: 0.5rem;">
@@ -1392,8 +1393,7 @@
                 <input type="tel" id="newParent2Phone" class="form-control" placeholder="예: 416-555-2111" />
               </div>
               <div class="form-group" style="margin-bottom: 0.35rem; display: flex; align-items: flex-end;">
-                <label class="checkbox-item"
-                  style="width: 100%; height: 38px; justify-content: center; background: white; border: 1px solid var(--border);">
+                <label class="checkbox-item checkbox-item-block">
                   <input type="checkbox" id="newParent2IsTeacher" />
                   ✝ 본당 주일학교 교사 겸임
                 </label>
@@ -1409,7 +1409,108 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-close="modalAddParent">취소</button>
-          <button type="submit" class="btn btn-primary">학부모 등록</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitParentForm">학부모 등록</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add / Edit Teacher -->
+  <div class="modal-backdrop" id="modalEditTeacher">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 id="modalTeacherTitle">교사 정보 수정</h3>
+        <button class="modal-close-btn" data-close="modalEditTeacher">&times;</button>
+      </div>
+      <form id="editTeacherForm">
+        <input type="hidden" id="editTeacherId" value="" />
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">이름 *</label>
+              <input type="text" id="editTeacherName" class="form-control" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">세례명</label>
+              <input type="text" id="editTeacherBaptismal" class="form-control" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">전화번호</label>
+            <input type="tel" id="editTeacherPhone" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">교사 직책 * (복수 선택 가능)</label>
+            <div id="editTeacherDutyChecks" class="admin-role-row" style="margin-top: 0.35rem;"></div>
+            <small style="color: var(--text-muted);">학부모·학생 없이 교사만 등록할 수 있습니다. 담당 반은 반 구성에서 지정하세요.</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label">메모</label>
+            <input type="text" id="editTeacherNotes" class="form-control" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modalEditTeacher">취소</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitTeacherForm">저장</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: New Family Registration -->
+  <div class="modal-backdrop" id="modalAddFamily">
+    <div class="modal-content" style="max-width: 760px;">
+      <div class="modal-header">
+        <h3>+ 신규 가족 등록</h3>
+        <button class="modal-close-btn" data-close="modalAddFamily">&times;</button>
+      </div>
+      <form id="addFamilyForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Google Sheet 행 붙여넣기 (선택)</label>
+            <textarea id="familySheetPaste" class="form-control" rows="3"
+              placeholder="시트 헤더+데이터 행 CSV를 그대로 붙여넣으면 아래 폼이 채워집니다."></textarea>
+            <div style="display:flex; gap:0.5rem; margin-top:0.45rem; flex-wrap:wrap;">
+              <button type="button" class="btn btn-secondary btn-sm" id="btnApplyFamilyPaste">붙여넣기 반영</button>
+              <small style="color: var(--text-muted); align-self:center;">등록 시트와 동일한 컬럼을 모두 받을 수 있습니다.</small>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">등록 이메일 * (재임포트 키)</label>
+              <input type="email" id="familyRegEmail" class="form-control" required placeholder="family@example.com" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">타임스탬프</label>
+              <input type="text" id="familyTimestamp" class="form-control" placeholder="시트 값 그대로 (선택)" />
+            </div>
+          </div>
+
+          <div style="background: var(--surface-subtle); padding: 0.85rem; border-radius: 8px; margin-bottom: 0.85rem; border: 1px solid var(--border);">
+            <div style="font-weight: 700; margin-bottom: 0.5rem;">신청자 (학부모 1)</div>
+            <div class="form-grid-2">
+              <div class="form-group"><label class="form-label">이름 *</label><input id="familyApplicantName" class="form-control" required /></div>
+              <div class="form-group"><label class="form-label">세례명</label><input id="familyApplicantBaptismal" class="form-control" /></div>
+              <div class="form-group"><label class="form-label">전화번호</label><input id="familyApplicantPhone" class="form-control" /></div>
+              <div class="form-group"><label class="form-label">주소</label><input id="familyAddress" class="form-control" /></div>
+            </div>
+          </div>
+
+          <div style="background: var(--surface-subtle); padding: 0.85rem; border-radius: 8px; margin-bottom: 0.85rem; border: 1px solid var(--border);">
+            <div style="font-weight: 700; margin-bottom: 0.5rem;">배우자 (학부모 2, 선택)</div>
+            <div class="form-grid-2">
+              <div class="form-group"><label class="form-label">이름</label><input id="familySpouseName" class="form-control" /></div>
+              <div class="form-group"><label class="form-label">세례명</label><input id="familySpouseBaptismal" class="form-control" /></div>
+              <div class="form-group"><label class="form-label">전화번호</label><input id="familySpousePhone" class="form-control" /></div>
+            </div>
+          </div>
+
+          <div id="familyChildrenFields"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modalAddFamily">취소</button>
+          <button type="submit" class="btn btn-primary">가족 저장</button>
         </div>
       </form>
     </div>
@@ -1439,7 +1540,11 @@
           <!-- Dynamically populated -->
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="justify-content: space-between; gap: 0.5rem; flex-wrap: wrap;">
+        <div style="display:flex; gap:0.4rem;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btnEditPersonFromDetail" style="display:none;">수정</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnDeletePersonFromDetail" style="display:none; color:#b91c1c; border-color:#fca5a5;">삭제</button>
+        </div>
         <button type="button" class="btn btn-secondary" data-close="modalUserDetail">닫기</button>
       </div>
     </div>

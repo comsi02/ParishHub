@@ -1,6 +1,6 @@
 // registrationImport.js
 // 주일학교 등록 Google Sheet CSV → Person[] 변환
-// 이메일 주소 컬럼은 사용하지 않음
+// 이메일 주소 컬럼은 사용하지 않음 (재임포트 키용만)
 
 /**
  * RFC4180-ish CSV parse (quoted fields, escaped quotes)
@@ -74,7 +74,7 @@ function stableHash(input) {
   return (h >>> 0).toString(36) + h2.toString(36);
 }
 
-/** 시트 이메일 정규화 (Google 자동 매칭에는 사용하지 않음) */
+/** 시트 이메일 정규화 (Google 계정 자동 매칭에는 사용하지 않음) */
 function normalizeRegistrationEmail(raw) {
   const email = String(raw || '').trim().toLowerCase();
   if (!email || !email.includes('@')) return '';
@@ -195,6 +195,182 @@ const FAMILY_CONSENT = {
   tuitionTransferAck: true,
 };
 
+/** 시트와 동일한 논리 헤더 (폼/붙여넣기 안내용) */
+export const REGISTRATION_SHEET_HEADERS = [
+  '타임스탬프',
+  '이메일 주소',
+  '이름(신청자)',
+  '세례명(신청자)',
+  '전화번호(신청자)',
+  '주소',
+  '이름(배우자)',
+  '세례명(배우자)',
+  '전화번호(배우자)',
+  '자녀수',
+  ...[1, 2, 3, 4].flatMap(n => [
+    `이름(자녀${n})`,
+    `세례명(자녀${n})`,
+    `성별(자녀${n})`,
+    `학년(자녀${n})`,
+    `축일(자녀${n})`,
+    `첫영성체(자녀${n})`,
+    `견진(자녀${n})`,
+    `2025-2026 부서(자녀${n})`,
+    `2026-2027 희망부서(자녀${n})`,
+  ]),
+];
+
+/**
+ * 신규 가족 1건 → Person[] (시트 import와 동일 스키마)
+ * @param {{
+ *   registrationEmail: string,
+ *   timestamp?: string,
+ *   address?: string,
+ *   applicant: { name: string, baptismalName?: string, phone?: string },
+ *   spouse?: { name?: string, baptismalName?: string, phone?: string } | null,
+ *   children?: Array<{
+ *     name: string,
+ *     baptismalName?: string,
+ *     gender?: string,
+ *     grade?: string,
+ *     feastDay?: string,
+ *     firstCommunion?: boolean|string,
+ *     confirmation?: boolean|string,
+ *     departmentsPrev?: string,
+ *     departments?: string|string[],
+ *   }>
+ * }} record
+ * @returns {{ family: object|null, persons: object[], errors: string[] }}
+ */
+export function buildPersonsFromFamilyRecord(record) {
+  const errors = [];
+  const applicantName = normalizePersonName(record?.applicant?.name);
+  if (isPlaceholderName(applicantName)) {
+    errors.push('신청자(학부모) 이름이 필요합니다.');
+    return { family: null, persons: [], errors };
+  }
+
+  const registrationEmail = normalizeRegistrationEmail(record?.registrationEmail);
+  if (!registrationEmail) {
+    errors.push('등록용 이메일(재임포트 키)이 필요합니다.');
+    return { family: null, persons: [], errors };
+  }
+
+  const address = String(record?.address || '').trim();
+  const familyKey = makeFamilyKey(registrationEmail);
+  const applicantKey = makeImportKey(registrationEmail, applicantName);
+
+  const spouseName = normalizePersonName(record?.spouse?.name);
+  const spouseKey = spouseName && !isPlaceholderName(spouseName)
+    ? makeImportKey(registrationEmail, spouseName)
+    : null;
+
+  const childKeys = [];
+  const children = [];
+  const persons = [];
+
+  (record?.children || []).forEach((ch) => {
+    const childName = normalizePersonName(ch?.name);
+    if (isPlaceholderName(childName)) return;
+
+    const childKey = makeImportKey(registrationEmail, childName);
+    childKeys.push(childKey);
+
+    const departments = Array.isArray(ch.departments)
+      ? ch.departments
+      : parseDepartments(ch.departments || ch.departmentsHope || '');
+
+    const student = {
+      id: childKey,
+      importKey: childKey,
+      familyKey,
+      registrationEmail,
+      name: childName,
+      baptismalName: String(ch.baptismalName || '').trim(),
+      phone: '',
+      email: '',
+      address,
+      roles: ['student'],
+      teacherInfo: null,
+      parentInfo: null,
+      studentInfo: {
+        grade: normalizeGrade(ch.grade) || 'G1',
+        gender: String(ch.gender || '').trim(),
+        feastDay: normalizeFeast(ch.feastDay || ch.feast),
+        firstCommunion: typeof ch.firstCommunion === 'boolean' ? ch.firstCommunion : parseYesNo(ch.firstCommunion),
+        confirmation: typeof ch.confirmation === 'boolean' ? ch.confirmation : parseYesNo(ch.confirmation),
+        departments,
+        departmentsPrev: String(ch.departmentsPrev || '').trim(),
+        parentPersonIds: [applicantKey, ...(spouseKey ? [spouseKey] : [])],
+      },
+      notes: '',
+      source: record?.source || 'family_form',
+    };
+    children.push(student);
+    persons.push(student);
+  });
+
+  const applicant = {
+    id: applicantKey,
+    importKey: applicantKey,
+    familyKey,
+    registrationEmail,
+    name: applicantName,
+    baptismalName: String(record?.applicant?.baptismalName || '').trim(),
+    phone: String(record?.applicant?.phone || '').trim(),
+    email: '',
+    address,
+    roles: ['parent'],
+    teacherInfo: null,
+    parentInfo: {
+      childPersonIds: [...childKeys],
+      spousePersonId: spouseKey,
+    },
+    studentInfo: null,
+    notes: '',
+    source: record?.source || 'family_form',
+    ...FAMILY_CONSENT,
+  };
+  persons.push(applicant);
+
+  let spouse = null;
+  if (spouseKey) {
+    spouse = {
+      id: spouseKey,
+      importKey: spouseKey,
+      familyKey,
+      registrationEmail,
+      name: spouseName,
+      baptismalName: String(record?.spouse?.baptismalName || '').trim(),
+      phone: String(record?.spouse?.phone || '').trim(),
+      email: '',
+      address,
+      roles: ['parent'],
+      teacherInfo: null,
+      parentInfo: {
+        childPersonIds: [...childKeys],
+        spousePersonId: applicantKey,
+      },
+      studentInfo: null,
+      notes: '',
+      source: record?.source || 'family_form',
+      ...FAMILY_CONSENT,
+    };
+    persons.push(spouse);
+  }
+
+  const family = {
+    familyKey,
+    timestamp: String(record?.timestamp || '').trim(),
+    applicant,
+    spouse,
+    children,
+    consent: { ...FAMILY_CONSENT },
+  };
+
+  return { family, persons, errors };
+}
+
 /**
  * @param {string} csvText
  * @returns {{ families: object[], persons: object[], summary: object, errors: string[] }}
@@ -226,113 +402,48 @@ export function parseRegistrationCsv(csvText) {
       continue;
     }
 
-    const spouseName = col(row, idx.spouseName);
-    const address = col(row, idx.address);
-    const familyKey = makeFamilyKey(registrationEmail);
-    // 파싱 단계에서는 importKey 로 가족 관계만 연결. 실제 문서 id 는 upsert 시 자동 발급.
-    // 키 원문: email|name → 해시
-    const applicantKey = makeImportKey(registrationEmail, applicantName);
-    const spouseKey = spouseName && !isPlaceholderName(spouseName)
-      ? makeImportKey(registrationEmail, spouseName)
-      : null;
-
-    const childKeys = [];
     const children = [];
-
     for (let c = 0; c < idx.children.length; c++) {
       const cmap = idx.children[c];
       const childName = col(row, cmap.name);
       if (isPlaceholderName(childName)) continue;
-
-      const childKey = makeImportKey(registrationEmail, childName);
-      childKeys.push(childKey);
-      const student = {
-        id: childKey,
-        importKey: childKey,
-        familyKey,
-        registrationEmail,
+      children.push({
         name: childName,
         baptismalName: col(row, cmap.baptismal),
-        phone: '',
-        email: '',
-        address,
-        roles: ['student'],
-        teacherInfo: null,
-        parentInfo: null,
-        studentInfo: {
-          grade: normalizeGrade(col(row, cmap.grade)) || 'G1',
-          gender: col(row, cmap.gender) || '',
-          feastDay: normalizeFeast(col(row, cmap.feast)),
-          firstCommunion: parseYesNo(col(row, cmap.firstCommunion)),
-          confirmation: parseYesNo(col(row, cmap.confirmation)),
-          departments: parseDepartments(col(row, cmap.deptHope)),
-          departmentsPrev: col(row, cmap.deptPrev) || '',
-          parentPersonIds: [applicantKey, ...(spouseKey ? [spouseKey] : [])],
-        },
-        notes: '',
-        source: 'registration_sheet',
-      };
-      children.push(student);
-      persons.push(student);
+        gender: col(row, cmap.gender),
+        grade: col(row, cmap.grade),
+        feastDay: col(row, cmap.feast),
+        firstCommunion: col(row, cmap.firstCommunion),
+        confirmation: col(row, cmap.confirmation),
+        departmentsPrev: col(row, cmap.deptPrev),
+        departments: col(row, cmap.deptHope),
+      });
     }
 
-    const applicant = {
-      id: applicantKey,
-      importKey: applicantKey,
-      familyKey,
+    const built = buildPersonsFromFamilyRecord({
       registrationEmail,
-      name: applicantName,
-      baptismalName: col(row, idx.applicantBaptismal),
-      phone: col(row, idx.applicantPhone),
-      email: '',
-      address,
-      roles: ['parent'],
-      teacherInfo: null,
-      parentInfo: {
-        childPersonIds: [...childKeys],
-        spousePersonId: spouseKey,
+      timestamp: col(row, idx.timestamp),
+      address: col(row, idx.address),
+      applicant: {
+        name: applicantName,
+        baptismalName: col(row, idx.applicantBaptismal),
+        phone: col(row, idx.applicantPhone),
       },
-      studentInfo: null,
-      notes: '',
-      source: 'registration_sheet',
-      ...FAMILY_CONSENT,
-    };
-    persons.push(applicant);
-
-    let spouse = null;
-    if (spouseKey) {
-      spouse = {
-        id: spouseKey,
-        importKey: spouseKey,
-        familyKey,
-        registrationEmail,
-        name: spouseName,
+      spouse: {
+        name: col(row, idx.spouseName),
         baptismalName: col(row, idx.spouseBaptismal),
         phone: col(row, idx.spousePhone),
-        email: '',
-        address,
-        roles: ['parent'],
-        teacherInfo: null,
-        parentInfo: {
-          childPersonIds: [...childKeys],
-          spousePersonId: applicantKey,
-        },
-        studentInfo: null,
-        notes: '',
-        source: 'registration_sheet',
-        ...FAMILY_CONSENT,
-      };
-      persons.push(spouse);
-    }
-
-    families.push({
-      familyKey,
-      timestamp: col(row, idx.timestamp),
-      applicant,
-      spouse,
+      },
       children,
-      consent: { ...FAMILY_CONSENT },
+      source: 'registration_sheet',
     });
+
+    if (built.errors.length) {
+      built.errors.forEach(e => errors.push(`${r + 1}행: ${e}`));
+      continue;
+    }
+    if (built.family) families.push(built.family);
+    persons.push(...built.persons);
   }
 
   const summary = {

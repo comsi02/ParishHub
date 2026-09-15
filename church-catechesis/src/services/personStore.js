@@ -6,6 +6,7 @@ import {
   doc,
   getDocs,
   setDoc,
+  deleteDoc,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase-init.js';
@@ -203,4 +204,39 @@ export async function patchPerson(id, updates) {
     await setDoc(doc(db, PERSONS_COLLECTION, id), { ...rest, id }, { merge: true });
   }
   return updated;
+}
+
+/**
+ * Person 삭제 (로컬 관계 정리 + Firestore 문서 삭제 + 연관 Person 저장)
+ * upsertPersons 를 쓰지 않음 (로드 시 삭제 대상이 다시 살아날 수 있음)
+ * @param {string} id
+ */
+export async function deletePersonRemote(id) {
+  if (!id) return { ok: false };
+  await loadPersonsFromFirestore();
+  const { deleted, touched, touchedClasses } = dataProvider.deletePerson(id);
+  if (!deleted) return { ok: false };
+
+  if (isFirebaseMode && db) {
+    await deleteDoc(doc(db, PERSONS_COLLECTION, id));
+    const now = new Date().toISOString();
+    for (const p of touched) {
+      const { id: pid, ...rest } = p;
+      await setDoc(
+        doc(db, PERSONS_COLLECTION, pid),
+        { ...rest, id: pid, updatedAt: now },
+        { merge: true }
+      );
+    }
+    for (const cls of touchedClasses || []) {
+      const { id: cid, ...rest } = cls;
+      await setDoc(
+        doc(db, 'catechesis_classes', cid),
+        { ...rest, id: cid, updatedAt: now },
+        { merge: true }
+      );
+    }
+  }
+
+  return { ok: true, deleted, touched, touchedClasses };
 }
