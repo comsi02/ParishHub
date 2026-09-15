@@ -8,7 +8,6 @@ import {
   EXCLUSIVE_ACCOUNT_ROLES,
   PARENT_LEADER_ROLES,
   STAFF_ACCOUNT_ROLES,
-  approveUser,
   formatAccountRolesLabel,
   getAllUsers,
   linkUserToPerson,
@@ -20,6 +19,7 @@ import {
   rejectUser,
   rolesNeedPersonLink,
   setLocalDemoUserRole,
+  setUserApprovalStatus,
   signInWithGoogle,
   signOut,
   updateUserAdminFlag
@@ -70,12 +70,45 @@ function isUserAdmin() {
   return email === 'stcomsi02@gmail.com';
 }
 
+/** 전화번호·주소는 관리자만 열람 */
+function canViewContactInfo() {
+  return isUserAdmin();
+}
+
+function contactPrivacyBadge(label = '관리자 전용') {
+  return `<span class="privacy-masked-badge" title="관리자만 확인 가능">🔒 ${label}</span>`;
+}
+
+function formatPhoneHtml(phone, { linkStyle = 'color: var(--primary); font-weight: 600;' } = {}) {
+  if (!canViewContactInfo()) return contactPrivacyBadge();
+  if (!phone) return '<span style="color: var(--text-muted);">-</span>';
+  const safe = escapeHtml(String(phone));
+  return `📞 <a href="tel:${safe}" style="${linkStyle}">${safe}</a>`;
+}
+
+function formatAddressHtml(address, { prefix = '📍 ', empty = '주소 미등록' } = {}) {
+  if (!canViewContactInfo()) return contactPrivacyBadge();
+  if (!address) return `<span style="color: var(--text-muted);">${empty}</span>`;
+  return `${prefix}${escapeHtml(String(address))}`;
+}
+
+function formatPhonePlainText(phone) {
+  if (!canViewContactInfo()) return '';
+  return phone ? `📞 ${phone}` : '';
+}
+
 /** 승인 + (필요 시) 프로필 연결 완료 시에만 사이트 이용 가능. 관리자·신부님은 예외. */
 function isUserApproved() {
   if (isUserAdmin()) return true;
-  if (!currentUserProfile?.isApproved) return false;
+  const status = currentUserProfile?.status;
+  const approved = Boolean(
+    currentUserProfile?.isApproved
+    || status === 'approved'
+  );
+  if (!approved) return false;
   if (!rolesNeedPersonLink(currentUserProfile)) return true;
-  return Boolean(currentUserProfile?.personId);
+  const personId = currentUserProfile?.personId;
+  return typeof personId === 'string' && personId.trim().length > 0;
 }
 
 function hasPersonLinked() {
@@ -86,7 +119,6 @@ function hasPersonLinked() {
 const navTabs = document.querySelectorAll('.nav-tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 const toastContainer = document.getElementById('toastContainer');
-const btnResetData = document.getElementById('btnResetData');
 const bottomTabBar = document.getElementById('bottomTabBar');
 const navMoreSheet = document.getElementById('navMoreSheet');
 const btnNavMore = document.getElementById('btnNavMore');
@@ -413,13 +445,15 @@ function showUserDetail(type, id) {
             <strong>${idx === 0 ? '학부모 1' : '학부모 2'}:</strong>
             <span class="clickable-name" data-detail-type="parent" data-detail-id="${p.id}">${p.name}</span>
             ${p.baptismalName ? `(${p.baptismalName})` : ''} ${roleBadge}
-            • 📞 <a href="tel:${p.phone}">${p.phone}</a>
+            ${canViewContactInfo() && p.phone ? `• ${formatPhoneHtml(p.phone, { linkStyle: 'color: inherit;' })}` : (canViewContactInfo() ? '' : `• ${contactPrivacyBadge()}`)}
           </div>
         `;
       }).join('');
       const firstParent = parents[0];
-      if (firstParent.address) {
-        parentHtml += `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem;">📍 주소: ${firstParent.address}</div>`;
+      if (canViewContactInfo() && firstParent.address) {
+        parentHtml += `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem;">📍 주소: ${escapeHtml(firstParent.address)}</div>`;
+      } else if (!canViewContactInfo()) {
+        parentHtml += `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem;">📍 주소: ${contactPrivacyBadge()}</div>`;
       }
     }
 
@@ -530,7 +564,7 @@ function showUserDetail(type, id) {
       </div>
       <div class="detail-item detail-item-full">
         <div class="detail-label">연락처</div>
-        <div class="detail-value">📞 <a href="tel:${person.phone}">${person.phone || '-'}</a></div>
+        <div class="detail-value">${formatPhoneHtml(person.phone)}</div>
       </div>
       ${person.email ? `
       <div class="detail-item detail-item-full">
@@ -561,7 +595,9 @@ function showUserDetail(type, id) {
         ${person.baptismalName ? `<span style="color: var(--text-muted); font-size: 0.85rem;">(${person.baptismalName})</span>` : ''}
         ${isTeacher ? `<span class="badge badge-sacrament" style="font-size: 0.7rem; margin-left: 0.25rem;">${getPrimaryRoleLabel(person)}</span>` : ''}
       </div>
-      ${person.phone ? `<div style="font-size: 0.85rem; margin-top: 0.35rem;">📞 <a href="tel:${person.phone}" style="color: var(--primary); font-weight: 600;">${person.phone}</a></div>` : '<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem;">연락처 미등록</div>'}
+      ${person.phone || !canViewContactInfo()
+        ? `<div style="font-size: 0.85rem; margin-top: 0.35rem;">${formatPhoneHtml(person.phone)}</div>`
+        : '<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem;">연락처 미등록</div>'}
     `;
 
     // 학부모 2 정보 (동일 포맷)
@@ -580,7 +616,9 @@ function showUserDetail(type, id) {
             ${spouse.baptismalName ? `<span style="color: var(--text-muted); font-size: 0.85rem;">(${spouse.baptismalName})</span>` : ''}
             ${spouseBadge}
           </div>
-          ${spouse.phone ? `<div style="font-size: 0.85rem; margin-top: 0.35rem;">📞 <a href="tel:${spouse.phone}" style="color: var(--primary); font-weight: 600;">${spouse.phone}</a></div>` : '<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem;">연락처 미등록</div>'}
+          ${spouse.phone || !canViewContactInfo()
+            ? `<div style="font-size: 0.85rem; margin-top: 0.35rem;">${formatPhoneHtml(spouse.phone)}</div>`
+            : '<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem;">연락처 미등록</div>'}
         `;
       }
     }
@@ -610,7 +648,7 @@ function showUserDetail(type, id) {
       </div>
       <div class="detail-item detail-item-full">
         <div class="detail-label">자택 주소</div>
-        <div class="detail-value">📍 ${person.address || '주소 미등록'}</div>
+        <div class="detail-value">${formatAddressHtml(person.address)}</div>
       </div>
       <div class="detail-item detail-item-full">
         <div class="detail-label">등록 자녀 목록 (클릭 시 학생 정보 조회)</div>
@@ -662,6 +700,23 @@ function getAccessLockedHtml(tabTitle) {
         </p>
         <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
           <span class="role-badge-tag role-badge-pending">상태: 프로필 연결 대기</span>
+        </div>
+      </div>
+    `;
+  }
+
+  if (!currentUserProfile?.isApproved && hasPersonLinked()) {
+    return `
+      <div class="access-locked-card pending">
+        <div class="locked-icon">🔗</div>
+        <h3>프로필은 연결됐지만 아직 미승인입니다</h3>
+        <p>
+          <strong>${name}</strong> (${email}) 님의 Person 연결은 완료되었습니다.<br/>
+          관리자가 <strong>가입 승인 관리</strong>에서 승인 스위치를 켜면 ${tabTitle}을(를) 이용할 수 있습니다.<br/>
+          <span style="font-size:0.82rem; color:var(--text-muted);">승인 후 새로고침하거나 다시 로그인해 주세요.</span>
+        </p>
+        <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+          <span class="role-badge-tag role-badge-pending">상태: 연결됨 · 미승인</span>
         </div>
       </div>
     `;
@@ -949,11 +1004,10 @@ async function autoSavePersonRolesFromCard(personId, card) {
   refreshPersonCardRoleBadges(card, personRoles);
 
   const linked = adminUsersByPersonId.get(personId) || null;
-  if (linked) {
+  if (linked && linked.status === 'approved') {
     const wantAdmin = reconcileAccountRoles(linked).includes('admin');
     try {
-      if (linked.status === 'approved') await updateUserAdminFlag(linked.uid, wantAdmin);
-      else await approveUser(linked.uid, { admin: wantAdmin });
+      await updateUserAdminFlag(linked.uid, wantAdmin);
     } catch (e) {
       console.warn('[admin] users admin sync:', e);
     }
@@ -963,7 +1017,6 @@ async function autoSavePersonRolesFromCard(personId, card) {
         ...(wantAdmin ? ['admin'] : []),
       ]);
       currentUserProfile.isAdmin = wantAdmin;
-      currentUserProfile.isApproved = true;
     }
   }
 
@@ -1024,6 +1077,27 @@ function applyAccountRoleCheckRules(ownerAttr, ownerId, toggledRole, checked) {
   }
 
   setChecked(toggledRole, false);
+}
+
+/** Google 가입 승인 대기(배지·필터 공통). 미연결 승인 계정은 제외. */
+function isGoogleApprovalPending(u) {
+  const status = u?.status || 'pending';
+  return status === 'pending' || status === 'rejected';
+}
+
+function countGoogleApprovalPending(users) {
+  return (users || []).filter(isGoogleApprovalPending).length;
+}
+
+function approvalSwitchHtml(uid, isApproved) {
+  const on = Boolean(isApproved);
+  return `
+    <label class="admin-approval-switch" title="Person 연동과 별개로 가입 승인 상태를 바꿉니다">
+      <input type="checkbox" class="admin-approval-toggle" data-uid="${escapeHtml(uid)}" ${on ? 'checked' : ''} />
+      <span class="admin-approval-track" aria-hidden="true"></span>
+      <span class="admin-approval-switch-text">${on ? '승인됨' : '미승인'}</span>
+    </label>
+  `;
 }
 
 function googleUserOptionsHtml(users, selectedUid, { currentPersonId } = {}) {
@@ -1267,14 +1341,18 @@ async function renderAdminUsersPage() {
     } else {
       const renderPersonCard = (person) => {
         const linked = usersByPersonId.get(person.id) || null;
+        const linkedUid = linked ? (linked.uid || linked.id || '') : '';
+        const linkedApproved = Boolean(linked && linked.status === 'approved');
         // 역할 원본은 Person (Google 연동 여부 무관)
         const personRoles = reconcileAccountRoles(person.roles || []);
         const displayRoles = personRoles.length
           ? personRoles
           : suggestAccountRolesFromPerson(person);
-        const linkBadge = linked
-          ? `<span class="role-badge-tag role-badge-teacher">Google 연결됨</span>`
-          : `<span class="role-badge-tag role-badge-pending">Google 미연결</span>`;
+        const linkBadge = !linked
+          ? '<span class="role-badge-tag role-badge-pending">Google 미연결</span>'
+          : linkedApproved
+            ? '<span class="role-badge-tag role-badge-teacher">승인 · Google 연결됨</span>'
+            : '<span class="role-badge-tag role-badge-pending">연결됨 · 미승인</span>';
         const metaBits = [
           person.baptismalName ? `세례명 ${person.baptismalName}` : null,
           person.email || null,
@@ -1297,7 +1375,12 @@ async function renderAdminUsersPage() {
             ${linked ? `
               <div class="admin-user-card-row">
                 <span class="admin-user-card-label" style="margin:0;">연결된 계정</span>
-                <span style="font-size:0.82rem;">${escapeHtml(linked.displayName || '')} · ${escapeHtml(linked.email || linked.uid)}</span>
+                <span style="font-size:0.82rem;">${escapeHtml(linked.displayName || '')} · ${escapeHtml(linked.email || linkedUid)}</span>
+              </div>
+              <div class="admin-user-card-block">
+                <div class="admin-user-card-label">가입 승인</div>
+                ${approvalSwitchHtml(linkedUid, linkedApproved)}
+                <p style="font-size:0.75rem; color:var(--text-muted); margin:0.35rem 0 0;">Person 연동과 별개입니다. 켜면 바로 이용 가능합니다.</p>
               </div>
             ` : `
               <p style="font-size:0.8rem; color:var(--text-muted); margin:0.55rem 0 0;">
@@ -1315,8 +1398,8 @@ async function renderAdminUsersPage() {
               </div>
             </div>
             <div class="mobile-card-actions">
-              ${linked ? `
-                <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-person-id="${escapeHtml(person.id)}" data-uid="${escapeHtml(linked.uid)}">
+              ${linked && linkedUid ? `
+                <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-person-id="${escapeHtml(person.id)}" data-uid="${escapeHtml(linkedUid)}">
                   연결 해제
                 </button>
               ` : ''}
@@ -1385,7 +1468,7 @@ async function renderAdminUsersPage() {
       );
     }
     if (adminGoogleStatusFilter === 'pending') {
-      list = list.filter(u => u.status === 'pending');
+      list = list.filter(isGoogleApprovalPending);
     } else if (adminGoogleStatusFilter === 'unlinked') {
       list = list.filter(u => !u.personId);
     } else if (adminGoogleStatusFilter === 'linked') {
@@ -1393,7 +1476,9 @@ async function renderAdminUsersPage() {
     }
 
     if (googleCountEl) {
-      googleCountEl.textContent = `${list.length}명 표시 · 전체 ${users.length}명`;
+      const pendingN = countGoogleApprovalPending(users);
+      googleCountEl.textContent = `${list.length}명 표시 · 전체 ${users.length}명` +
+        (pendingN ? ` · 승인 대기 ${pendingN}명` : '');
     }
 
     if (!list.length) {
@@ -1404,16 +1489,21 @@ async function renderAdminUsersPage() {
       ));
     } else {
       setMobileCards(usersList, list.map(u => {
+        const uid = u.uid || u.id || '';
         const roles = reconcileAccountRoles(u);
         const isAdminRole = roles.includes('admin');
         const linkedPerson = u.personId ? dataProvider.getPersonById(u.personId) : null;
-        const statusBadge = u.status === 'pending'
-          ? '<span class="role-badge-tag role-badge-pending">승인 대기</span>'
-          : u.status === 'rejected'
+        const status = u.status || 'pending';
+        const isApproved = status === 'approved';
+        const statusBadge = !isApproved && u.personId
+          ? '<span class="role-badge-tag role-badge-pending">연결됨 · 미승인</span>'
+          : !isApproved && status === 'rejected'
             ? '<span class="role-badge-tag" style="background:#fee2e2;color:#991b1b;">거절됨</span>'
-            : u.personId
-              ? '<span class="role-badge-tag role-badge-teacher">연결됨</span>'
-              : '<span class="role-badge-tag role-badge-pending">미연결</span>';
+            : !isApproved
+              ? '<span class="role-badge-tag role-badge-pending">승인 대기</span>'
+              : u.personId
+                ? '<span class="role-badge-tag role-badge-teacher">승인 · 연결됨</span>'
+                : '<span class="role-badge-tag role-badge-teacher">승인됨</span>';
         const reqDate = u.requestedAt ? new Date(u.requestedAt).toLocaleDateString('ko-KR') : '-';
         const nonAdminRoles = linkedPerson
           ? reconcileAccountRoles(linkedPerson.roles || []).filter(r => r !== 'admin')
@@ -1423,11 +1513,11 @@ async function renderAdminUsersPage() {
           : (linkedPerson ? 'Person 역할 미지정' : 'Person 미연결');
 
         return `
-          <article class="mobile-data-card admin-user-card" data-uid="${escapeHtml(u.uid)}">
+          <article class="mobile-data-card admin-user-card" data-uid="${escapeHtml(uid)}">
             <div class="mobile-card-top">
               <div>
                 <div class="mobile-card-title">${escapeHtml(u.displayName || '이름 없음')}</div>
-                <div class="mobile-card-sub">${escapeHtml(u.email || u.uid)}</div>
+                <div class="mobile-card-sub">${escapeHtml(u.email || uid)}</div>
               </div>
               <div class="mobile-card-side">${statusBadge}</div>
             </div>
@@ -1443,29 +1533,34 @@ async function renderAdminUsersPage() {
               </div>
             ` : ''}
             <div class="admin-user-card-block">
+              <div class="admin-user-card-label">가입 승인</div>
+              ${approvalSwitchHtml(uid, isApproved)}
+              <p style="font-size:0.75rem; color:var(--text-muted); margin:0.35rem 0 0;">Person 연동과 별개입니다. 스위치를 켜야 사이트 이용이 가능합니다.</p>
+            </div>
+            <div class="admin-user-card-block">
               <div class="admin-user-card-label">Person 매핑</div>
-              <select class="admin-person-pick admin-person-link" data-uid="${escapeHtml(u.uid)}">
+              <select class="admin-person-pick admin-person-link" data-uid="${escapeHtml(uid)}">
                 ${personOptionsHtml(u.personId || '')}
               </select>
             </div>
             <div class="admin-user-card-block">
               <label class="admin-admin-toggle">
-                <input type="checkbox" class="admin-google-admin-check" data-uid="${escapeHtml(u.uid)}" ${isAdminRole ? 'checked' : ''} />
+                <input type="checkbox" class="admin-google-admin-check" data-uid="${escapeHtml(uid)}" ${isAdminRole ? 'checked' : ''} />
                 <span>관리자 권한 부여</span>
               </label>
               <p style="font-size:0.75rem; color:var(--text-muted); margin:0.35rem 0 0;">학생·신부님 전용 계정에는 관리자를 함께 부여할 수 없습니다.</p>
             </div>
             <div class="mobile-card-actions">
-              <button type="button" class="btn btn-primary btn-sm btn-save-google-mapping" data-uid="${escapeHtml(u.uid)}">
+              <button type="button" class="btn btn-primary btn-sm btn-save-google-mapping" data-uid="${escapeHtml(uid)}">
                 💾 매핑·관리자 저장
               </button>
               ${u.personId ? `
-                <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-uid="${escapeHtml(u.uid)}">
+                <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-uid="${escapeHtml(uid)}">
                   연결 해제
                 </button>
               ` : ''}
-              ${u.status === 'pending' || u.status === 'rejected' ? `
-                <button type="button" class="btn btn-secondary btn-sm btn-reject-user" data-uid="${escapeHtml(u.uid)}" style="color:#dc2626;">
+              ${!isApproved ? `
+                <button type="button" class="btn btn-secondary btn-sm btn-reject-user" data-uid="${escapeHtml(uid)}" style="color:#dc2626;">
                   거절
                 </button>
               ` : ''}
@@ -1500,6 +1595,32 @@ async function renderAdminUsersPage() {
     }
   }, 'change');
 
+  bindInRoots(roots, '.admin-approval-toggle', async (e) => {
+    const el = e.currentTarget;
+    const uid = el.getAttribute('data-uid');
+    const approved = el.checked;
+    const label = el.closest('.admin-approval-switch')?.querySelector('.admin-approval-switch-text');
+    if (!uid) return;
+    try {
+      el.disabled = true;
+      await setUserApprovalStatus(uid, approved);
+      if (label) label.textContent = approved ? '승인됨' : '미승인';
+      if (currentUser?.uid === uid && currentUserProfile) {
+        currentUserProfile.isApproved = approved;
+        currentUserProfile.status = approved ? 'approved' : 'pending';
+      }
+      showToast(approved ? '승인되었습니다. 해당 계정은 다시 로그인하면 이용 가능합니다.' : '미승인으로 변경되었습니다.', '✅');
+      renderAdminUsersPage();
+      updateAdminBadge();
+    } catch (err) {
+      console.error(err);
+      el.checked = !approved;
+      if (label) label.textContent = !approved ? '승인됨' : '미승인';
+      showToast(err?.message || '승인 상태 변경에 실패했습니다.', '❌');
+      el.disabled = false;
+    }
+  }, 'change');
+
   bindInRoots(roots, '.btn-save-google-mapping', async (e) => {
     const btn = e.currentTarget;
     const uid = btn.getAttribute('data-uid');
@@ -1509,10 +1630,12 @@ async function renderAdminUsersPage() {
     const personId = personSel?.value || '';
     const wantAdmin = Boolean(card?.querySelector(`.admin-google-admin-check[data-uid="${cssAttrEquals(uid)}"]`)?.checked
       || card?.querySelector('.admin-google-admin-check')?.checked);
-    const target = users.find(u => u.uid === uid);
-    if (!target) return;
+    const target = users.find(u => (u.uid || u.id) === uid);
+    if (!target) {
+      showToast('대상 Google 계정을 찾을 수 없습니다.', '⚠️');
+      return;
+    }
 
-    // 학생·신부님 Person 에는 관리자 겸임 불가
     if (wantAdmin && personId) {
       const person = dataProvider.getPersonById(personId);
       const pr = person?.roles || [];
@@ -1522,7 +1645,7 @@ async function renderAdminUsersPage() {
       }
     }
 
-    if (!personId && !wantAdmin && !target.personId && target.status === 'pending') {
+    if (!personId && !wantAdmin && !target.personId) {
       showToast('Person을 선택하거나 관리자 권한을 체크한 뒤 저장하세요.', '⚠️');
       return;
     }
@@ -1531,29 +1654,27 @@ async function renderAdminUsersPage() {
       btn.disabled = true;
 
       if (personId) {
-        const previously = users.filter(u => u.personId === personId && u.uid !== uid);
+        const previously = users.filter(u => u.personId === personId && (u.uid || u.id) !== uid);
         for (const prev of previously) {
-          await linkUserToPerson(prev.uid, null);
+          await linkUserToPerson(prev.uid || prev.id, null);
         }
         await linkUserToPerson(uid, personId);
-
-        if (target.status === 'approved') await updateUserAdminFlag(uid, wantAdmin);
-        else await approveUser(uid, { admin: wantAdmin });
-      } else {
-        if (target.personId) await linkUserToPerson(uid, null);
-
-        if (wantAdmin) {
-          if (target.status === 'approved') await updateUserAdminFlag(uid, true);
-          else await approveUser(uid, { admin: true });
-        } else if (target.status === 'approved') {
-          await updateUserAdminFlag(uid, false);
-        }
+      } else if (target.personId) {
+        await linkUserToPerson(uid, null);
       }
+
+      await updateUserAdminFlag(uid, wantAdmin);
+
+      // 매핑 저장 시 승인 스위치 상태도 함께 반영
+      const approvalOn = Boolean(card?.querySelector(`.admin-approval-toggle[data-uid="${cssAttrEquals(uid)}"]`)?.checked
+        || card?.querySelector('.admin-approval-toggle')?.checked);
+      await setUserApprovalStatus(uid, approvalOn);
 
       if (currentUser?.uid === uid && currentUserProfile) {
         currentUserProfile.personId = personId || null;
-        currentUserProfile.isApproved = true;
         currentUserProfile.isAdmin = wantAdmin;
+        currentUserProfile.isApproved = approvalOn;
+        currentUserProfile.status = approvalOn ? 'approved' : 'pending';
         const person = personId ? dataProvider.getPersonById(personId) : null;
         const personRoles = reconcileAccountRoles(person?.roles || []).filter(r => r !== 'admin');
         currentUserProfile.roles = reconcileAccountRoles([
@@ -1562,9 +1683,11 @@ async function renderAdminUsersPage() {
         ]);
       }
       showToast(
-        wantAdmin
-          ? (personId ? '매핑 및 관리자 권한이 저장되었습니다.' : '관리자 권한이 부여되었습니다.')
-          : (personId ? 'Person 매핑이 저장되었습니다.' : '관리자 권한이 해제되었습니다.'),
+        approvalOn
+          ? (personId ? 'Person 매핑 및 승인이 저장되었습니다.' : '승인·관리자 설정이 저장되었습니다.')
+          : (personId
+            ? 'Person 매핑이 저장되었습니다. 이용하려면 승인 스위치를 켜 주세요.'
+            : '저장되었습니다.'),
         '🎉'
       );
       renderAdminUsersPage();
@@ -1624,6 +1747,8 @@ async function renderAdminUsersPage() {
     googleSearchInput.focus();
     try { googleSearchInput.setSelectionRange(pos, pos); } catch (_) { /* ignore */ }
   }
+
+  await updateAdminBadge(users);
 }
 
 function initAdminPersonsPageControls() {
@@ -1672,13 +1797,9 @@ function initAdminPersonsPageControls() {
   });
 }
 
-async function updateAdminBadge() {
-  const users = await getAllUsers();
-  const pendingCount = users.filter(u => {
-    if (u.status === 'pending') return true;
-    if (u.status === 'approved' && rolesNeedPersonLink(u) && !u.personId) return true;
-    return false;
-  }).length;
+async function updateAdminBadge(preloadedUsers) {
+  const users = preloadedUsers || await getAllUsers();
+  const pendingCount = countGoogleApprovalPending(users);
   const ids = ['pendingUsersBadge', 'pendingUsersBadgeNav', 'pendingUsersBadgeMore'];
   ids.forEach(id => {
     const badge = document.getElementById(id);
@@ -1686,6 +1807,7 @@ async function updateAdminBadge() {
     badge.textContent = pendingCount;
     badge.style.display = pendingCount > 0 ? 'inline-flex' : 'none';
   });
+  return pendingCount;
 }
 
 function setAdminNavVisible(show) {
@@ -1711,21 +1833,12 @@ function initAuthUI() {
   const btnOpenAdminUsersPage = document.getElementById('btnOpenAdminUsersPage');
   const btnRefreshAdminUsers = document.getElementById('btnRefreshAdminUsers');
   const demoRoleSelect = document.getElementById('demoRoleSelect');
-  const envBadge = document.getElementById('envBadge');
+  const utilStrip = document.getElementById('utilStrip');
 
   if (import.meta.env.VITE_PROVIDER === 'firebase') {
-    if (envBadge) {
-      const usingEmulator = import.meta.env.VITE_USE_EMULATOR === 'true';
-      envBadge.innerHTML = usingEmulator
-        ? `<span class="env-dot" style="background:#f59e0b;" aria-hidden="true"></span><span class="env-badge-text">Firebase Emulator</span>`
-        : `<span class="env-dot" style="background:#3b82f6;" aria-hidden="true"></span><span class="env-badge-text">Firebase · ${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'cloud'}</span>`;
-      envBadge.style.color = usingEmulator ? '#b45309' : '#1d4ed8';
-      envBadge.style.borderColor = usingEmulator ? '#fcd34d' : '#93c5fd';
-      envBadge.style.background = usingEmulator ? '#fffbeb' : '#eff6ff';
-    }
-    const demoWrapper = document.getElementById('demoPersonaWrapper');
-    if (demoWrapper) demoWrapper.style.display = 'none';
+    if (utilStrip) utilStrip.style.display = 'none';
   } else {
+    if (utilStrip) utilStrip.style.display = '';
     demoRoleSelect?.addEventListener('change', (e) => {
       setLocalDemoUserRole(e.target.value);
     });
@@ -1782,6 +1895,9 @@ function initAuthUI() {
         } else if (profile?.isApproved) {
           userRoleBadge.textContent = '👤 프로필 연결 대기';
           userRoleBadge.className = 'role-badge-tag role-badge-pending';
+        } else if (profile?.personId) {
+          userRoleBadge.textContent = '🔗 연결됨 · 미승인';
+          userRoleBadge.className = 'role-badge-tag role-badge-pending';
         } else {
           userRoleBadge.textContent = '⏳ 승인 대기';
           userRoleBadge.className = 'role-badge-tag role-badge-pending';
@@ -1833,14 +1949,17 @@ function initAuthUI() {
       setAdminNavVisible(false);
     }
 
-    // Refresh current view based on permissions
-    renderDashboard();
-    renderSchedule();
-    renderAttendance();
-    renderStats();
-    renderActivities();
-    renderGraceBank();
-    renderDirectory();
+    // Refresh current view based on permissions (개별 실패가 전체 인증을 깨지 않게)
+    const safeRender = (fn, label) => {
+      try { fn(); } catch (e) { console.error(`[UI] ${label} render failed:`, e); }
+    };
+    safeRender(renderDashboard, 'dashboard');
+    safeRender(renderSchedule, 'schedule');
+    safeRender(renderAttendance, 'attendance');
+    safeRender(renderStats, 'stats');
+    safeRender(renderActivities, 'activities');
+    safeRender(renderGraceBank, 'grace');
+    safeRender(renderDirectory, 'directory');
   });
 }
 
@@ -2311,10 +2430,6 @@ function renderDashboard() {
         ? `<span class="clickable-name" data-detail-type="teacher" data-detail-id="${t.id}">${displayName}</span>`
         : `<span style="color: var(--text-muted); font-weight: 600;">${displayName}</span>`;
 
-      const phoneMarkup = isApproved
-        ? `📞 <a href="tel:${t.phone}" style="color: inherit; text-decoration: underline;">${t.phone || '-'}</a>`
-        : `<span class="privacy-masked-badge">🔒 로그인 후 확인</span>`;
-
       return `
         <div style="background: var(--surface-subtle); padding: 0.65rem 0.85rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
           <div>
@@ -2322,9 +2437,6 @@ function renderDashboard() {
               ${nameMarkup}
               ${displayBaptismal}
               ${parentBadge}${specialBadges}
-            </div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem;">
-              ${phoneMarkup}
             </div>
           </div>
           <span class="badge ${roleBadgeClass}">${primaryRole?.label || '교사'}</span>
@@ -2674,7 +2786,13 @@ function renderDirectory() {
   if (protectedEl) protectedEl.style.display = '';
   if (lockedEl) lockedEl.style.display = 'none';
 
-  const search = document.getElementById('directorySearchInput')?.value.trim().toLowerCase() || '';
+  const searchInput = document.getElementById('directorySearchInput');
+  if (searchInput) {
+    searchInput.placeholder = canViewContactInfo()
+      ? '이름, 세례명, 전화번호 검색...'
+      : '이름, 세례명 검색...';
+  }
+  const search = searchInput?.value.trim().toLowerCase() || '';
 
   if (currentDirectoryView === 'students') renderStudentsDirectory(search);
   else if (currentDirectoryView === 'parents') renderParentsDirectory(search);
@@ -2785,9 +2903,11 @@ function renderParentsDirectory(search = '') {
 
   const filtered = parents.filter(p => {
     if (!search) return true;
-    return p.name.toLowerCase().includes(search) ||
-           (p.baptismalName && p.baptismalName.toLowerCase().includes(search)) ||
-           (p.phone && p.phone.includes(search)) ||
+    const basic = p.name.toLowerCase().includes(search) ||
+           (p.baptismalName && p.baptismalName.toLowerCase().includes(search));
+    if (basic) return true;
+    if (!canViewContactInfo()) return false;
+    return (p.phone && p.phone.includes(search)) ||
            (p.address && p.address.toLowerCase().includes(search));
   });
 
@@ -2846,8 +2966,8 @@ function renderParentsDirectory(search = '') {
           ${parentLeaderBadges}
         </td>
         <td>${spouseCell}</td>
-        <td><a href="tel:${p.phone}" style="color: var(--primary); font-weight: 600;">📞 ${p.phone || '-'}</a></td>
-        <td style="font-size: 0.85rem; color: var(--text-muted);">${p.address || '-'}</td>
+        <td>${formatPhoneHtml(p.phone)}</td>
+        <td style="font-size: 0.85rem; color: var(--text-muted);">${formatAddressHtml(p.address, { prefix: '', empty: '-' })}</td>
         <td><span style="font-size: 0.85rem;">${childNames}</span></td>
         <td>${detailBtn}</td>
       </tr>
@@ -2862,7 +2982,7 @@ function renderParentsDirectory(search = '') {
               ${p1TeacherBadge}
               ${parentLeaderBadges}
             </div>
-            <div class="mobile-card-sub">${p.phone ? `📞 ${p.phone}` : ''}${spouseShort}</div>
+            <div class="mobile-card-sub">${formatPhonePlainText(p.phone) || (canViewContactInfo() ? '' : '🔒 연락처 관리자 전용')}${spouseShort}</div>
           </div>
         </div>
         <div class="mobile-card-meta">자녀: ${childNames}</div>
@@ -2937,7 +3057,7 @@ function renderTeachersDirectory(search = '') {
         </td>
         <td>${roleBadge}</td>
         <td>${assignedClassHtml}</td>
-        <td><a href="tel:${t.phone}" style="color: var(--primary);">📞 ${t.phone || '-'}</a></td>
+        <td>${formatPhoneHtml(t.phone, { linkStyle: 'color: var(--primary);' })}</td>
         <td>${dualHtml}</td>
         <td>${detailBtn}</td>
       </tr>
@@ -2953,7 +3073,7 @@ function renderTeachersDirectory(search = '') {
             <div class="mobile-card-meta" style="margin-top: 0.3rem;">${roleBadge}${assignedClassHtml}</div>
           </div>
         </div>
-        <div class="mobile-card-sub">${t.phone ? `📞 ${t.phone}` : ''}${dualRoles.length ? ` · ${dualRoles.join(', ')}` : ''}</div>
+        <div class="mobile-card-sub">${formatPhonePlainText(t.phone) || (canViewContactInfo() ? '' : '🔒 연락처 관리자 전용')}${dualRoles.length ? ` · ${dualRoles.join(', ')}` : ''}</div>
         <div class="mobile-card-actions">${detailBtn}</div>
       </article>
     `
@@ -3150,6 +3270,9 @@ function renderStats() {
       classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
   }
 
+  // 2. Fetch Aggregated Statistics (기간 배지보다 먼저 계산)
+  const stats = dataProvider.getSeasonStatistics(selectedSeason, selectedClass);
+
   // Update Season Period Info Badge
   const periodBadge = document.getElementById('statsSeasonPeriodInfo');
   if (periodBadge) {
@@ -3157,9 +3280,6 @@ function renderStats() {
     const schoolDays = stats.schoolDayCount || stats.totalWeeks;
     periodBadge.textContent = `📅 시즌 기간: ${startYear}년 9월 ~ ${endYear}년 6월 (학사 수업일 ${schoolDays}회)`;
   }
-
-  // 2. Fetch Aggregated Statistics
-  const stats = dataProvider.getSeasonStatistics(selectedSeason, selectedClass);
 
   // 3. Update KPI Summary Cards
   const kpiOverallRate = document.getElementById('kpiOverallRate');
@@ -3791,7 +3911,10 @@ document.getElementById('btnOpenAddStudentModal')?.addEventListener('click', () 
   const parents = dataProvider.getParents();
   const sel = document.getElementById('newStudentParent');
   sel.innerHTML = '<option value="">학부모를 선택하세요 (선택)...</option>' +
-    parents.map(p => `<option value="${p.id}">${p.name} (${p.baptismalName || '-'}, ${p.phone || '-'})</option>`).join('');
+    parents.map(p => {
+      const phoneHint = canViewContactInfo() && p.phone ? `, ${p.phone}` : '';
+      return `<option value="${p.id}">${p.name} (${p.baptismalName || '-'}${phoneHint})</option>`;
+    }).join('');
   openModal('modalAddStudent');
 });
 
@@ -3877,41 +4000,6 @@ document.getElementById('addParentForm')?.addEventListener('submit', async (e) =
   } catch (err) {
     console.error(err);
     showToast('학부모 등록 저장에 실패했습니다.', '⚠️');
-  }
-});
-
-// Reset data
-btnResetData?.addEventListener('click', async () => {
-  const isFirebase = dataProvider.mode === 'firebase';
-  const msg = isFirebase
-    ? '로컬 캐시를 비우고 Firestore에서 다시 불러올까요? (원격 데이터는 삭제되지 않습니다)'
-    : '모든 데이터를 초기 샘플 데이터로 복구하시겠습니까?';
-  if (!confirm(msg)) return;
-
-  try {
-    dataProvider.resetToDefaults();
-    if (isFirebase) {
-      await Promise.all([
-        loadPersonsFromFirestore(),
-        loadSchedulesFromFirestore(),
-        loadClassesFromFirestore(),
-        loadOpsFromFirestore(),
-        ensureSettingsInFirestore(),
-      ]);
-      showToast('Firestore 데이터를 다시 불러왔습니다.', '🔄');
-    } else {
-      showToast('샘플 데이터로 초기화되었습니다.', '🔄');
-    }
-    renderDashboard();
-    renderSchedule();
-    renderAttendance();
-    renderStats();
-    renderActivities();
-    renderGraceBank();
-    renderDirectory();
-  } catch (err) {
-    console.error(err);
-    showToast('데이터 초기화/재로딩에 실패했습니다.', '⚠️');
   }
 });
 

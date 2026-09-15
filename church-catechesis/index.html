@@ -178,8 +178,8 @@
     </div>
   </div>
 
-  <!-- Utility strip: demo role / season / env (kept out of sticky brand row) -->
-  <div class="util-strip" id="utilStrip">
+  <!-- Utility strip: local demo role only (hidden in Firebase mode) -->
+  <div class="util-strip" id="utilStrip" style="display: none;">
     <div class="util-strip-inner">
       <div id="demoPersonaWrapper" class="demo-persona-wrap">
         <label class="util-label" for="demoRoleSelect">데모</label>
@@ -190,17 +190,6 @@
           <option value="admin">🛡️ 관리자 (신부님/교감)</option>
         </select>
       </div>
-      <span class="season-badge" id="seasonHeaderBadge" title="주일학교 시즌: 매년 9월 ~ 이듬해 6월">
-        🎓 2026-2027 학년도
-      </span>
-      <span class="env-badge" id="envBadge">
-        <span class="env-dot" aria-hidden="true"></span>
-        <span class="env-badge-text">로컬 데모 모드</span>
-      </span>
-      <button class="btn btn-secondary btn-sm" id="btnResetData" title="샘플 데이터로 초기화" type="button">
-        <span class="reset-label-full">🔄 데이터 초기화</span>
-        <span class="reset-label-short">🔄</span>
-      </button>
     </div>
   </div>
 
@@ -214,6 +203,9 @@
         <div class="dday-left-content">
           <div>
             <div class="dday-date-badge-row">
+              <span class="season-badge" id="seasonHeaderBadge" title="주일학교 시즌: 매년 9월 ~ 이듬해 6월">
+                🎓 2026-2027 학년도
+              </span>
               <span class="today-calendar-badge" id="ddayTodayDateBadge">
                 📅 오늘: 2026년 9월 10일 (목요일)
               </span>
@@ -556,7 +548,7 @@
               <button class="pill-btn" data-dir="teachers">✝️ 교사 명부</button>
               <button class="pill-btn" data-dir="classes">🏫 반 구성</button>
             </div>
-            <input type="text" id="directorySearchInput" class="search-input" placeholder="이름, 세례명, 전화번호 검색..." />
+            <input type="text" id="directorySearchInput" class="search-input" placeholder="이름, 세례명 검색..." />
           </div>
           <div class="toolbar-group" id="directoryActionBtns">
             <button class="btn btn-primary btn-sm" id="btnOpenAddStudentModal">
@@ -955,10 +947,9 @@
           <section class="admin-page-section" aria-labelledby="adminPersonsHeading">
             <h3 class="admin-section-title" id="adminPersonsHeading">가입 승인 · 권한 부여</h3>
             <p class="admin-section-desc">
-              등록 멤버의 <strong>역할은 Person에 저장</strong>됩니다 (Google 연동 없이도 저장 가능).
-              Google 연결·관리자 권한은 「Google 가입」탭에서 설정하세요.
-              <strong>교사·교감·담당</strong> 탭에는 교사·교감·부교감·전례부교사·복사교사·총무·청소년분과장이,
-              <strong>학부모</strong> 탭에는 학부모와 자부회장·자모회장·자부회총무·자모회총무가 표시됩니다.
+              등록 멤버의 <strong>역할은 Person에 저장</strong>됩니다.
+              Google이 연결된 카드에는 <strong>가입 승인 스위치</strong>가 표시됩니다 (연동과 별개).
+              Google 연결은 「Google 가입」탭에서도 설정할 수 있습니다.
             </p>
             <div class="pill-group admin-role-tabs" id="adminPersonRoleTabs" role="tablist" aria-label="역할 구분">
               <button type="button" class="pill-btn" data-role-tab="priest">신부님</button>
@@ -985,7 +976,9 @@
           <section class="admin-page-section" aria-labelledby="adminUsersHeading">
             <h3 class="admin-section-title" id="adminUsersHeading">Google 가입 계정 · Person 매핑</h3>
             <p class="admin-section-desc">
-              Google 가입 계정에 Person을 연결하고, <strong>관리자 권한만</strong> 부여·해제할 수 있습니다. 교사·학부모 등 일반 권한은 「가입 승인」탭에서 설정하세요.
+              Person 매핑과 <strong>가입 승인</strong>은 별개입니다.
+              매핑만 하면 미승인 상태로 남고, <strong>승인 스위치</strong>를 켜야 사이트 이용이 가능합니다.
+              관리자 권한만 이 탭에서 부여·해제하고, 교사·학부모 등 일반 권한은 「가입 승인」탭에서 설정하세요.
             </p>
             <div class="admin-persons-toolbar">
               <input
@@ -997,7 +990,7 @@
               />
               <div class="pill-group" id="adminGoogleStatusFilter" role="group" aria-label="상태 필터">
                 <button type="button" class="pill-btn active" data-google-filter="all">전체</button>
-                <button type="button" class="pill-btn" data-google-filter="pending">대기</button>
+                <button type="button" class="pill-btn" data-google-filter="pending">승인 대기</button>
                 <button type="button" class="pill-btn" data-google-filter="unlinked">미연결</button>
                 <button type="button" class="pill-btn" data-google-filter="linked">연결됨</button>
               </div>

@@ -223,12 +223,14 @@ function enrichProfile(base) {
   const roles = reconcileAccountRoles(base);
   const isAdmin = roles.includes('admin') || Boolean(base?.isAdmin);
   const isStaff = roles.some(r => STAFF_ACCOUNT_ROLES.includes(r));
+  const status = typeof base?.status === 'string' ? base.status : '';
   return {
     ...base,
     roles,
     role: primaryAccountRole(roles),
+    status: status || base?.status || 'pending',
     isAdmin,
-    isApproved: Boolean(base?.isApproved || base?.status === 'approved' || isAdmin),
+    isApproved: Boolean(base?.isApproved || status === 'approved' || isAdmin),
     isStudent: roles.includes('student'),
     isPriest: roles.includes('priest'),
     isParent: roles.includes('parent')
@@ -348,21 +350,31 @@ export async function syncUserProfile(user) {
     });
   }
 
-  const buildFallbackProfile = (extra = {}) => enrichProfile({
-    uid: user.uid,
-    email: userEmail || user.email || null,
-    displayName: user.displayName || (userEmail ? userEmail.split('@')[0] : '사용자'),
-    photoURL: user.photoURL || null,
-    status: bootstrapAdmin ? 'approved' : (extra.status || 'pending'),
-    ...withRoleFields(bootstrapAdmin ? ['admin'] : (extra.roles || extra.role || [])),
-    personId: extra.personId || null,
-    isApproved: bootstrapAdmin || extra.status === 'approved',
-    isAdmin: bootstrapAdmin || isAccountAdmin(extra),
-    ...extra,
-    ...(bootstrapAdmin
-      ? { status: 'approved', ...withRoleFields(['admin']), isApproved: true, isAdmin: true }
-      : {}),
-  });
+  const buildFallbackProfile = (extra = {}) => {
+    const roleInput = Array.isArray(extra.roles)
+      ? extra.roles
+      : (extra.role && extra.role !== 'none' ? extra.role : []);
+    const status = bootstrapAdmin
+      ? 'approved'
+      : (typeof extra.status === 'string' && extra.status ? extra.status : 'pending');
+    return enrichProfile({
+      uid: user.uid,
+      email: userEmail || user.email || null,
+      displayName: user.displayName || (userEmail ? userEmail.split('@')[0] : '사용자'),
+      photoURL: user.photoURL || null,
+      status,
+      ...withRoleFields(bootstrapAdmin ? ['admin'] : roleInput),
+      personId: extra.personId || null,
+      isApproved: bootstrapAdmin || status === 'approved',
+      isAdmin: bootstrapAdmin || isAccountAdmin(extra),
+      ...extra,
+      status,
+      isApproved: bootstrapAdmin || status === 'approved' || Boolean(extra.isApproved),
+      ...(bootstrapAdmin
+        ? { status: 'approved', ...withRoleFields(['admin']), isApproved: true, isAdmin: true }
+        : {}),
+    });
+  };
 
   try {
     const userRef = doc(db, 'catechesis_users', user.uid);
@@ -396,7 +408,17 @@ export async function syncUserProfile(user) {
 
     const now = new Date().toISOString();
 
-    if (!snap || !snap.exists()) {
+    if (!snap) {
+      // 읽기 실패 시 기존 문서를 pending/personId:null 로 덮어쓰지 않음
+      console.error('[Auth] catechesis_users 읽기 실패 — 기존 승인·연동 정보를 유지합니다.');
+      return buildFallbackProfile({
+        email: userEmail || user.email || null,
+        status: 'pending',
+        personId: null,
+      });
+    }
+
+    if (!snap.exists()) {
       const roleFields = withRoleFields(isAdminDoc ? ['admin'] : []);
       const newProfile = {
         uid: user.uid,
@@ -441,7 +463,9 @@ export async function syncUserProfile(user) {
 
     // Person.roles → 세션 권한 병합
     let effectiveRoles = [...userRolesOnly];
-    const personId = data.personId || null;
+    const personId = (typeof data.personId === 'string' && data.personId.trim())
+      ? data.personId.trim()
+      : null;
     if (personId) {
       try {
         const personSnap = await getDocPreferServer(doc(db, 'catechesis_persons', personId));
@@ -464,23 +488,28 @@ export async function syncUserProfile(user) {
       }
     }
 
+    // 로그인 시 lastLogin 등만 갱신 — role/roles/status/personId 는 본인 쓰면 규칙에 막혀 전체 패치 실패함
     const profilePatch = {
       lastLoginAt: now,
-      displayName: user.displayName || data.displayName,
+      displayName: user.displayName || data.displayName || null,
       photoURL: user.photoURL || data.photoURL || null,
-      ...withRoleFields(userRolesOnly),
     };
     if (userEmail && userEmail !== data.email) {
       profilePatch.email = userEmail;
     }
 
-    if (isAdmin && data.status !== 'approved') {
-      profilePatch.status = 'approved';
-      profilePatch.approvedAt = data.approvedAt || now;
-    }
-
     try {
-      await setDoc(userRef, profilePatch, { merge: true });
+      // 관리자 계정만 status/roles 동시 패치
+      if (isAdmin && data.status !== 'approved') {
+        await setDoc(userRef, {
+          ...profilePatch,
+          status: 'approved',
+          approvedAt: data.approvedAt || now,
+          ...withRoleFields(userRolesOnly),
+        }, { merge: true });
+      } else {
+        await setDoc(userRef, profilePatch, { merge: true });
+      }
     } catch (e) {
       console.error('[Auth] catechesis_users 업데이트 실패:', e);
     }
@@ -497,12 +526,17 @@ export async function syncUserProfile(user) {
       }
     }
 
-    const merged = { ...data, ...profilePatch, personId };
+    const rawStatus = typeof data.status === 'string' ? data.status : '';
+    const statusAfter = (isAdmin && data.status !== 'approved')
+      ? 'approved'
+      : (rawStatus || 'pending');
+    const merged = { ...data, ...profilePatch, personId, status: statusAfter };
     return buildFallbackProfile({
       ...merged,
       ...withRoleFields(effectiveRoles),
       personId,
-      isApproved: merged.status === 'approved' || isAdmin,
+      status: statusAfter,
+      isApproved: statusAfter === 'approved' || isAdmin,
       isAdmin,
     });
   } catch (e) {
@@ -533,14 +567,14 @@ export function onAuthStateChanged(callback) {
   if (isFirebaseMode && auth) {
     return firebaseOnAuthStateChanged(auth, async (user) => {
       if (user) {
+        let profile = null;
         try {
-          const profile = await syncUserProfile(user);
-          callback(user, profile);
+          profile = await syncUserProfile(user);
         } catch (e) {
           console.error('[Auth] Profile sync error:', e);
           const email = resolveUserEmail(user);
           const bootstrapAdmin = isBootstrapAdminEmail(email);
-          callback(user, enrichProfile({
+          profile = enrichProfile({
             uid: user.uid,
             email: email || user.email,
             displayName: user.displayName,
@@ -548,7 +582,13 @@ export function onAuthStateChanged(callback) {
             ...withRoleFields(bootstrapAdmin ? ['admin'] : []),
             isApproved: bootstrapAdmin,
             isAdmin: bootstrapAdmin,
-          }));
+          });
+        }
+        try {
+          callback(user, profile);
+        } catch (e) {
+          // UI 렌더 오류가 승인 프로필을 pending 으로 덮어쓰지 않도록 분리
+          console.error('[Auth] Auth UI callback error:', e);
         }
       } else {
         callback(null, null);
@@ -576,7 +616,17 @@ export async function getAllUsers() {
       const colRef = collection(db, 'catechesis_users');
       const snap = await getDocs(colRef);
       return snap.docs.map(d => {
-        const data = { id: d.id, ...d.data() };
+        const raw = d.data() || {};
+        // 문서 ID = Auth uid. raw.uid 가 어긋난 경우가 있어 항상 d.id 사용
+        const data = {
+          ...raw,
+          id: d.id,
+          uid: d.id,
+          status: raw.status || 'pending',
+          personId: typeof raw.personId === 'string' && raw.personId.trim()
+            ? raw.personId.trim()
+            : null,
+        };
         return { ...data, ...withRoleFields(data) };
       });
     } catch (e) {
@@ -623,13 +673,14 @@ export async function approveUser(uid, rolesInput = []) {
 
   if (isFirebaseMode && db) {
     const userRef = doc(db, 'catechesis_users', uid);
-    const snap = await getDoc(userRef);
+    const snap = await getDocPreferServer(userRef).catch(() => getDoc(userRef));
     const email = snap.exists() ? snap.data()?.email : null;
-    await updateDoc(userRef, {
+    await setDoc(userRef, {
       status: 'approved',
       ...roleFields,
       approvedAt,
-    });
+      ...(email ? { email } : {}),
+    }, { merge: true });
     await syncAdminDoc(uid, roleFields.roles, email);
   } else {
     const list = getLocalUsersList();
@@ -706,23 +757,25 @@ export async function rejectUser(uid) {
 
 /**
  * Google 계정 ↔ Person 연결 (관리자 전용)
+ * Person 연결과 승인은 별개입니다. 연결만 변경하고 status는 건드리지 않습니다.
  * @param {string} uid
  * @param {string|null} personId
  */
 export async function linkUserToPerson(uid, personId) {
   const value = personId || null;
+  const now = new Date().toISOString();
   if (isFirebaseMode && db) {
     const userRef = doc(db, 'catechesis_users', uid);
     await updateDoc(userRef, {
       personId: value,
-      personLinkedAt: value ? new Date().toISOString() : null,
+      personLinkedAt: value ? now : null,
     });
   } else {
     const list = getLocalUsersList();
     const target = list.find(u => u.uid === uid);
     if (target) {
       target.personId = value;
-      target.personLinkedAt = value ? new Date().toISOString() : null;
+      target.personLinkedAt = value ? now : null;
       saveLocalUsersList(list);
     }
     if (localUser && localUser.uid === uid) {
@@ -733,6 +786,60 @@ export async function linkUserToPerson(uid, personId) {
         isApproved: localUser.status === 'approved',
       });
       localAuthListeners.forEach(cb => cb(localUser, profile));
+    }
+  }
+}
+
+/**
+ * 가입 승인 / 미승인 전환 (관리자 전용). Person 연동은 유지합니다.
+ * @param {string} uid
+ * @param {boolean} approved
+ */
+export async function setUserApprovalStatus(uid, approved) {
+  if (!uid) throw new Error('사용자 ID가 없습니다.');
+
+  if (isFirebaseMode && db) {
+    const userRef = doc(db, 'catechesis_users', uid);
+    const snap = await getDocPreferServer(userRef).catch(() => getDoc(userRef));
+    if (!snap.exists()) {
+      throw new Error('해당 Google 가입 문서를 찾을 수 없습니다. 상대방이 한 번 로그인한 뒤 다시 시도하세요.');
+    }
+    const data = snap.data() || {};
+    const wantAdmin = hasAccountRole(data, 'admin');
+    if (approved) {
+      await approveUser(uid, { admin: wantAdmin });
+    } else {
+      await setDoc(userRef, {
+        status: 'pending',
+        approvedAt: null,
+      }, { merge: true });
+    }
+
+    const verify = await getDocPreferServer(userRef).catch(() => getDoc(userRef));
+    const got = verify.exists() ? verify.data()?.status : null;
+    const expect = approved ? 'approved' : 'pending';
+    if (got !== expect) {
+      throw new Error(`승인 상태 저장에 실패했습니다 (현재: ${got || '없음'}). Firestore 규칙 배포·관리자 권한을 확인하세요.`);
+    }
+  } else {
+    const list = getLocalUsersList();
+    const target = list.find(u => u.uid === uid);
+    if (target) {
+      target.status = approved ? 'approved' : 'pending';
+      target.approvedAt = approved ? new Date().toISOString() : null;
+      saveLocalUsersList(list);
+    }
+    if (localUser && localUser.uid === uid) {
+      localUser = {
+        ...localUser,
+        status: approved ? 'approved' : 'pending',
+        approvedAt: approved ? new Date().toISOString() : null,
+      };
+      localStorage.setItem(LOCAL_STORAGE_KEY_USER, JSON.stringify(localUser));
+      localAuthListeners.forEach(cb => cb(localUser, enrichProfile({
+        ...localUser,
+        isApproved: approved,
+      })));
     }
   }
 }

@@ -103,7 +103,7 @@ service cloud.firestore {
             (!('role' in request.resource.data) || request.resource.data.role != 'admin')
           )
         );
-      // 본인은 role/roles/status/personId 변경 불가. 프로필 연결·권한은 관리자만.
+      // 본인은 role/roles/status/personId 변경 불가. 승인·Person 연결은 관리자만.
       allow update: if isCatechesisAdmin() || (
         isAuthenticated() &&
         request.auth.uid == uid &&
