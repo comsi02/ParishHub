@@ -137,7 +137,8 @@ service cloud.firestore {
     }
 
     match /catechesis_attendance/{attendanceId} {
-      allow read, write: if isCatechesisActiveUser();
+      allow read: if isCatechesisAdmin() || isCatechesisActiveUser();
+      allow write: if isCatechesisAdmin();
     }
 
     match /catechesis_activities/{activityId} {

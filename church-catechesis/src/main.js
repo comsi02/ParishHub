@@ -2,7 +2,7 @@
 // church-catechesis 주일학교 & 은총표 관리 애플리케이션 진입점
 // v2 - 통합 Person 모델 + 자유 합반(Class) 구조 + Google 인증 및 관리자 승인 체계
 
-import { AVAILABLE_SEASONS, GRADE_SORT_MAP, PERSON_ROLES, getCurrentSeasonId, getRecentSaturday } from './mock/sampleData.js';
+import { AVAILABLE_SEASONS, GRADES, GRADE_SORT_MAP, PERSON_ROLES, getCurrentSeasonId, getRecentSaturday } from './mock/sampleData.js';
 import {
   ACCOUNT_ROLES,
   EXCLUSIVE_ACCOUNT_ROLES,
@@ -52,7 +52,8 @@ import { parseRegistrationCsv } from './services/registrationImport.js';
 
 // --- State ---
 let currentTab = 'dashboard';
-let currentAttGradeFilter = 'all';
+let currentAttClassFilter = 'all'; // 'all' | classId
+let currentAttGradeFilter = 'all'; // 'all' | JK | SK | G1 ... G12
 let currentGraceGradeFilter = 'all';
 let currentDirectoryView = 'students'; // 'students' | 'parents' | 'teachers' | 'classes'
 let currentUser = null;
@@ -196,7 +197,7 @@ function switchToTab(tabName) {
     return;
   }
   if (tabName === 'attendance') {
-    loadOpsFromFirestore()
+    Promise.all([loadOpsFromFirestore(), loadClassesFromFirestore(), loadPersonsFromFirestore()])
       .then(() => renderAttendance())
       .catch((err) => {
         console.error(err);
@@ -376,7 +377,7 @@ function getClassNameForGrade(grade) {
   return cls ? cls.name : grade;
 }
 
-// 학년 필터 매칭 헬퍼 (출석/은총표 탭용 전통적 그룹 필터)
+// 학년 필터 매칭 헬퍼 (은총표 탭용 전통적 그룹 필터)
 function matchGradeGroup(grade, group) {
   if (group === 'all') return true;
   const sortOrder = GRADE_SORT_MAP[grade] ?? 99;
@@ -384,6 +385,91 @@ function matchGradeGroup(grade, group) {
   if (group === 'elementary') return sortOrder >= 2 && sortOrder <= 7;  // G1-G6
   if (group === 'youth') return sortOrder >= 8;          // G7-G12
   return true;
+}
+
+/** 출석 탭: 설정된 반(Class) 기준 학생 필터 */
+function matchAttendanceClass(student, classFilterId) {
+  if (!classFilterId || classFilterId === 'all') return true;
+  const cls = dataProvider.getClassById(classFilterId);
+  if (!cls) return false;
+  const grade = student.studentInfo?.grade || '';
+  return Array.isArray(cls.grades) && cls.grades.includes(grade);
+}
+
+/** 출석 탭: 학년(Grade) 기준 학생 필터 */
+function matchAttendanceGrade(student, gradeFilterId) {
+  if (!gradeFilterId || gradeFilterId === 'all') return true;
+  return (student.studentInfo?.grade || '') === gradeFilterId;
+}
+
+function matchesAttendanceFilters(student) {
+  return matchAttendanceClass(student, currentAttClassFilter)
+    && matchAttendanceGrade(student, currentAttGradeFilter);
+}
+
+function getAttendanceGradeOptions() {
+  if (currentAttClassFilter !== 'all') {
+    const cls = dataProvider.getClassById(currentAttClassFilter);
+    const classGrades = new Set(Array.isArray(cls?.grades) ? cls.grades : []);
+    return GRADES.filter(g => classGrades.has(g.id));
+  }
+  return GRADES.slice();
+}
+
+function getClassGradeSortOrder(cls) {
+  const grades = Array.isArray(cls?.grades) ? cls.grades : [];
+  if (!grades.length) return 999;
+  return Math.min(...grades.map(g => GRADE_SORT_MAP[g] ?? 99));
+}
+
+function syncAttendanceClassFilterPills() {
+  const group = document.getElementById('attClassFilterGroup');
+  if (!group) return;
+  const classes = dataProvider.getClasses()
+    .slice()
+    .sort((a, b) => {
+      const ao = getClassGradeSortOrder(a);
+      const bo = getClassGradeSortOrder(b);
+      if (ao !== bo) return ao - bo;
+      return (a.name || '').localeCompare(b.name || '', 'ko');
+    });
+
+  const known = new Set(['all', ...classes.map(c => c.id)]);
+  if (!known.has(currentAttClassFilter)) currentAttClassFilter = 'all';
+
+  group.innerHTML = [
+    `<button type="button" class="pill-btn${currentAttClassFilter === 'all' ? ' active' : ''}" data-class-filter="all">전체 반</button>`,
+    ...classes.map(c => {
+      const count = dataProvider.getStudents()
+        .filter(st => matchAttendanceClass(st, c.id) && matchAttendanceGrade(st, currentAttGradeFilter))
+        .length;
+      return `<button type="button" class="pill-btn${currentAttClassFilter === c.id ? ' active' : ''}" data-class-filter="${escapeHtml(c.id)}">${escapeHtml(c.name || '반')} (${count})</button>`;
+    }),
+  ].join('');
+}
+
+function syncAttendanceGradeFilterPills() {
+  const group = document.getElementById('attGradeFilterGroup');
+  if (!group) return;
+
+  const gradeOptions = getAttendanceGradeOptions();
+  const known = new Set(['all', ...gradeOptions.map(g => g.id)]);
+  if (!known.has(currentAttGradeFilter)) currentAttGradeFilter = 'all';
+
+  group.innerHTML = [
+    `<button type="button" class="pill-btn${currentAttGradeFilter === 'all' ? ' active' : ''}" data-grade-filter="all">전체 학년</button>`,
+    ...gradeOptions.map(g => {
+      const count = dataProvider.getStudents()
+        .filter(st => matchAttendanceClass(st, currentAttClassFilter) && matchAttendanceGrade(st, g.id))
+        .length;
+      return `<button type="button" class="pill-btn${currentAttGradeFilter === g.id ? ' active' : ''}" data-grade-filter="${escapeHtml(g.id)}">${escapeHtml(g.id)} (${count})</button>`;
+    }),
+  ].join('');
+}
+
+function syncAttendanceFilterPills() {
+  syncAttendanceClassFilterPills();
+  syncAttendanceGradeFilterPills();
 }
 
 // 역할 한글 레이블 목록 (복수 역할 대응)
@@ -2452,6 +2538,9 @@ function renderDashboard() {
 function renderAttendance() {
   const protectedEl = document.getElementById('attendanceProtectedContent');
   const lockedEl = document.getElementById('attendanceLockedNotice');
+  const markAllBtn = document.getElementById('btnMarkAllPresent');
+  const viewOnlyHint = document.getElementById('attViewOnlyHint');
+  const canCheckAttendance = isUserAdmin();
 
   if (!isUserApproved()) {
     if (protectedEl) protectedEl.style.display = 'none';
@@ -2462,23 +2551,38 @@ function renderAttendance() {
     }
     return;
   }
+
   if (protectedEl) protectedEl.style.display = '';
   if (lockedEl) lockedEl.style.display = 'none';
+  if (markAllBtn) markAllBtn.style.display = canCheckAttendance ? '' : 'none';
+  if (viewOnlyHint) {
+    viewOnlyHint.style.display = canCheckAttendance ? 'none' : 'block';
+    viewOnlyHint.textContent = '조회만 가능합니다. 출석 체크는 관리자만 할 수 있습니다.';
+  }
 
   const dateInput = document.getElementById('attDatePicker');
   const selectedDate = dateInput?.value || getTodayDateString();
   if (dateInput && !dateInput.value) dateInput.value = selectedDate;
   updateAttendanceScheduleHint(selectedDate);
+  syncAttendanceFilterPills();
 
   const students = dataProvider.getStudents();
   const attendanceList = dataProvider.getAttendance(selectedDate);
   const attendanceGrid = document.getElementById('attendanceGrid');
 
   const schoolDay = dataProvider.isSchoolDay(selectedDate);
-  const filtered = students.filter(st => matchGradeGroup(st.studentInfo?.grade || '', currentAttGradeFilter));
+  const filtered = students
+    .filter(st => matchesAttendanceFilters(st))
+    .slice()
+    .sort((a, b) => {
+      const ao = GRADE_SORT_MAP[a.studentInfo?.grade] ?? 99;
+      const bo = GRADE_SORT_MAP[b.studentInfo?.grade] ?? 99;
+      if (ao !== bo) return ao - bo;
+      return (a.name || '').localeCompare(b.name || '', 'ko');
+    });
 
   if (filtered.length === 0) {
-    attendanceGrid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: var(--text-muted);">해당 학년의 학생이 없습니다.</div>';
+    attendanceGrid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: var(--text-muted);">선택한 반/학년에 해당하는 학생이 없습니다.</div>';
     return;
   }
 
@@ -2486,9 +2590,29 @@ function renderAttendance() {
     const si = st.studentInfo || {};
     const att = attendanceList.find(a => a.studentPersonId === st.id || a.studentId === st.id);
     const status = att ? att.status : '미체크';
-    const massAttended = att ? att.massAttended : false;
     const depts = (si.departments || []).map(d => `<span class="dept-tag">${d}</span>`).join('');
     const className = getClassNameForGrade(si.grade);
+    let actionRow;
+    if (canCheckAttendance) {
+      actionRow = `<div class="att-button-row">
+            <button type="button" class="btn-att-toggle ${status === '출석' ? 'active-present' : ''}" data-status="출석" data-id="${st.id}">
+              ✓ 출석 (+10 P)
+            </button>
+            <button type="button" class="btn-att-toggle ${status === '결석' ? 'active-absent' : ''}" data-status="결석" data-id="${st.id}">
+              ✕ 결석
+            </button>
+          </div>`;
+    } else if (status === '출석') {
+      actionRow = `<div class="att-button-row att-button-row-single">
+            <button type="button" class="btn-att-toggle active-present" disabled aria-disabled="true">✓ 출석 (+10 P)</button>
+          </div>`;
+    } else if (status === '결석') {
+      actionRow = `<div class="att-button-row att-button-row-single">
+            <button type="button" class="btn-att-toggle active-absent" disabled aria-disabled="true">✕ 결석</button>
+          </div>`;
+    } else {
+      actionRow = `<div class="att-status-view att-status-unchecked">미체크</div>`;
+    }
 
     return `
       <div class="student-att-card" data-student-id="${st.id}">
@@ -2518,22 +2642,21 @@ function renderAttendance() {
         </div>
 
         <div>
-          <div class="att-button-row">
-            <button class="btn-att-toggle ${status === '출석' ? 'active-present' : ''}" data-status="출석" data-id="${st.id}">
-              ✓ 출석 (+10 P)
-            </button>
-            <button class="btn-att-toggle ${status === '결석' ? 'active-absent' : ''}" data-status="결석" data-id="${st.id}">
-              ✕ 결석
-            </button>
-          </div>
+          ${actionRow}
         </div>
       </div>
     `;
   }).join('');
 
-  // 출석 버튼 이벤트 (원클릭으로 출석 체크 완료)
+  if (!canCheckAttendance) return;
+
+  // 출석 버튼 이벤트 (관리자만)
   attendanceGrid.querySelectorAll('.btn-att-toggle').forEach(btn => {
     btn.addEventListener('click', async () => {
+      if (!isUserAdmin()) {
+        showToast('출석 체크는 관리자만 할 수 있습니다.', '🛡️');
+        return;
+      }
       const studentId = btn.getAttribute('data-id');
       const newStatus = btn.getAttribute('data-status');
       if (schoolDay === false) {
@@ -2541,7 +2664,7 @@ function renderAttendance() {
         if (!ok) return;
       }
       try {
-        await recordAttendanceRemote({ date: selectedDate, studentId, status: newStatus, recordedBy: '담당 선생님' });
+        await recordAttendanceRemote({ date: selectedDate, studentId, status: newStatus, recordedBy: '관리자' });
         showToast(`${newStatus} 체크 완료 (은총표 자동 반영)`, '✅');
         renderAttendance();
         renderDashboard();
@@ -3801,14 +3924,24 @@ if (actDateInput) actDateInput.value = getTodayDateString();
 document.getElementById('btnFeastPrevMonth')?.addEventListener('click', () => shiftFeastViewMonth(-1));
 document.getElementById('btnFeastNextMonth')?.addEventListener('click', () => shiftFeastViewMonth(1));
 
-// Attendance grade filter
-document.querySelectorAll('#attGradeFilterGroup .pill-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#attGradeFilterGroup .pill-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentAttGradeFilter = btn.getAttribute('data-filter');
-    renderAttendance();
-  });
+// Attendance class / grade filters
+document.getElementById('attClassFilterGroup')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-class-filter]');
+  if (!btn) return;
+  currentAttClassFilter = btn.getAttribute('data-class-filter') || 'all';
+  // 선택한 반에 없는 학년이면 학년 필터 초기화
+  const gradeOptions = getAttendanceGradeOptions();
+  if (currentAttGradeFilter !== 'all' && !gradeOptions.some(g => g.id === currentAttGradeFilter)) {
+    currentAttGradeFilter = 'all';
+  }
+  renderAttendance();
+});
+
+document.getElementById('attGradeFilterGroup')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-grade-filter]');
+  if (!btn) return;
+  currentAttGradeFilter = btn.getAttribute('data-grade-filter') || 'all';
+  renderAttendance();
 });
 
 // Grace bank grade filter
@@ -3826,20 +3959,28 @@ document.getElementById('directorySearchInput')?.addEventListener('input', () =>
 
 // 전원 출석
 document.getElementById('btnMarkAllPresent')?.addEventListener('click', async () => {
+  if (!isUserAdmin()) {
+    showToast('출석 체크는 관리자만 할 수 있습니다.', '🛡️');
+    return;
+  }
   const selectedDate = attDatePicker.value || getTodayDateString();
   if (dataProvider.isSchoolDay(selectedDate) === false) {
     const ok = confirm('선택한 날짜는 학사 일정 상 휴교일입니다. 그래도 전원 출석을 기록할까요?');
     if (!ok) return;
   }
   const students = dataProvider.getStudents();
-  const filtered = students.filter(st => matchGradeGroup(st.studentInfo?.grade || '', currentAttGradeFilter));
+  const filtered = students.filter(st => matchesAttendanceFilters(st));
+  if (!filtered.length) {
+    showToast('선택한 반/학년에 출석 처리할 학생이 없습니다.', '⚠️');
+    return;
+  }
   try {
     await recordAttendanceBatch(filtered.map(st => ({
       date: selectedDate,
       studentId: st.id,
       status: '출석',
       massAttended: true,
-      recordedBy: '교사회 일괄 체크',
+      recordedBy: '관리자 일괄 체크',
     })));
     showToast(`${filtered.length}명 전원 출석(+미사) 체크 완료!`, '🎉');
     renderAttendance();

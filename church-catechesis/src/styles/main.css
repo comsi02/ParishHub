@@ -701,6 +701,51 @@ body {
 .btn-att-toggle:active { transform: scale(0.98); }
 .btn-att-toggle.active-present { background: #16a34a; border-color: #15803d; color: white; }
 .btn-att-toggle.active-absent  { background: #dc2626; border-color: #b91c1c; color: white; }
+.btn-att-toggle:disabled,
+.btn-att-toggle:disabled:hover {
+  cursor: default;
+  opacity: 1;
+  transform: none;
+  pointer-events: none;
+}
+.btn-att-toggle.active-present:disabled,
+.btn-att-toggle.active-present:disabled:hover {
+  background: #16a34a;
+  border-color: #15803d;
+  color: white;
+}
+.btn-att-toggle.active-absent:disabled,
+.btn-att-toggle.active-absent:disabled:hover {
+  background: #dc2626;
+  border-color: #b91c1c;
+  color: white;
+}
+.att-button-row-single {
+  grid-template-columns: 1fr;
+}
+.att-status-view {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+}
+.att-status-view.att-status-unchecked {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+.att-view-only-hint {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
 .mass-checkbox-label { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; color: var(--text-muted); font-weight: 600; cursor: pointer; }
 
 /* Modals */

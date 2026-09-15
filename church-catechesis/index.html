@@ -394,11 +394,13 @@
             <input type="date" id="attDatePicker" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" />
           </div>
           <div class="toolbar-group">
-            <div class="pill-group" id="attGradeFilterGroup">
-              <button class="pill-btn active" data-filter="all">전체</button>
-              <button class="pill-btn" data-filter="kinder">유치부(JK,SK)</button>
-              <button class="pill-btn" data-filter="elementary">초등부(G1~G6)</button>
-              <button class="pill-btn" data-filter="youth">중고등부(G7~G12)</button>
+            <div class="pill-group" id="attClassFilterGroup" role="group" aria-label="반별 필터">
+              <button type="button" class="pill-btn active" data-class-filter="all">전체 반</button>
+            </div>
+          </div>
+          <div class="toolbar-group">
+            <div class="pill-group" id="attGradeFilterGroup" role="group" aria-label="학년별 필터">
+              <button type="button" class="pill-btn active" data-grade-filter="all">전체 학년</button>
             </div>
           </div>
           <div class="toolbar-group">
@@ -408,6 +410,7 @@
           </div>
         </div>
         <div id="attScheduleHint" class="att-schedule-hint" style="display: none;"></div>
+        <div id="attViewOnlyHint" class="att-view-only-hint" style="display: none;" role="status"></div>
 
         <!-- Quick Attendance Cards Grid -->
         <div class="attendance-grid" id="attendanceGrid">
