@@ -436,11 +436,80 @@ function getRoleLabels(person) {
   return (person.roles || []).map(r => PERSON_ROLES[r]?.label || r);
 }
 
+/** 교리·전례부·복사 — 표시용 짧은 라벨 */
+const TEACHING_DUTY_SHORT = {
+  teacher: '교리',
+  liturgy_teacher: '전례부',
+  acolyte_teacher: '복사',
+};
+const TEACHING_DUTY_IDS = ['teacher', 'liturgy_teacher', 'acolyte_teacher'];
+
+function getTeachingDutyIds(roles = []) {
+  return TEACHING_DUTY_IDS.filter(id => roles.includes(id));
+}
+
+/** 텍스트용 (반 배정 셀렉트 등) — 복수면 "교리 · 전례부" */
+function formatStaffRoleLabel(person) {
+  const roles = person?.roles || [];
+  if (roles.includes('priest')) return PERSON_ROLES.priest?.label || '신부님';
+
+  const leadPriority = [
+    'youth_director',
+    'principal',
+    'vice_principal',
+    'secretary',
+    'assistant_teacher',
+  ];
+  const leadId = leadPriority.find(r => roles.includes(r));
+  const duties = getTeachingDutyIds(roles).map(id => TEACHING_DUTY_SHORT[id]);
+
+  const parts = [];
+  if (leadId) parts.push(PERSON_ROLES[leadId]?.label || leadId);
+  parts.push(...duties);
+  return parts.length ? parts.join(' · ') : '교사';
+}
+
+/** 교사회/명부용 — 교리·전례부·복사를 각각 별도 뱃지로 */
+function formatStaffRoleBadgesHtml(person, { badgeClass = 'badge-present' } = {}) {
+  const roles = person?.roles || [];
+  if (roles.includes('priest')) {
+    return `<span class="badge badge-sacrament">${PERSON_ROLES.priest?.label || '신부님'}</span>`;
+  }
+
+  const leadPriority = [
+    'youth_director',
+    'principal',
+    'vice_principal',
+    'secretary',
+    'assistant_teacher',
+  ];
+  const leadId = leadPriority.find(r => roles.includes(r));
+  const dutyIds = getTeachingDutyIds(roles);
+  const badges = [];
+
+  if (leadId) {
+    const leadClass = (leadId === 'principal' || leadId === 'youth_director')
+      ? 'badge-sacrament'
+      : leadId === 'vice_principal'
+        ? 'badge-grade'
+        : badgeClass;
+    badges.push(`<span class="badge ${leadClass}">${PERSON_ROLES[leadId]?.label || leadId}</span>`);
+  }
+
+  dutyIds.forEach(id => {
+    badges.push(`<span class="badge badge-sacrament">${TEACHING_DUTY_SHORT[id]}</span>`);
+  });
+
+  if (!badges.length) {
+    badges.push(`<span class="badge ${badgeClass}">교사</span>`);
+  }
+
+  return `<span class="staff-role-badges">${badges.join('')}</span>`;
+}
+
 // 주 역할 레이블 (신부님 > 교사계열 > 기타)
 function getPrimaryRoleLabel(person) {
-  if (person?.roles?.includes('priest')) return PERSON_ROLES.priest?.label || '신부님';
-  const info = dataProvider.getPrimaryTeacherRole(person);
-  return info ? info.label : (PERSON_ROLES[person.roles?.[0]]?.label || person.roles?.[0] || '-');
+  return formatStaffRoleLabel(person);
 }
 
 // ============================================================
@@ -1198,12 +1267,12 @@ const ADMIN_TEACHER_PERSON_ROLES = [
 const TEACHER_TAB_GROUPS = [
   { id: 'principal', label: '교감' },
   { id: 'vice_principal', label: '부교감' },
-  { id: 'liturgy_teacher', label: '전례부교사' },
-  { id: 'acolyte_teacher', label: '복사교사' },
+  { id: 'liturgy_teacher', label: '전례부' },
+  { id: 'acolyte_teacher', label: '복사' },
   { id: 'secretary', label: '총무' },
   { id: 'youth_director', label: '청소년분과장' },
-  { id: 'teacher', label: '교리교사' },
-  { id: 'assistant_teacher', label: '부교사' },
+  { id: 'teacher', label: '교리' },
+  { id: 'assistant_teacher', label: '보조' },
 ];
 
 /** 학부모 탭 — 자부회·자모회 임원 그룹 */
@@ -2710,9 +2779,9 @@ function renderOrgChart() {
     </div>
     <div class="org-connector" aria-hidden="true"></div>
     <div class="org-tier org-tier-staff">
-      ${orgNodeHtml({ title: '교리교사', people: teachers, tone: 'staff', approved })}
-      ${orgNodeHtml({ title: '전례부교사', people: liturgy, tone: 'staff', approved })}
-      ${orgNodeHtml({ title: '복사교사', people: acolyte, tone: 'staff', approved })}
+      ${orgNodeHtml({ title: '교리', people: teachers, tone: 'staff', approved })}
+      ${orgNodeHtml({ title: '전례부', people: liturgy, tone: 'staff', approved })}
+      ${orgNodeHtml({ title: '복사', people: acolyte, tone: 'staff', approved })}
       ${orgNodeHtml({ title: '총무', people: secretary, tone: 'staff', approved })}
     </div>
     <div class="org-connector org-connector-label" aria-hidden="true">
@@ -2917,30 +2986,42 @@ function renderDashboard() {
   }
 
   // --- 교사회 명단 (대시보드 우측) ---
+  // 정렬: 신부님 → 청소년분과장 → 교감 → 부교감 → 이후 가나다
   const teachersContainer = document.getElementById('teachersList');
   if (teachersContainer) {
+    const staffRank = (p) => {
+      const roles = p.roles || [];
+      if (roles.includes('priest')) return 0;
+      if (roles.includes('youth_director')) return 1;
+      if (roles.includes('principal')) return 2;
+      if (roles.includes('vice_principal')) return 3;
+      return 100;
+    };
     const staffList = [
       ...dataProvider.getPersons().filter(p => (p.roles || []).includes('priest')),
       ...teachers,
-    ].filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
+    ]
+      .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i)
+      .sort((a, b) => {
+        const ra = staffRank(a);
+        const rb = staffRank(b);
+        if (ra !== rb) return ra - rb;
+        return (a.name || '').localeCompare(b.name || '', 'ko');
+      });
 
     teachersContainer.innerHTML = staffList.map(t => {
       const isPriest = (t.roles || []).includes('priest');
       const primaryRole = dataProvider.getPrimaryTeacherRole(t);
       const primaryRoleId = isPriest ? 'priest' : (primaryRole?.role || 'teacher');
-      const roleLabel = isPriest
-        ? (PERSON_ROLES.priest?.label || '신부님')
-        : (primaryRole?.label || '교사');
-      const roleBadgeClass = isPriest || primaryRoleId === 'principal' ? 'badge-sacrament' :
-                              primaryRoleId === 'vice_principal' ? 'badge-grade' : 'badge-present';
+      const roleBadgesHtml = formatStaffRoleBadgesHtml(t);
       const parentBadge = isApproved && t.roles?.includes('parent')
         ? '<span class="badge badge-grade" style="font-size: 0.7rem; margin-left: 0.3rem;">👨‍👩‍👧 학부모</span>'
         : '';
-      // 우측 대표 역할과 겹치지 않는 겸임/담당만 뱃지로 표시
+      // 교리·전례부·복사는 역할 뱃지에 이미 포함 — 그 외 겸임만
       const specialBadges = isApproved
         ? (t.roles || [])
             .filter(r => [
-              'liturgy_teacher', 'acolyte_teacher', 'secretary', 'youth_director',
+              'secretary', 'youth_director',
               'fathers_chair', 'mothers_chair', 'fathers_secretary', 'mothers_secretary',
             ].includes(r) && r !== primaryRoleId)
             .map(r => `<span class="badge badge-sacrament" style="font-size: 0.65rem; margin-left: 0.2rem;">${PERSON_ROLES[r]?.icon || ''} ${PERSON_ROLES[r]?.label || r}</span>`)
@@ -2958,7 +3039,7 @@ function renderDashboard() {
         : `<span style="color: var(--text-muted); font-weight: 600;">${displayName}</span>`;
 
       return `
-        <div style="background: var(--surface-subtle); padding: 0.65rem 0.85rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="background: var(--surface-subtle); padding: 0.65rem 0.85rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
           <div>
             <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-main); display: flex; align-items: center; flex-wrap: wrap; gap: 0.2rem;">
               ${nameMarkup}
@@ -2966,7 +3047,9 @@ function renderDashboard() {
               ${parentBadge}${specialBadges}
             </div>
           </div>
-          <span class="badge ${roleBadgeClass}">${roleLabel}</span>
+          <div style="display:flex; flex-wrap:wrap; gap:0.25rem; justify-content:flex-end; flex-shrink:0;">
+            ${roleBadgesHtml}
+          </div>
         </div>
       `;
     }).join('');
@@ -3602,12 +3685,7 @@ function renderTeachersDirectory(search = '') {
     const isPriest = (t.roles || []).includes('priest');
     const primaryRole = dataProvider.getPrimaryTeacherRole(t);
     const primaryRoleId = isPriest ? 'priest' : (primaryRole?.role || 'teacher');
-    const roleLabel = isPriest
-      ? (PERSON_ROLES.priest?.label || '신부님')
-      : (primaryRole?.label || '교사');
-    const roleBadgeClass = isPriest || primaryRoleId === 'principal' ? 'badge-sacrament' :
-                            primaryRoleId === 'vice_principal' ? 'badge-grade' : 'badge-present';
-    const roleBadge = `<span class="badge ${roleBadgeClass}">${roleLabel}</span>`;
+    const roleBadge = formatStaffRoleBadgesHtml(t);
 
     // 담당 반
     const assignedClasses = (t.teacherInfo?.assignedClassIds || [])
@@ -3617,12 +3695,12 @@ function renderTeachersDirectory(search = '') {
       ? assignedClasses.map(c => `<span class="badge badge-grade" style="font-size: 0.75rem;">${c.name}</span>`).join(' ')
       : '<span style="color: var(--text-muted); font-size: 0.82rem;">전체 관할</span>';
 
-    // 겸임 정보 — 대표 역할과 중복되지 않게
+    // 겸임 정보 — 교리·전례부·복사는 역할 열에 이미 표시
     const dualRoles = [];
     if (t.roles?.includes('parent')) dualRoles.push('학부모 겸임');
     const extraRoleIds = [
       'fathers_chair', 'mothers_chair', 'fathers_secretary', 'mothers_secretary',
-      'liturgy_teacher', 'acolyte_teacher', 'secretary', 'youth_director',
+      'secretary', 'youth_director',
     ];
     extraRoleIds.forEach(r => {
       if (t.roles?.includes(r) && r !== primaryRoleId) {
@@ -3756,10 +3834,7 @@ function populateClassModal(editClassId = null) {
   const teachers = dataProvider.getTeachers();
   const teacherCheckboxContainer = document.getElementById('classTeacherCheckboxes');
   teacherCheckboxContainer.innerHTML = teachers.map(t => {
-    const primaryRole = dataProvider.getPrimaryTeacherRole(t);
-    const roleLabel = (t.roles || []).includes('priest')
-      ? (PERSON_ROLES.priest?.label || '신부님')
-      : (primaryRole?.label || '교사');
+    const roleLabel = formatStaffRoleLabel(t);
     return `
       <label class="checkbox-item">
         <input type="checkbox" value="${t.id}" class="class-teacher-check" />
