@@ -140,6 +140,12 @@ service cloud.firestore {
       allow write: if isCatechesisAdmin();
     }
 
+    // 학사 일정별 미사·전례 봉사 배정 (관리자만 수정)
+    match /catechesis_duty_assignments/{dutyId} {
+      allow read: if isCatechesisAdmin() || isCatechesisActiveUser();
+      allow write: if isCatechesisAdmin();
+    }
+
     match /catechesis_activities/{activityId} {
       allow read, write: if isCatechesisActiveUser();
     }

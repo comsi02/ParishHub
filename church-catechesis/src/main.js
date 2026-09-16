@@ -46,10 +46,19 @@ import {
   loadOpsFromFirestore,
   recordAttendanceRemote,
   recordAttendanceBatch,
-  recordActivityRemote,
   addBonusPointsRemote,
   ensureSettingsInFirestore,
 } from './services/opsStore.js';
+import {
+  DUTY_ROLE_DEFS,
+  DUTY_ROLE_ROWS,
+  emptyDutyAssignments,
+  getDutyRoleDef,
+  loadDutiesFromFirestore,
+  normalizeAssignmentValue,
+  saveDutyAssignment,
+} from './services/dutyStore.js';
+import { bindSearchableSelect, bindSearchableSelects } from './services/searchableSelect.js';
 import { parseRegistrationCsv, buildPersonsFromFamilyRecord } from './services/registrationImport.js';
 
 // --- State ---
@@ -218,7 +227,12 @@ function switchToTab(tabName) {
     return;
   }
   if (tabName === 'activities') {
-    loadOpsFromFirestore()
+    Promise.all([
+      loadOpsFromFirestore(),
+      loadSchedulesFromFirestore(),
+      loadDutiesFromFirestore(),
+      loadPersonsFromFirestore(),
+    ])
       .then(() => renderActivities())
       .catch((err) => {
         console.error(err);
@@ -819,6 +833,7 @@ function fillStudentParentSelect(selectedId = '') {
       const selected = p.id === selectedId ? ' selected' : '';
       return `<option value="${p.id}"${selected}>${p.name} (${p.baptismalName || '-'}${phoneHint})</option>`;
     }).join('');
+  bindSearchableSelect(sel, { placeholder: '학부모 이름·세례명 검색...' });
 }
 
 function openStudentFormCreate() {
@@ -2163,6 +2178,8 @@ async function renderAdminUsersPage() {
 
   const roots = [personsList, usersList].filter(Boolean);
 
+  bindSearchableSelects(usersList, '.admin-person-pick', { placeholder: 'Person 이름·세례명 검색...' });
+
   bindInRoots(roots, '.admin-role-check', async (e) => {
     const el = e.currentTarget;
     const personId = el.getAttribute('data-person-id');
@@ -3218,8 +3235,341 @@ function renderAttendance() {
 }
 
 // ============================================================
-//  TAB 3: Activities
+//  TAB 3: Activities — 학사 일정 봉사 배정 + 은총표 활동 기록
 // ============================================================
+function studentDutyOptionLabel(s) {
+  return `${s.name} (${s.baptismalName || '세례명 없음'}, ${s.studentInfo?.grade || '-'})`;
+}
+
+function preferredDutySchoolDate() {
+  const today = getTodayISO();
+  const dates = dataProvider.getSchoolDates().slice().sort();
+  if (!dates.length) return '';
+  const upcoming = dataProvider.getNextUpcomingSchoolDate()?.date;
+  if (upcoming && dates.includes(upcoming)) return upcoming;
+  const pastOrToday = dates.filter(d => d <= today);
+  return pastOrToday[pastOrToday.length - 1] || dates[0];
+}
+
+function fillDutyDateSelect(preferredDate = '') {
+  const sel = document.getElementById('dutyDateSelect');
+  if (!sel) return;
+  const dates = dataProvider.getSchoolDates().slice().sort((a, b) => b.localeCompare(a));
+  const prev = preferredDate || sel.value || preferredDutySchoolDate();
+  if (!dates.length) {
+    sel.innerHTML = '<option value="">등록된 수업일이 없습니다</option>';
+    return;
+  }
+  sel.innerHTML = dates.map(d => {
+    const sch = dataProvider.getScheduleByDate(d);
+    const title = sch?.title ? ` · ${sch.title}` : '';
+    return `<option value="${escapeHtml(d)}">${escapeHtml(d)}${escapeHtml(title)}</option>`;
+  }).join('');
+  if (prev && dates.includes(prev)) sel.value = prev;
+  else sel.value = dates[0];
+}
+
+function normalizeDutyAssignmentsMap(raw = {}) {
+  const out = emptyDutyAssignments();
+  DUTY_ROLE_DEFS.forEach(({ id }) => {
+    out[id] = normalizeAssignmentValue(id, raw[id]);
+  });
+  return out;
+}
+
+function dutyPersonChipHtml(personId) {
+  const st = personId ? dataProvider.getPersonById(personId) : null;
+  if (!st) return '';
+  return `<button type="button" class="duty-role-person clickable-name" data-detail-type="student" data-detail-id="${escapeHtml(st.id)}">
+    <span class="duty-role-person-name">${escapeHtml(st.name)}</span>
+    <span class="duty-role-baptismal">${escapeHtml(st.baptismalName || '-')}</span>
+  </button>`;
+}
+
+function dutyEmptyPersonHtml() {
+  return '<div class="duty-role-person is-empty"><span class="duty-role-empty">미배정</span></div>';
+}
+
+function dutyStudentOptionsHtml(students) {
+  return '<option value="">미배정</option>' + students.map(s =>
+    `<option value="${escapeHtml(s.id)}">${escapeHtml(studentDutyOptionLabel(s))}</option>`
+  ).join('');
+}
+
+function renderDutySingleCardView(def, personId) {
+  const { label, tone, icon } = def;
+  return `
+    <article class="duty-role-card duty-tone-${escapeHtml(tone || 'narrator')}">
+      <div class="duty-role-card-top">
+        <span class="duty-role-icon" aria-hidden="true">${icon || ''}</span>
+        <div class="duty-role-label">${escapeHtml(label)}</div>
+      </div>
+      ${dutyPersonChipHtml(personId) || dutyEmptyPersonHtml()}
+    </article>
+  `;
+}
+
+function renderDutySingleCardEdit(def, optionsHtml, personId = '', index = 0, { multi = false, canRemove = false } = {}) {
+  const { id, label, tone, icon } = def;
+  const sid = multi ? `dutyRole_${id}_${index}` : `dutyRole_${id}`;
+  const removeBtn = canRemove
+    ? `<button type="button" class="btn btn-secondary btn-sm duty-multi-remove" title="제거" aria-label="${escapeHtml(label)} 카드 제거">×</button>`
+    : '';
+  return `
+    <article class="duty-role-card duty-tone-${escapeHtml(tone || 'narrator')} is-editable${multi ? ' is-multi-unit' : ''}"
+      data-duty-role-card="${escapeHtml(id)}"${multi ? ` data-duty-multi-index="${index}"` : ''}>
+      <div class="duty-role-card-top">
+        <span class="duty-role-icon" aria-hidden="true">${icon || ''}</span>
+        <label class="duty-role-label" for="${escapeHtml(sid)}">${escapeHtml(label)}</label>
+        ${removeBtn}
+      </div>
+      <select class="form-control duty-role-select" id="${escapeHtml(sid)}"
+        data-duty-role="${escapeHtml(id)}"${multi ? ' data-duty-multi="1"' : ''}>
+        ${optionsHtml}
+      </select>
+    </article>
+  `;
+}
+
+function renderDutyAddCard(def) {
+  const { id, label, tone, icon } = def;
+  return `
+    <button type="button" class="duty-role-card duty-tone-${escapeHtml(tone || 'narrator')} duty-role-add-card"
+      data-duty-add="${escapeHtml(id)}" aria-label="${escapeHtml(label)} 인원 추가">
+      <div class="duty-role-card-top">
+        <span class="duty-role-icon" aria-hidden="true">${icon || ''}</span>
+        <div class="duty-role-label">${escapeHtml(label)}</div>
+      </div>
+      <div class="duty-role-add-body">
+        <span class="duty-role-add-plus">+</span>
+        <span class="duty-role-add-text">추가</span>
+      </div>
+    </button>
+  `;
+}
+
+function dutySlotValuesForRole(def, assignments) {
+  if (!def.multi) return [assignments[def.id] || ''];
+  const ids = Array.isArray(assignments[def.id]) ? assignments[def.id] : [];
+  return ids.length ? ids : [''];
+}
+
+function renderDutyRowCards(def, assignments, { canEdit, optionsHtml }) {
+  if (!def.multi) {
+    return canEdit
+      ? renderDutySingleCardEdit(def, optionsHtml, assignments[def.id] || '')
+      : renderDutySingleCardView(def, assignments[def.id] || '');
+  }
+
+  const slots = dutySlotValuesForRole(def, assignments);
+  if (!canEdit) {
+    const filled = slots.filter(Boolean);
+    if (!filled.length) return renderDutySingleCardView(def, '');
+    return filled.map(pid => renderDutySingleCardView(def, pid)).join('');
+  }
+
+  const canRemove = slots.length > 1;
+  const cards = slots.map((pid, i) =>
+    renderDutySingleCardEdit(def, optionsHtml, pid, i, { multi: true, canRemove })
+  ).join('');
+  return cards + renderDutyAddCard(def);
+}
+
+function bindDutyMultiEditors(grid, optionsHtml) {
+  grid.querySelectorAll('.duty-role-add-card[data-duty-add]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const roleId = btn.getAttribute('data-duty-add');
+      const def = getDutyRoleDef(roleId);
+      const row = btn.closest('.duty-roster-row');
+      if (!def || !row) return;
+      const index = row.querySelectorAll(`.duty-role-card.is-editable[data-duty-role-card="${CSS.escape(roleId)}"]`).length;
+      btn.insertAdjacentHTML('beforebegin',
+        renderDutySingleCardEdit(def, optionsHtml, '', index, { multi: true, canRemove: true })
+      );
+      // 기존 카드에도 제거 버튼 보이게 재렌더 대신 동기화
+      row.querySelectorAll(`.duty-role-card.is-editable[data-duty-role-card="${CSS.escape(roleId)}"]`).forEach((card, i) => {
+        card.setAttribute('data-duty-multi-index', String(i));
+        const sel = card.querySelector('select');
+        if (sel && !sel.id.endsWith(`_${i}`)) {
+          sel.id = `dutyRole_${roleId}_${i}`;
+          const lab = card.querySelector('label.duty-role-label');
+          if (lab) lab.setAttribute('for', sel.id);
+        }
+        if (!card.querySelector('.duty-multi-remove')) {
+          const top = card.querySelector('.duty-role-card-top');
+          top?.insertAdjacentHTML('beforeend',
+            `<button type="button" class="btn btn-secondary btn-sm duty-multi-remove" title="제거" aria-label="${escapeHtml(def.label)} 카드 제거">×</button>`
+          );
+        }
+      });
+      const newSel = btn.previousElementSibling?.querySelector('select');
+      if (newSel) bindSearchableSelect(newSel, { placeholder: `${def.label} 검색...` });
+      bindDutyRemoveButtons(grid);
+    });
+  });
+
+  bindDutyRemoveButtons(grid);
+}
+
+function bindDutyRemoveButtons(grid) {
+  grid.querySelectorAll('.duty-multi-remove').forEach(btn => {
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.duty-role-card');
+      const row = card?.closest('.duty-roster-row');
+      const roleId = card?.getAttribute('data-duty-role-card');
+      if (!card || !row || !roleId) return;
+      const cards = [...row.querySelectorAll(`.duty-role-card.is-editable[data-duty-role-card="${CSS.escape(roleId)}"]`)];
+      if (cards.length <= 1) {
+        const sel = card.querySelector('select');
+        if (sel) {
+          sel.value = '';
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return;
+      }
+      card.remove();
+      const left = [...row.querySelectorAll(`.duty-role-card.is-editable[data-duty-role-card="${CSS.escape(roleId)}"]`)];
+      left.forEach((c, i) => {
+        c.setAttribute('data-duty-multi-index', String(i));
+        const sel = c.querySelector('select');
+        if (sel) {
+          sel.id = `dutyRole_${roleId}_${i}`;
+          const lab = c.querySelector('label.duty-role-label');
+          if (lab) lab.setAttribute('for', sel.id);
+        }
+        if (left.length <= 1) c.querySelector('.duty-multi-remove')?.remove();
+      });
+    });
+  });
+}
+
+function renderDutyRoster() {
+  const dateSel = document.getElementById('dutyDateSelect');
+  const grid = document.getElementById('dutyRosterGrid');
+  const meta = document.getElementById('dutyScheduleMeta');
+  const hint = document.getElementById('dutyRosterHint');
+  const saveBtn = document.getElementById('btnSaveDutyRoster');
+  if (!grid || !dateSel) return;
+
+  const canEdit = isUserAdmin();
+  if (saveBtn) saveBtn.style.display = canEdit ? '' : 'none';
+  if (hint) {
+    hint.textContent = canEdit
+      ? '관리자만 봉사자를 지정·저장할 수 있습니다. 성가대·현악·밴드는 + 카드로 인원을 늘릴 수 있습니다.'
+      : '조회만 가능합니다. 배정 변경은 관리자에게 요청해 주세요.';
+  }
+
+  fillDutyDateSelect(dateSel.value);
+  const dateStr = dateSel.value;
+  const sch = dateStr ? dataProvider.getScheduleByDate(dateStr) : null;
+  if (meta) {
+    if (!dateStr) {
+      meta.textContent = '학사 일정에서 수업일(hasSchool)을 먼저 등록해 주세요.';
+    } else {
+      const typeLabel = sch?.type === 'special' ? '특별 행사' : (sch?.type === 'holiday' ? '휴일' : '정규 수업');
+      meta.textContent = `${dateStr} · ${sch?.title || '주일학교 모임'} (${typeLabel})`;
+    }
+  }
+
+  if (!dateStr) {
+    grid.innerHTML = '<p class="duty-role-empty">선택할 수업일이 없습니다.</p>';
+    return;
+  }
+
+  const students = dataProvider.getStudents()
+    .slice()
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+  const duty = dataProvider.getDutyAssignmentByDate(dateStr);
+  const assignments = normalizeDutyAssignmentsMap(duty?.assignments || {});
+  const optionsHtml = dutyStudentOptionsHtml(students);
+
+  const rowsHtml = DUTY_ROLE_ROWS.map(row => {
+    const cards = row.roleIds.map(roleId => {
+      const def = getDutyRoleDef(roleId);
+      if (!def) return '';
+      return renderDutyRowCards(def, assignments, { canEdit, optionsHtml });
+    }).join('');
+    return `<div class="duty-roster-row duty-row-${escapeHtml(row.id)}">${cards}</div>`;
+  }).join('');
+
+  grid.innerHTML = rowsHtml;
+
+  if (!canEdit) {
+    grid.querySelectorAll('[data-detail-type]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const type = btn.getAttribute('data-detail-type');
+        const id = btn.getAttribute('data-detail-id');
+        if (type && id) showUserDetail(type, id);
+      });
+    });
+    return;
+  }
+
+  DUTY_ROLE_DEFS.forEach(({ id, label, multi }) => {
+    if (multi) {
+      const values = Array.isArray(assignments[id]) ? assignments[id] : [];
+      grid.querySelectorAll(`select.duty-role-select[data-duty-role="${CSS.escape(id)}"]`).forEach((sel, i) => {
+        if (values[i]) sel.value = values[i];
+        bindSearchableSelect(sel, { placeholder: `${label} 검색...` });
+      });
+      return;
+    }
+    const sel = document.getElementById(`dutyRole_${id}`);
+    if (sel && assignments[id]) sel.value = assignments[id];
+    if (sel) bindSearchableSelect(sel, { placeholder: `${label} 검색...` });
+  });
+
+  bindDutyMultiEditors(grid, optionsHtml);
+}
+
+function readDutyAssignmentsFromForm() {
+  const assignments = emptyDutyAssignments();
+  DUTY_ROLE_DEFS.forEach(({ id, multi }) => {
+    if (multi) {
+      const vals = [];
+      document.querySelectorAll(`.duty-role-select[data-duty-role="${CSS.escape(id)}"]`).forEach(sel => {
+        const v = (sel.value || '').trim();
+        if (v) vals.push(v);
+      });
+      assignments[id] = vals;
+      return;
+    }
+    const sel = document.querySelector(`.duty-role-select[data-duty-role="${CSS.escape(id)}"]:not([data-duty-multi])`);
+    assignments[id] = sel?.value || '';
+  });
+  return assignments;
+}
+
+async function handleSaveDutyRoster() {
+  if (!isUserAdmin()) {
+    showToast('봉사 배정은 관리자만 저장할 수 있습니다.', '🛡️');
+    return;
+  }
+  const dateStr = document.getElementById('dutyDateSelect')?.value;
+  if (!dateStr) {
+    showToast('수업일을 선택해 주세요.', '⚠️');
+    return;
+  }
+  const btn = document.getElementById('btnSaveDutyRoster');
+  try {
+    if (btn) btn.disabled = true;
+    await saveDutyAssignment({
+      date: dateStr,
+      assignments: readDutyAssignmentsFromForm(),
+      updatedBy: currentUserProfile?.displayName || currentUser?.email || '관리자',
+    });
+    showToast(`${dateStr} 봉사 배정이 저장되었습니다.`, '✅');
+    renderDutyRoster();
+  } catch (err) {
+    console.error(err);
+    showToast(err?.message || '봉사 배정 저장에 실패했습니다.', '❌');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function renderActivities() {
   const protectedEl = document.getElementById('activitiesProtectedContent');
   const lockedEl = document.getElementById('activitiesLockedNotice');
@@ -3233,63 +3583,10 @@ function renderActivities() {
     }
     return;
   }
-  if (protectedEl) protectedEl.style.display = 'grid';
+  if (protectedEl) protectedEl.style.display = 'flex';
   if (lockedEl) lockedEl.style.display = 'none';
 
-  const students = dataProvider.getStudents();
-  const allActivities = dataProvider.getActivities();
-  const select = document.getElementById('actStudentSelect');
-  const tableBody = document.querySelector('#activityHistoryTable tbody');
-  const cardList = document.getElementById('activityHistoryCardList');
-
-  const prevVal = select.value;
-  select.innerHTML = '<option value="">봉사 학생을 선택하세요...</option>' +
-    students.map(s => `<option value="${s.id}">${s.name} (${s.baptismalName || '세례명 없음'}, ${s.studentInfo?.grade || '-'})</option>`).join('');
-  if (prevVal) select.value = prevVal;
-
-  const sorted = [...allActivities].reverse();
-  document.getElementById('activityListCount').textContent = `${sorted.length}건`;
-
-  if (sorted.length === 0) {
-    const emptyMsg = '기록된 활동 봉사 내역이 없습니다.';
-    tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">${emptyMsg}</td></tr>`;
-    setMobileCards(cardList, emptyMobileCards(emptyMsg));
-    return;
-  }
-
-  const rows = sorted.map(act => {
-    const st = students.find(s => s.id === (act.studentPersonId || act.studentId));
-    const stName = st ? `${st.name} (${st.baptismalName || '-'}, ${st.studentInfo?.grade || '-'})` : '알 수 없음';
-    const nameMarkup = `<strong class="clickable-name" data-detail-type="student" data-detail-id="${act.studentPersonId || act.studentId}">${stName}</strong>`;
-    const dept = `<span class="dept-tag">${act.department}</span>`;
-    const points = `<span class="grace-badge"><span class="coin">🪙</span> +${act.pointsEarned} P</span>`;
-    return {
-      table: `
-      <tr>
-        <td style="white-space: nowrap;">${act.date}</td>
-        <td>${nameMarkup}</td>
-        <td>${dept}</td>
-        <td>${act.roleDetail || '-'}</td>
-        <td style="text-align: right;">${points}</td>
-        <td style="color: var(--text-muted); font-size: 0.8rem;">${act.recordedBy || '선생님'}</td>
-      </tr>
-    `,
-      card: `
-      <article class="mobile-data-card">
-        <div class="mobile-card-top">
-          <div>
-            <div class="mobile-card-title">${nameMarkup}</div>
-            <div class="mobile-card-sub">${act.date} · ${act.recordedBy || '선생님'}</div>
-          </div>
-          <div class="mobile-card-side">${points}</div>
-        </div>
-        <div class="mobile-card-meta">${dept}<span class="mobile-card-points">${act.roleDetail || '-'}</span></div>
-      </article>
-    `
-    };
-  });
-  tableBody.innerHTML = rows.map(r => r.table).join('');
-  setMobileCards(cardList, rows.map(r => r.card).join(''));
+  renderDutyRoster();
 }
 
 // ============================================================
@@ -3395,9 +3692,19 @@ function renderGraceBank() {
     showGraceLedgerModal(e.currentTarget.getAttribute('data-id'));
   });
   bindInRoots(roots, '.btn-quick-bonus', (e) => {
-    document.getElementById('bonusStudentSelect').value = e.currentTarget.getAttribute('data-id');
-    openModal('modalBonusPoints');
+    openBonusModalForStudent(e.currentTarget.getAttribute('data-id'));
   });
+}
+
+function openBonusModalForStudent(studentId = '') {
+  const students = dataProvider.getStudents();
+  const sel = document.getElementById('bonusStudentSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">학생을 선택하세요...</option>' +
+    students.map(s => `<option value="${s.id}">${s.name} (${s.baptismalName || '세례명 없음'}, ${s.studentInfo?.grade || '-'})</option>`).join('');
+  if (studentId) sel.value = studentId;
+  bindSearchableSelect(sel, { placeholder: '학생 이름·세례명 검색...' });
+  openModal('modalBonusPoints');
 }
 
 function showGraceLedgerModal(studentId) {
@@ -3558,8 +3865,7 @@ function renderStudentsDirectory(search = '') {
   setMobileCards(cardList, rows.map(r => r.card).join(''));
 
   bindInRoots([studentsBody, cardList], '.btn-quick-bonus', (e) => {
-    document.getElementById('bonusStudentSelect').value = e.currentTarget.getAttribute('data-id');
-    openModal('modalBonusPoints');
+    openBonusModalForStudent(e.currentTarget.getAttribute('data-id'));
   });
   bindInRoots([studentsBody, cardList], '.btn-edit-person', (e) => {
     const id = e.currentTarget.getAttribute('data-id');
@@ -4482,9 +4788,6 @@ if (attDatePicker) {
   attDatePicker.value = getTodayDateString();
   attDatePicker.addEventListener('change', () => { renderAttendance(); renderDashboard(); });
 }
-const actDateInput = document.getElementById('actDate');
-if (actDateInput) actDateInput.value = getTodayDateString();
-
 document.getElementById('btnFeastPrevMonth')?.addEventListener('click', () => shiftFeastViewMonth(-1));
 document.getElementById('btnFeastNextMonth')?.addEventListener('click', () => shiftFeastViewMonth(1));
 
@@ -4549,39 +4852,12 @@ document.getElementById('btnMarkAllPresent')?.addEventListener('click', async ()
 });
 
 // Activity dept -> points
-document.getElementById('actDeptSelect')?.addEventListener('change', (e) => {
-  const settings = dataProvider.getSettings();
-  const pts = settings.activityPoints[e.target.value] || 10;
-  document.getElementById('actPoints').value = pts;
-});
-
-// Activity form
-document.getElementById('activityForm')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const date = document.getElementById('actDate').value;
-  const studentId = document.getElementById('actStudentSelect').value;
-  const department = document.getElementById('actDeptSelect').value;
-  const roleDetail = document.getElementById('actRoleDetail').value;
-  const points = Number(document.getElementById('actPoints').value);
-  try {
-    await recordActivityRemote({ date, studentId, department, roleDetail, pointsEarned: points, recordedBy: '담당 교사' });
-    showToast(`활동 봉사 기록 및 은총표 +${points} P 적립 완료`, '🕊️');
-    document.getElementById('actRoleDetail').value = '';
-    renderActivities();
-    renderDashboard();
-  } catch (err) {
-    console.error(err);
-    showToast('활동 저장에 실패했습니다.', '⚠️');
-  }
-});
+document.getElementById('dutyDateSelect')?.addEventListener('change', () => renderDutyRoster());
+document.getElementById('btnSaveDutyRoster')?.addEventListener('click', () => handleSaveDutyRoster());
 
 // Bonus points modal
 document.getElementById('btnOpenBonusModal')?.addEventListener('click', () => {
-  const students = dataProvider.getStudents();
-  const sel = document.getElementById('bonusStudentSelect');
-  sel.innerHTML = '<option value="">학생을 선택하세요...</option>' +
-    students.map(s => `<option value="${s.id}">${s.name} (${s.baptismalName || '세례명 없음'}, ${s.studentInfo?.grade || '-'})</option>`).join('');
-  openModal('modalBonusPoints');
+  openBonusModalForStudent('');
 });
 
 document.getElementById('bonusPointsForm')?.addEventListener('submit', async (e) => {

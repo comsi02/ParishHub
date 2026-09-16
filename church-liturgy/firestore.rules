@@ -141,6 +141,11 @@ service cloud.firestore {
       allow write: if isCatechesisAdmin();
     }
 
+    match /catechesis_duty_assignments/{dutyId} {
+      allow read: if isCatechesisAdmin() || isCatechesisActiveUser();
+      allow write: if isCatechesisAdmin();
+    }
+
     match /catechesis_activities/{activityId} {
       allow read, write: if isCatechesisActiveUser();
     }

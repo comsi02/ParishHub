@@ -503,6 +503,27 @@ class DataProvider {
   }
 
   // ============================================================
+  //  학사 일정별 미사·전례 봉사 배정
+  // ============================================================
+  getDutyAssignments() {
+    return this._getItem('catechesis_duty_assignments') || [];
+  }
+
+  getDutyAssignmentByDate(dateStr) {
+    if (!dateStr) return null;
+    return this.getDutyAssignments().find(d => d.date === dateStr) || null;
+  }
+
+  upsertDutyAssignment(duty) {
+    const list = this.getDutyAssignments();
+    const idx = list.findIndex(d => d.id === duty.id || d.date === duty.date);
+    if (idx >= 0) list[idx] = { ...list[idx], ...duty };
+    else list.push(duty);
+    this._setItem('catechesis_duty_assignments', list);
+    return list.find(d => d.id === duty.id) || duty;
+  }
+
+  // ============================================================
   //  은총표 원장 (Grace Ledger)
   // ============================================================
   getGraceLedger(studentId = null) {

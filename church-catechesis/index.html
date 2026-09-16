@@ -422,74 +422,29 @@
     <!-- TAB 3: Activities -->
     <section class="tab-panel" id="panel-activities">
       <div id="activitiesLockedNotice" style="display: none;"></div>
-      <div id="activitiesProtectedContent" class="activities-layout">
-        <!-- Left: Activity Recording Form -->
-        <div class="data-table-container" style="padding: 1.25rem; height: fit-content;">
-          <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 1rem;">
-            🕊️ 활동 봉사 기록 & 은총표 지급
-          </h3>
-          <form id="activityForm">
-            <div class="form-group">
-              <label class="form-label">활동 일자</label>
-              <input type="date" id="actDate" class="form-control" required />
+      <div id="activitiesProtectedContent" class="activities-page">
+        <!-- 학사 일정별 미사·전례 봉사 배정 -->
+        <div class="data-table-container duty-roster-card">
+          <div class="duty-roster-header">
+            <div>
+              <h3 class="duty-roster-title">🕊️ 미사 · 전례 봉사 배정</h3>
+              <p class="duty-roster-sub">학사 일정(수업일)에 맞춰 해설·복사·독서·반주·성가대·현악·밴드 봉사자를 확인합니다.</p>
             </div>
-            <div class="form-group">
-              <label class="form-label">봉사 학생 선택</label>
-              <select id="actStudentSelect" class="form-control" required>
-                <option value="">학생을 선택하세요...</option>
-              </select>
+            <div class="duty-roster-controls">
+              <label class="form-label" for="dutyDateSelect" style="margin:0;">수업일</label>
+              <select id="dutyDateSelect" class="form-control" style="min-width: min(100%, 16rem);"></select>
             </div>
-            <div class="form-group">
-              <label class="form-label">활동 부서</label>
-              <select id="actDeptSelect" class="form-control" required>
-                <option value="복사">복사단 (15 P)</option>
-                <option value="전례(해설/독서)">전례부 - 해설/독서 (10 P)</option>
-                <option value="성가대">성가대 (10 P)</option>
-                <option value="현악">현악 앙상블 (10 P)</option>
-                <option value="밴드">찬양 밴드 (10 P)</option>
-                <option value="기타">기타 봉사 (5 P)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">상세 활동 내용</label>
-              <input type="text" id="actRoleDetail" class="form-control" placeholder="예: 어린이 미사 제1독서 봉헌, 복사 서기 등" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">지급 은총표 (포인트)</label>
-              <input type="number" id="actPoints" class="form-control" value="15" required />
-            </div>
-            <button type="submit" class="btn btn-primary" style="width: 100%;">
-              활동 기록 및 은총표 적립
+          </div>
+          <div id="dutyScheduleMeta" class="duty-schedule-meta"></div>
+          <div id="dutyRosterGrid" class="duty-roster-grid" aria-live="polite"></div>
+          <div class="duty-roster-footer">
+            <span id="dutyRosterHint" class="duty-roster-hint"></span>
+            <button type="button" class="btn btn-primary btn-sm" id="btnSaveDutyRoster" style="display:none;">
+              봉사 배정 저장
             </button>
-          </form>
+          </div>
         </div>
 
-        <!-- Right: Recent Activities Table -->
-        <div class="data-table-container">
-          <div
-            style="padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-dark);">최근 활동 봉사 내역</h3>
-            <span style="font-size: 0.8rem; color: var(--text-muted);" id="activityListCount">0건</span>
-          </div>
-          <div class="data-view-desktop">
-            <table class="data-table" id="activityHistoryTable">
-              <thead>
-                <tr>
-                  <th>일자</th>
-                  <th>학생</th>
-                  <th>부서</th>
-                  <th>상세 내용</th>
-                  <th style="text-align: right;">지급 은총표</th>
-                  <th>기록 교사</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Activities injected -->
-              </tbody>
-            </table>
-          </div>
-          <div class="mobile-card-list" id="activityHistoryCardList" aria-label="활동 내역 카드"></div>
-        </div>
       </div>
     </section>
 
