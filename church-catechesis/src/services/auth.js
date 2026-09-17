@@ -813,6 +813,41 @@ export async function linkUserToPerson(uid, personId) {
 }
 
 /**
+ * 본인 가족(주일학교) 등록 제출 표시 — role/status/personId 는 변경하지 않음
+ * @param {{ familyKey?: string, registrationEmail?: string }} [payload]
+ */
+export async function markFamilyRegistrationSubmitted(payload = {}) {
+  const now = new Date().toISOString();
+  const patch = {
+    familyRegistrationSubmittedAt: now,
+    familyRegistrationFamilyKey: payload.familyKey || null,
+    familyRegistrationEmail: payload.registrationEmail || null,
+  };
+
+  if (isFirebaseMode && auth?.currentUser && db) {
+    const uid = auth.currentUser.uid;
+    await setDoc(doc(db, 'catechesis_users', uid), patch, { merge: true });
+    return patch;
+  }
+
+  if (localUser) {
+    localUser = { ...localUser, ...patch };
+    localStorage.setItem(LOCAL_STORAGE_KEY_USER, JSON.stringify(localUser));
+    const list = getLocalUsersList();
+    const idx = list.findIndex(u => u.uid === localUser.uid);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...patch };
+      saveLocalUsersList(list);
+    }
+    localAuthListeners.forEach(cb => cb(
+      localUser,
+      enrichProfile({ ...localUser, isApproved: localUser.status === 'approved' })
+    ));
+  }
+  return patch;
+}
+
+/**
  * 가입 승인 / 미승인 전환 (관리자 전용). Person 연동은 유지합니다.
  * @param {string} uid
  * @param {boolean} approved

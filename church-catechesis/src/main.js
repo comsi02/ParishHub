@@ -13,6 +13,7 @@ import {
   formatAccountRolesLabel,
   getAllUsers,
   linkUserToPerson,
+  markFamilyRegistrationSubmitted,
   maskBaptismalName,
   maskKoreanName,
   maskTeacherName,
@@ -59,7 +60,15 @@ import {
   saveDutyAssignment,
 } from './services/dutyStore.js';
 import { bindSearchableSelect, bindSearchableSelects } from './services/searchableSelect.js';
-import { parseRegistrationCsv, buildPersonsFromFamilyRecord } from './services/registrationImport.js';
+import {
+  parseRegistrationCsv,
+  buildPersonsFromFamilyRecord,
+  REGISTRATION_CONSENTS,
+  REGISTRATION_MAX_CHILDREN,
+  REGISTRATION_DEPT_OPTIONS,
+  REGISTRATION_DEPT_NONE_PREV,
+  REGISTRATION_DEPT_NONE_HOPE,
+} from './services/registrationImport.js';
 
 /** 윈도우/모바일 모든 환경에서 100% 선명하게 렌더링되는 황금 은총 코인 SVG */
 export const GRACE_COIN_SVG = `<svg class="grace-coin-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#F59E0B" stroke="#B45309" stroke-width="1.2"/><circle cx="12" cy="12" r="7.8" fill="#FEF3C7" stroke="#D97706" stroke-width="0.8"/><path d="M12 6.8v10.4M8.2 10.2h7.6" stroke="#92400E" stroke-width="1.8" stroke-linecap="round"/></svg>`;
@@ -77,8 +86,8 @@ let feastViewMonth = new Date().getMonth();
 /** 상세 모달에서 현재 보고 있는 Person */
 let currentDetailPerson = { type: null, id: null };
 
-const MORE_TABS = new Set(['stats', 'activities', 'students', 'orgchart', 'admin']);
-const ALL_TABS = new Set(['dashboard', 'schedule', 'attendance', 'stats', 'activities', 'grace', 'students', 'orgchart', 'admin']);
+const MORE_TABS = new Set(['stats', 'activities', 'students', 'orgchart', 'myinfo', 'admin']);
+const ALL_TABS = new Set(['dashboard', 'schedule', 'attendance', 'stats', 'activities', 'grace', 'students', 'orgchart', 'myinfo', 'admin']);
 
 function isUserAdmin() {
   if (currentUserProfile?.isAdmin) return true;
@@ -240,6 +249,15 @@ function switchToTab(tabName) {
       .catch((err) => {
         console.error(err);
         renderActivities();
+      });
+    return;
+  }
+  if (tabName === 'myinfo') {
+    loadPersonsFromFirestore()
+      .then(() => renderMyInfo())
+      .catch((err) => {
+        console.error(err);
+        renderMyInfo();
       });
     return;
   }
@@ -1040,143 +1058,557 @@ async function deletePersonFromDetail() {
   }
 }
 
-function buildFamilyChildrenFieldsHtml() {
+function regDeptChecksHtml(n, field, noneLabel) {
+  const opts = REGISTRATION_DEPT_OPTIONS.map(d =>
+    `<label class="checkbox-item"><input type="checkbox" data-reg-child="${n}" data-field="${field}" value="${d}" /> ${d}</label>`
+  ).join('');
+  return `
+    <div class="register-dept-group" data-reg-dept-group="${n}" data-field="${field}">
+      ${opts}
+      <label class="checkbox-item"><input type="checkbox" data-reg-child="${n}" data-field="${field}" data-dept-none="1" value="${noneLabel}" /> ${noneLabel}</label>
+    </div>
+  `;
+}
+
+function buildRegisterChildBlockHtml(n) {
   const gradeOpts = GRADES.map(g => `<option value="${g.id}">${g.id}</option>`).join('');
-  return [1, 2, 3, 4].map(n => `
-    <div class="family-child-block" style="background: var(--surface-subtle); padding: 0.85rem; border-radius: 8px; margin-bottom: 0.75rem; border: 1px solid var(--border);">
-      <div style="font-weight: 700; margin-bottom: 0.5rem;">자녀 ${n}</div>
+  return `
+    <div class="register-child-block" data-reg-child-block="${n}">
+      <div class="register-child-title">자녀${n}</div>
       <div class="form-grid-2">
-        <div class="form-group"><label class="form-label">이름</label><input class="form-control" data-family-child="${n}" data-field="name" /></div>
-        <div class="form-group"><label class="form-label">세례명</label><input class="form-control" data-family-child="${n}" data-field="baptismalName" /></div>
-        <div class="form-group"><label class="form-label">성별</label>
-          <select class="form-control" data-family-child="${n}" data-field="gender">
-            <option value="">-</option><option value="남">남</option><option value="여">여</option>
+        <div class="form-group">
+          <label class="form-label">이름(자녀${n}) *</label>
+          <input class="form-control" data-reg-child="${n}" data-field="name" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">세례명(자녀${n})</label>
+          <input class="form-control" data-reg-child="${n}" data-field="baptismalName" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">성별(자녀${n})</label>
+          <select class="form-control" data-reg-child="${n}" data-field="gender">
+            <option value="">선택</option><option value="남">남</option><option value="여">여</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">학년</label>
-          <select class="form-control" data-family-child="${n}" data-field="grade">
-            <option value="">-</option>${gradeOpts}
+        <div class="form-group">
+          <label class="form-label">학년(자녀${n}) *26년 9월 기준</label>
+          <select class="form-control" data-reg-child="${n}" data-field="grade">
+            <option value="">선택</option>${gradeOpts}
           </select>
         </div>
-        <div class="form-group"><label class="form-label">축일</label><input class="form-control" data-family-child="${n}" data-field="feastDay" placeholder="MM-DD" /></div>
-        <div class="form-group"><label class="form-label">첫영성체</label>
-          <select class="form-control" data-family-child="${n}" data-field="firstCommunion">
-            <option value="">-</option><option value="예">예</option><option value="아니오">아니오</option>
+        <div class="form-group">
+          <label class="form-label">축일(자녀${n})</label>
+          <input class="form-control" data-reg-child="${n}" data-field="feastDay" placeholder="예) 4. 28" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">첫 영성체(자녀${n})</label>
+          <select class="form-control" data-reg-child="${n}" data-field="firstCommunion">
+            <option value="">선택</option><option value="예">예</option><option value="아니요">아니요</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">견진</label>
-          <select class="form-control" data-family-child="${n}" data-field="confirmation">
-            <option value="">-</option><option value="예">예</option><option value="아니오">아니오</option>
+        <div class="form-group">
+          <label class="form-label">견진(자녀${n})</label>
+          <select class="form-control" data-reg-child="${n}" data-field="confirmation">
+            <option value="">선택</option><option value="예">예</option><option value="아니요">아니요</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">2025-2026 부서</label><input class="form-control" data-family-child="${n}" data-field="departmentsPrev" /></div>
-        <div class="form-group" style="grid-column: 1 / -1;"><label class="form-label">2026-2027 희망부서</label><input class="form-control" data-family-child="${n}" data-field="departments" placeholder="쉼표로 구분" /></div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label class="form-label">2025-2026 주일학교 부서 활동 및 단체(자녀${n})</label>
+          ${regDeptChecksHtml(n, 'departmentsPrev', REGISTRATION_DEPT_NONE_PREV)}
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label class="form-label">2026-2027 주일학교 부서 희망 활동 및 단체(자녀${n})</label>
+          ${regDeptChecksHtml(n, 'departments', REGISTRATION_DEPT_NONE_HOPE)}
+        </div>
       </div>
     </div>
+  `;
+}
+
+function buildRegisterConsentHtml() {
+  return REGISTRATION_CONSENTS.map(c => `
+    <label class="register-consent-item">
+      <input type="checkbox" required data-reg-consent="${c.id}" />
+      <span class="register-consent-copy">
+        <span class="register-consent-title">${escapeHtml(c.title)}</span>
+        ${c.body ? `<span class="register-consent-body">${escapeHtml(c.body)}</span>` : ''}
+      </span>
+    </label>
   `).join('');
 }
 
-function collectFamilyFormRecord() {
-  const children = [1, 2, 3, 4].map(n => {
-    const get = (field) => document.querySelector(`[data-family-child="${n}"][data-field="${field}"]`)?.value?.trim() || '';
-    return {
-      name: get('name'),
+function syncRegisterChildFields(count) {
+  const host = document.getElementById('regChildrenFields');
+  if (!host) return;
+  const n = Math.max(1, Math.min(REGISTRATION_MAX_CHILDREN, Number(count) || 1));
+  const prev = {};
+  host.querySelectorAll('[data-reg-child-block]').forEach(block => {
+    const idx = block.getAttribute('data-reg-child-block');
+    prev[idx] = {};
+    block.querySelectorAll('[data-reg-child][data-field]').forEach(el => {
+      const field = el.getAttribute('data-field');
+      if (el.type === 'checkbox') {
+        if (!prev[idx][field]) prev[idx][field] = [];
+        if (el.checked) prev[idx][field].push(el.value);
+      } else {
+        prev[idx][field] = el.value;
+      }
+    });
+  });
+  host.innerHTML = Array.from({ length: n }, (_, i) => buildRegisterChildBlockHtml(i + 1)).join('');
+  Object.entries(prev).forEach(([idx, fields]) => {
+    if (Number(idx) > n) return;
+    Object.entries(fields).forEach(([field, val]) => {
+      if (Array.isArray(val)) {
+        val.forEach(v => {
+          const el = host.querySelector(`[data-reg-child="${idx}"][data-field="${field}"][value="${CSS.escape(v)}"]`);
+          if (el) el.checked = true;
+        });
+      } else {
+        const el = host.querySelector(`[data-reg-child="${idx}"][data-field="${field}"]:not([type="checkbox"])`);
+        if (el) el.value = val;
+      }
+    });
+  });
+  bindRegisterDeptExclusive(host);
+}
+
+function bindRegisterDeptExclusive(root) {
+  root.querySelectorAll('.register-dept-group').forEach(group => {
+    if (group.dataset.bound === '1') return;
+    group.dataset.bound = '1';
+    group.addEventListener('change', (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement) || t.type !== 'checkbox') return;
+      const boxes = [...group.querySelectorAll('input[type="checkbox"]')];
+      if (t.dataset.deptNone === '1' && t.checked) {
+        boxes.forEach(b => { if (b !== t) b.checked = false; });
+      } else if (t.checked) {
+        boxes.filter(b => b.dataset.deptNone === '1').forEach(b => { b.checked = false; });
+      }
+    });
+  });
+}
+
+function collectDeptField(n, field) {
+  const checked = [...document.querySelectorAll(`[data-reg-child="${n}"][data-field="${field}"]:checked`)]
+    .map(el => el.value.trim())
+    .filter(Boolean);
+  return checked.join(', ');
+}
+
+function collectSundayRegisterRecord({ source = 'self_register' } = {}) {
+  const childCount = Math.max(1, Math.min(
+    REGISTRATION_MAX_CHILDREN,
+    Number(document.getElementById('regChildCount')?.value) || 1
+  ));
+  const children = [];
+  for (let n = 1; n <= childCount; n++) {
+    const get = (field) => document.querySelector(`[data-reg-child="${n}"][data-field="${field}"]:not([type="checkbox"])`)?.value?.trim() || '';
+    const name = get('name');
+    if (!name) continue;
+    children.push({
+      name,
       baptismalName: get('baptismalName'),
       gender: get('gender'),
       grade: get('grade'),
       feastDay: get('feastDay'),
       firstCommunion: get('firstCommunion'),
       confirmation: get('confirmation'),
-      departmentsPrev: get('departmentsPrev'),
-      departments: get('departments'),
-    };
-  }).filter(c => c.name);
+      departmentsPrev: collectDeptField(n, 'departmentsPrev'),
+      departments: collectDeptField(n, 'departments'),
+    });
+  }
+
+  const consent = {};
+  REGISTRATION_CONSENTS.forEach(c => {
+    consent[c.id] = Boolean(document.querySelector(`[data-reg-consent="${c.id}"]`)?.checked);
+  });
 
   return {
-    registrationEmail: document.getElementById('familyRegEmail')?.value.trim() || '',
-    timestamp: document.getElementById('familyTimestamp')?.value.trim() || '',
-    address: document.getElementById('familyAddress')?.value.trim() || '',
+    registrationEmail: document.getElementById('regEmail')?.value.trim() || '',
+    timestamp: document.getElementById('regTimestamp')?.value.trim()
+      || new Date().toLocaleString('ko-KR'),
+    address: document.getElementById('regAddress')?.value.trim() || '',
     applicant: {
-      name: document.getElementById('familyApplicantName')?.value.trim() || '',
-      baptismalName: document.getElementById('familyApplicantBaptismal')?.value.trim() || '',
-      phone: document.getElementById('familyApplicantPhone')?.value.trim() || '',
+      name: document.getElementById('regApplicantName')?.value.trim() || '',
+      baptismalName: document.getElementById('regApplicantBaptismal')?.value.trim() || '',
+      phone: document.getElementById('regApplicantPhone')?.value.trim() || '',
     },
     spouse: {
-      name: document.getElementById('familySpouseName')?.value.trim() || '',
-      baptismalName: document.getElementById('familySpouseBaptismal')?.value.trim() || '',
-      phone: document.getElementById('familySpousePhone')?.value.trim() || '',
+      name: document.getElementById('regSpouseName')?.value.trim() || '',
+      baptismalName: document.getElementById('regSpouseBaptismal')?.value.trim() || '',
+      phone: document.getElementById('regSpousePhone')?.value.trim() || '',
     },
     children,
-    source: 'family_form',
+    consent,
+    source,
+    createdByUid: currentUser?.uid || currentUserProfile?.uid || '',
   };
 }
 
-function fillFamilyFormFromParsedFamily(family) {
-  if (!family) return;
-  document.getElementById('familyRegEmail').value = family.applicant?.registrationEmail || '';
-  document.getElementById('familyTimestamp').value = family.timestamp || '';
-  document.getElementById('familyAddress').value = family.applicant?.address || '';
-  document.getElementById('familyApplicantName').value = family.applicant?.name || '';
-  document.getElementById('familyApplicantBaptismal').value = family.applicant?.baptismalName || '';
-  document.getElementById('familyApplicantPhone').value = family.applicant?.phone || '';
-  document.getElementById('familySpouseName').value = family.spouse?.name || '';
-  document.getElementById('familySpouseBaptismal').value = family.spouse?.baptismalName || '';
-  document.getElementById('familySpousePhone').value = family.spouse?.phone || '';
+function yesNoLabel(v) {
+  if (v === true) return '예';
+  if (v === false) return '아니요';
+  const s = String(v || '').trim();
+  if (s === '예' || s === 'Y' || s === 'y') return '예';
+  if (s === '아니요' || s === '아니오' || s === 'N' || s === 'n') return '아니요';
+  return '';
+}
 
-  (family.children || []).slice(0, 4).forEach((ch, i) => {
-    const n = i + 1;
-    const set = (field, val) => {
-      const el = document.querySelector(`[data-family-child="${n}"][data-field="${field}"]`);
-      if (el) el.value = val ?? '';
-    };
-    const si = ch.studentInfo || {};
-    set('name', ch.name || '');
-    set('baptismalName', ch.baptismalName || '');
-    set('gender', si.gender || '');
-    set('grade', si.grade || '');
-    set('feastDay', si.feastDay || '');
-    set('firstCommunion', si.firstCommunion ? '예' : (si.firstCommunion === false ? '아니오' : ''));
-    set('confirmation', si.confirmation ? '예' : (si.confirmation === false ? '아니오' : ''));
-    set('departmentsPrev', si.departmentsPrev || '');
-    set('departments', Array.isArray(si.departments) ? si.departments.join(', ') : (si.departments || ''));
+function setDeptCheckboxes(n, field, raw) {
+  const text = Array.isArray(raw) ? raw.join(', ') : String(raw || '');
+  const parts = text.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+    .map(s => s.replace(/전례\s*\(\s*해설\s*[,/]\s*독서\s*\)/g, '전례(해설/독서)'));
+  const boxes = [...document.querySelectorAll(`[data-reg-child="${n}"][data-field="${field}"]`)];
+  boxes.forEach(b => { b.checked = false; });
+  if (!parts.length) return;
+  parts.forEach(p => {
+    const el = boxes.find(b => b.value === p)
+      || boxes.find(b => b.value.replace(/\s/g, '') === p.replace(/\s/g, ''));
+    if (el) el.checked = true;
   });
 }
 
-function openFamilyForm() {
-  if (!isUserAdmin()) {
-    showToast('관리자만 가족을 등록할 수 있습니다.', '🔒');
+/** 연동 Person / 등록 이메일 기준으로 내 가족(신청자·배우자·자녀) 찾기 */
+function resolveMyFamilyMembers() {
+  const email = (currentUserProfile?.email || currentUser?.email || '').toLowerCase().trim();
+  const personId = currentUserProfile?.personId || '';
+  const all = dataProvider.getPersons() || [];
+
+  const byEmail = email
+    ? all.filter(p => {
+      const pe = (p.registrationEmail || p.email || '').toLowerCase().trim();
+      return pe && pe === email;
+    })
+    : [];
+
+  let me = personId ? dataProvider.getPersonById(personId) : null;
+  let applicant = null;
+  if (me?.roles?.includes('parent')) applicant = me;
+  if (!applicant) {
+    applicant = byEmail.find(p => p.roles?.includes('parent')) || null;
+  }
+  if (!applicant && me) applicant = me;
+  if (!applicant) return null;
+
+  const familyKey = applicant.familyKey || '';
+  const regEmail = (applicant.registrationEmail || applicant.email || email || '').toLowerCase().trim();
+
+  let spouse = null;
+  const spouseId = applicant.parentInfo?.spousePersonId;
+  if (spouseId) spouse = dataProvider.getPersonById(spouseId);
+  if (!spouse && familyKey) {
+    spouse = all.find(p =>
+      p.id !== applicant.id
+      && p.familyKey === familyKey
+      && p.roles?.includes('parent')
+    ) || null;
+  }
+  if (!spouse && regEmail) {
+    spouse = all.find(p =>
+      p.id !== applicant.id
+      && (p.registrationEmail || p.email || '').toLowerCase().trim() === regEmail
+      && p.roles?.includes('parent')
+    ) || null;
+  }
+
+  let children = (applicant.parentInfo?.childPersonIds || [])
+    .map(id => dataProvider.getPersonById(id))
+    .filter(Boolean);
+  if (!children.length && familyKey) {
+    children = all.filter(p => p.familyKey === familyKey && p.roles?.includes('student'));
+  }
+  if (!children.length && regEmail) {
+    children = all.filter(p =>
+      (p.registrationEmail || '').toLowerCase().trim() === regEmail
+      && p.roles?.includes('student')
+    );
+  }
+
+  return { applicant, spouse, children, familyKey, registrationEmail: regEmail || email };
+}
+
+function fillMyInfoFormFromFamily(family, { force = false } = {}) {
+  if (!family?.applicant) return false;
+  const form = document.getElementById('sundaySchoolRegisterForm');
+  if (!form) return false;
+  if (!force && form.dataset.filledFromFamily === '1') return false;
+
+  const { applicant, spouse, children, registrationEmail } = family;
+  const setVal = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v ?? '';
+  };
+
+  setVal('regEmail', registrationEmail || applicant.registrationEmail || applicant.email || currentUser?.email || '');
+  setVal('regApplicantName', applicant.name || '');
+  setVal('regApplicantBaptismal', applicant.baptismalName || '');
+  setVal('regApplicantPhone', applicant.phone || '');
+  setVal('regAddress', applicant.address || '');
+  setVal('regSpouseName', spouse?.name || '');
+  setVal('regSpouseBaptismal', spouse?.baptismalName || '');
+  setVal('regSpousePhone', spouse?.phone || '');
+
+  const count = Math.max(1, Math.min(REGISTRATION_MAX_CHILDREN, children.length || 1));
+  const countSel = document.getElementById('regChildCount');
+  if (countSel) countSel.value = String(count);
+  syncRegisterChildFields(count);
+
+  children.slice(0, REGISTRATION_MAX_CHILDREN).forEach((ch, i) => {
+    const n = i + 1;
+    const si = ch.studentInfo || {};
+    const setChild = (field, val) => {
+      const el = document.querySelector(`[data-reg-child="${n}"][data-field="${field}"]:not([type="checkbox"])`);
+      if (el) el.value = val ?? '';
+    };
+    setChild('name', ch.name || '');
+    setChild('baptismalName', ch.baptismalName || '');
+    setChild('gender', si.gender || '');
+    setChild('grade', si.grade || '');
+    setChild('feastDay', si.feastDay || '');
+    setChild('firstCommunion', yesNoLabel(si.firstCommunion));
+    setChild('confirmation', yesNoLabel(si.confirmation));
+    setDeptCheckboxes(n, 'departmentsPrev', si.departmentsPrev || '');
+    setDeptCheckboxes(n, 'departments', si.departments || []);
+  });
+
+  REGISTRATION_CONSENTS.forEach(c => {
+    const el = document.querySelector(`[data-reg-consent="${c.id}"]`);
+    if (!el) return;
+    const v = applicant[c.id];
+    if (typeof v === 'boolean') el.checked = v;
+    else if (v == null && (spouse?.[c.id] != null)) el.checked = Boolean(spouse[c.id]);
+  });
+
+  form.dataset.filledFromFamily = '1';
+  return true;
+}
+
+function renderMyFamilySummary(family) {
+  const host = document.getElementById('myinfoFamilySummary');
+  if (!host) return;
+  if (!family?.applicant) {
+    host.hidden = true;
+    host.innerHTML = '';
     return;
   }
-  const host = document.getElementById('familyChildrenFields');
-  if (host) host.innerHTML = buildFamilyChildrenFieldsHtml();
-  document.getElementById('addFamilyForm')?.reset();
-  document.getElementById('familySheetPaste').value = '';
-  if (host) host.innerHTML = buildFamilyChildrenFieldsHtml();
-  openModal('modalAddFamily');
+  const { applicant, spouse, children } = family;
+  const childHtml = (children || []).length
+    ? children.map(ch => {
+      const si = ch.studentInfo || {};
+      return `<li><strong>${escapeHtml(ch.name || '-')}</strong>`
+        + `${ch.baptismalName ? ` (${escapeHtml(ch.baptismalName)})` : ''}`
+        + ` · ${escapeHtml(si.grade || '-')}`
+        + `${si.gender ? ` · ${escapeHtml(si.gender)}` : ''}`
+        + `</li>`;
+    }).join('')
+    : '<li class="myinfo-empty">등록된 자녀가 없습니다.</li>';
+
+  host.hidden = false;
+  host.innerHTML = `
+    <h3 class="register-section-title">연동된 가족 정보</h3>
+    <div class="myinfo-family-grid">
+      <div class="myinfo-family-block">
+        <div class="myinfo-family-label">신청자</div>
+        <div><strong>${escapeHtml(applicant.name || '-')}</strong>${applicant.baptismalName ? ` (${escapeHtml(applicant.baptismalName)})` : ''}</div>
+        <div class="myinfo-family-meta">${escapeHtml(applicant.phone || '전화 없음')} · ${escapeHtml(applicant.address || '주소 없음')}</div>
+      </div>
+      <div class="myinfo-family-block">
+        <div class="myinfo-family-label">배우자</div>
+        ${spouse
+          ? `<div><strong>${escapeHtml(spouse.name || '-')}</strong>${spouse.baptismalName ? ` (${escapeHtml(spouse.baptismalName)})` : ''}</div>
+             <div class="myinfo-family-meta">${escapeHtml(spouse.phone || '전화 없음')}</div>`
+          : '<div class="myinfo-empty">미등록</div>'}
+      </div>
+      <div class="myinfo-family-block myinfo-family-children">
+        <div class="myinfo-family-label">자녀 (${(children || []).length}명)</div>
+        <ul class="myinfo-child-list">${childHtml}</ul>
+      </div>
+    </div>
+  `;
+}
+
+function renderMyInfo() {
+  const lockedEl = document.getElementById('myinfoLockedNotice');
+  const protectedEl = document.getElementById('myinfoProtectedContent');
+  if (!currentUser) {
+    if (protectedEl) protectedEl.style.display = 'none';
+    if (lockedEl) {
+      lockedEl.style.display = 'block';
+      lockedEl.innerHTML = `
+        <div class="access-locked-card">
+          <div class="locked-icon">🔐</div>
+          <h3>Google 로그인 후 내 정보를 입력할 수 있습니다</h3>
+          <p>계정 정보와 가족 등록(시트와 동일)은 로그인 후 「내 정보」에서 작성합니다.</p>
+          <button class="btn btn-primary btn-locked-action btn-login-trigger">Google 계정으로 로그인하기</button>
+        </div>
+      `;
+      lockedEl.querySelector('.btn-login-trigger')?.addEventListener('click', handleGoogleLogin);
+    }
+    return;
+  }
+
+  if (lockedEl) lockedEl.style.display = 'none';
+  if (protectedEl) protectedEl.style.display = 'block';
+
+  const family = resolveMyFamilyMembers();
+  const hasFamily = Boolean(family?.applicant);
+  const regDone = Boolean(currentUserProfile?.familyRegistrationSubmittedAt) || hasFamily;
+
+  const accountCard = document.getElementById('myinfoAccountCard');
+  if (accountCard) {
+    const name = family?.applicant?.name
+      || currentUserProfile?.displayName
+      || currentUser.displayName
+      || '-';
+    const email = currentUserProfile?.email || currentUser.email || '-';
+    let statusLabel = '승인 대기';
+    if (isUserAdmin()) statusLabel = '관리자';
+    else if (currentUserProfile?.isApproved && currentUserProfile?.personId) statusLabel = '이용 가능';
+    else if (currentUserProfile?.isApproved) statusLabel = '프로필 연결 대기';
+    else if (currentUserProfile?.personId) statusLabel = '연결됨 · 미승인';
+    const spouseLabel = family?.spouse?.name
+      ? `${family.spouse.name}${family.spouse.baptismalName ? ` (${family.spouse.baptismalName})` : ''}`
+      : '미등록';
+    const childLabel = (family?.children || []).length
+      ? family.children.map(c => c.name).filter(Boolean).join(', ')
+      : '미등록';
+    accountCard.innerHTML = `
+      <div class="myinfo-account-row"><span class="myinfo-account-label">이름</span><strong>${escapeHtml(name)}</strong></div>
+      <div class="myinfo-account-row"><span class="myinfo-account-label">Google 이메일</span><span>${escapeHtml(email)}</span></div>
+      <div class="myinfo-account-row"><span class="myinfo-account-label">가입 상태</span><span>${escapeHtml(statusLabel)}</span></div>
+      <div class="myinfo-account-row"><span class="myinfo-account-label">배우자</span><span>${escapeHtml(spouseLabel)}</span></div>
+      <div class="myinfo-account-row"><span class="myinfo-account-label">자녀</span><span>${escapeHtml(childLabel)}</span></div>
+      <div class="myinfo-account-row"><span class="myinfo-account-label">가족 등록</span><span>${regDone ? '등록됨 (아래 폼에서 확인/수정)' : '미제출 — 아래에서 입력'}</span></div>
+    `;
+  }
+
+  renderMyFamilySummary(family);
+
+  const consentHost = document.getElementById('regConsentFields');
+  if (consentHost && !consentHost.dataset.ready) {
+    consentHost.innerHTML = buildRegisterConsentHtml();
+    consentHost.dataset.ready = '1';
+  }
+
+  const countSel = document.getElementById('regChildCount');
+  if (countSel && !countSel.dataset.bound) {
+    countSel.dataset.bound = '1';
+    countSel.addEventListener('change', () => syncRegisterChildFields(countSel.value));
+  }
+  if (!document.getElementById('regChildrenFields')?.children.length) {
+    syncRegisterChildFields(countSel?.value || 1);
+  }
+
+  const emailEl = document.getElementById('regEmail');
+  if (emailEl && !emailEl.value) {
+    emailEl.value = currentUserProfile?.email || currentUser.email || '';
+  }
+  if (emailEl && !isUserAdmin()) {
+    emailEl.readOnly = true;
+  }
+
+  if (family) fillMyInfoFormFromFamily(family);
+
+  const badge = document.getElementById('registerStatusBadge');
+  const hint = document.getElementById('registerFormHint');
+  if (regDone) {
+    if (badge) {
+      badge.hidden = false;
+      badge.textContent = hasFamily ? '연동 가족 정보 표시 중' : '등록 제출 완료 · 승인 대기';
+    }
+    if (hint) {
+      hint.textContent = hasFamily
+        ? '연동된 배우자·자녀 정보를 불러왔습니다. 수정 후 저장할 수 있습니다.'
+        : '이미 등록을 제출하셨습니다. 내용을 수정해 다시 제출하면 같은 가족 키로 갱신됩니다.';
+    }
+  } else if (badge) {
+    badge.hidden = true;
+  }
+}
+
+async function handleSundayRegisterSubmit(e) {
+  e.preventDefault();
+  if (!currentUser) {
+    showToast('Google 로그인 후 등록해 주세요.', '🔐');
+    return;
+  }
+
+  const missingConsent = REGISTRATION_CONSENTS.find(c =>
+    !document.querySelector(`[data-reg-consent="${c.id}"]`)?.checked
+  );
+  if (missingConsent) {
+    showToast('동의 항목을 모두 체크해 주세요.', '⚠️');
+    return;
+  }
+
+  const childCount = Number(document.getElementById('regChildCount')?.value) || 1;
+  for (let n = 1; n <= childCount; n++) {
+    const name = document.querySelector(`[data-reg-child="${n}"][data-field="name"]`)?.value?.trim();
+    if (!name) {
+      showToast(`자녀${n} 이름을 입력해 주세요.`, '⚠️');
+      return;
+    }
+  }
+
+  const tsEl = document.getElementById('regTimestamp');
+  if (tsEl) tsEl.value = new Date().toLocaleString('ko-KR');
+
+  const source = isUserAdmin() ? 'family_form' : 'self_register';
+  const record = collectSundayRegisterRecord({ source });
+  const built = buildPersonsFromFamilyRecord(record);
+  if (built.errors.length || !built.persons.length) {
+    showToast(built.errors[0] || '저장할 가족 정보가 없습니다.', '⚠️');
+    return;
+  }
+  if (!confirm(`학부모·학생 ${built.persons.length}명을 등록할까요?`)) return;
+
+  const btn = document.getElementById('btnSubmitSundayRegister');
+  try {
+    if (btn) btn.disabled = true;
+    const result = await upsertPersons(built.persons);
+    try {
+      await markFamilyRegistrationSubmitted({
+        familyKey: built.family?.familyKey,
+        registrationEmail: record.registrationEmail,
+      });
+      if (currentUserProfile) {
+        currentUserProfile = {
+          ...currentUserProfile,
+          familyRegistrationSubmittedAt: new Date().toISOString(),
+          familyRegistrationFamilyKey: built.family?.familyKey || null,
+        };
+      }
+    } catch (markErr) {
+      console.warn('[register] 제출 표시 저장 실패:', markErr);
+    }
+    showToast(`내 정보가 저장되었습니다. (${result.count}명)`, '🎉');
+    renderMyInfo();
+    renderDirectory();
+    renderDashboard();
+  } catch (err) {
+    console.error(err);
+    showToast(err?.message || '등록 저장에 실패했습니다. 관리자에게 문의해 주세요.', '❌');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/** 관리자용: 기존 모달 가족 등록 (간단 경로 → 등록 탭으로 이동) */
+function openFamilyForm() {
+  if (!currentUser) {
+    showToast('Google 로그인 후 내 정보에서 등록할 수 있습니다.', '🔐');
+    return;
+  }
+  switchToTab('myinfo');
+  showToast('내 정보에서 가족 등록을 작성해 주세요.', '👤');
 }
 
 function applyFamilySheetPaste() {
-  const text = document.getElementById('familySheetPaste')?.value || '';
-  if (!text.trim()) {
-    showToast('붙여넣을 시트 내용이 없습니다.', '⚠️');
-    return;
-  }
-  const parsed = parseRegistrationCsv(text);
-  if (!parsed.families?.length) {
-    showToast(parsed.errors?.[0] || '가족 데이터를 읽지 못했습니다. 헤더+행 CSV인지 확인하세요.', '⚠️');
-    return;
-  }
-  fillFamilyFormFromParsedFamily(parsed.families[0]);
-  if (parsed.families.length > 1) {
-    showToast(`첫 번째 가정만 폼에 반영했습니다. (총 ${parsed.families.length}가정)`, 'ℹ️');
-  } else {
-    showToast('시트 내용을 폼에 반영했습니다.', '✅');
-  }
+  showToast('등록 탭에서 직접 입력해 주세요. 시트 붙여넣기는 가져오기 탭을 이용하세요.', 'ℹ️');
 }
 
-// ============================================================
-//  Google Auth, Admin Approval & Permission Guard Helpers
-// ============================================================
 function getAccessLockedHtml(tabTitle) {
   if (!currentUser) {
     return `
@@ -1236,6 +1668,7 @@ function getAccessLockedHtml(tabTitle) {
     `;
   }
 
+  const regDone = Boolean(currentUserProfile?.familyRegistrationSubmittedAt);
   return `
     <div class="access-locked-card pending">
       <div class="locked-icon">⏳</div>
@@ -1244,9 +1677,17 @@ function getAccessLockedHtml(tabTitle) {
         <strong>${name}</strong> (${email}) 님의 가입 신청이 접수되었습니다.<br/>
         관리자가 승인하고 프로필을 연결한 뒤 ${tabTitle} 기능을 이용하실 수 있습니다.
       </p>
-      <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+      <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap;">
         <span class="role-badge-tag role-badge-pending">상태: 승인 대기</span>
         <span style="font-size: 0.8rem; color: var(--text-muted);">신청일: ${new Date(currentUserProfile?.requestedAt || Date.now()).toLocaleDateString('ko-KR')}</span>
+      </div>
+      <div style="margin-top: 0.9rem;">
+        <button type="button" class="btn btn-primary btn-sm" id="btnGotoFamilyRegister">
+          ${regDone ? '👤 내 정보에서 확인/수정' : '👤 내 정보에서 가족 등록하기'}
+        </button>
+        <p style="margin: 0.45rem 0 0; font-size: 0.78rem; color: var(--text-muted);">
+          ${regDone ? '등록은 제출되었습니다. 상단 프로필 또는 「내 정보」에서 확인할 수 있습니다.' : '상단 프로필(내 정보)에서 시트와 동일한 가족·자녀 정보를 입력해 주세요.'}
+        </p>
       </div>
     </div>
   `;
@@ -1264,8 +1705,11 @@ async function handleGoogleLogin() {
       showToast(`환영합니다, ${user?.displayName || '선생님'}님!`, '✝️');
     } else if (profile?.isApproved) {
       showToast('승인은 완료되었습니다. 관리자의 프로필 연결 후 이용 가능합니다.', '👤');
+    } else if (profile?.familyRegistrationSubmittedAt) {
+      showToast('가입·가족 등록이 접수되었습니다. 관리자 승인을 기다려 주세요.', '⏳');
     } else {
-      showToast('가입 신청되었습니다. 관리자 승인·프로필 연결 후 이용 가능합니다.', '⏳');
+      showToast('가입되었습니다. 「내 정보」에서 가족을 등록해 주세요.', '👤');
+      switchToTab('myinfo');
     }
   } catch (err) {
     console.error(err);
@@ -2497,7 +2941,26 @@ function initAuthUI() {
 
   btnGoogleLogin?.addEventListener('click', handleGoogleLogin);
 
-  btnSignOut?.addEventListener('click', async () => {
+  const openMyInfo = () => {
+    if (!currentUser) {
+      showToast('Google 로그인 후 내 정보를 볼 수 있습니다.', '🔐');
+      return;
+    }
+    switchToTab('myinfo');
+  };
+  userProfileChip?.addEventListener('click', (e) => {
+    if (e.target.closest('#btnSignOut')) return;
+    openMyInfo();
+  });
+  userProfileChip?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (e.target.closest('#btnSignOut')) return;
+    e.preventDefault();
+    openMyInfo();
+  });
+
+  btnSignOut?.addEventListener('click', async (e) => {
+    e.stopPropagation();
     if (confirm('로그아웃 하시겠습니까?')) {
       await signOut();
       showToast('로그아웃 되었습니다.', '👋');
@@ -2515,6 +2978,8 @@ function initAuthUI() {
   onAuthStateChanged((user, profile) => {
     currentUser = user;
     currentUserProfile = profile;
+    const form = document.getElementById('sundaySchoolRegisterForm');
+    if (form) delete form.dataset.filledFromFamily;
 
     if (user) {
       if (btnGoogleLogin) btnGoogleLogin.style.display = 'none';
@@ -2554,6 +3019,7 @@ function initAuthUI() {
       }
       loadPersonsFromFirestore().then(() => {
         if (currentTab === 'students') renderDirectory();
+        if (currentTab === 'myinfo') renderMyInfo();
       }).catch(() => {});
       loadSchedulesFromFirestore().then(() => {
         if (currentTab === 'dashboard') renderDashboard();
@@ -2601,6 +3067,7 @@ function initAuthUI() {
     safeRender(renderActivities, 'activities');
     safeRender(renderGraceBank, 'grace');
     safeRender(renderDirectory, 'directory');
+    if (currentTab === 'myinfo') safeRender(renderMyInfo, 'myinfo');
   });
 }
 
@@ -5261,27 +5728,12 @@ document.getElementById('btnOpenAddFamilyModal')?.addEventListener('click', () =
 document.getElementById('btnApplyFamilyPaste')?.addEventListener('click', () => applyFamilySheetPaste());
 document.getElementById('btnEditPersonFromDetail')?.addEventListener('click', () => openEditPersonFromDetail());
 document.getElementById('btnDeletePersonFromDetail')?.addEventListener('click', () => deletePersonFromDetail());
+document.getElementById('sundaySchoolRegisterForm')?.addEventListener('submit', handleSundayRegisterSubmit);
 
-document.getElementById('addFamilyForm')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const record = collectFamilyFormRecord();
-  const built = buildPersonsFromFamilyRecord(record);
-  if (built.errors.length || !built.persons.length) {
-    showToast(built.errors[0] || '저장할 가족 정보가 없습니다.', '⚠️');
-    return;
-  }
-  if (!confirm(`학부모·학생 ${built.persons.length}명을 저장할까요?`)) return;
-  try {
-    const result = await upsertPersons(built.persons);
-    showToast(`신규 가족 저장 완료: Person ${result.count}명`, '🎉');
-    closeModal('modalAddFamily');
-    document.getElementById('addFamilyForm')?.reset();
-    renderDirectory();
-    renderDashboard();
-    renderAttendance();
-  } catch (err) {
-    console.error(err);
-    showToast('가족 저장에 실패했습니다.', '⚠️');
+document.addEventListener('click', (e) => {
+  if (e.target?.closest?.('#btnGotoFamilyRegister')) {
+    e.preventDefault();
+    switchToTab('myinfo');
   }
 });
 

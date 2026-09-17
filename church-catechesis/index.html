@@ -38,7 +38,7 @@
             </svg>
             <span>Google 로그인</span>
           </button>
-          <div class="user-profile-chip" id="userProfileChip" style="display: none;">
+          <div class="user-profile-chip" id="userProfileChip" style="display: none;" role="button" tabindex="0" title="내 정보" aria-label="내 정보 열기">
             <img class="user-avatar-img" id="userAvatarImg" src="" alt="User Avatar" style="display: none;" />
             <div class="user-avatar-fallback" id="userAvatarFallback">G</div>
             <div class="user-meta">
@@ -96,6 +96,9 @@
       </button>
       <button class="nav-tab-btn" data-tab="orgchart" type="button">
         ✝ 조직도
+      </button>
+      <button class="nav-tab-btn" data-tab="myinfo" type="button" id="navTabMyInfo">
+        👤 내 정보
       </button>
       <button class="nav-tab-btn" data-tab="admin" type="button" id="navTabAdmin" style="display: none;">
         🛡️ 가입 승인
@@ -163,6 +166,13 @@
           <span class="nav-more-item-text">
             <strong>주일학교 조직도</strong>
             <span>교감 · 교사 · 자모회 · 자부회</span>
+          </span>
+        </button>
+        <button class="nav-more-item" data-tab="myinfo" type="button" id="navMoreMyInfo">
+          <span class="nav-more-item-icon" aria-hidden="true">👤</span>
+          <span class="nav-more-item-text">
+            <strong>내 정보</strong>
+            <span>계정 · 가족 등록 (시트와 동일)</span>
           </span>
         </button>
         <button class="nav-more-item" data-tab="admin" type="button" id="navMoreAdmin" style="display: none;">
@@ -443,6 +453,100 @@
           </div>
         </div>
 
+      </div>
+    </section>
+
+    <!-- TAB: 내 정보 (Google 가입 후 가족 등록) -->
+    <section class="tab-panel" id="panel-myinfo">
+      <div id="myinfoLockedNotice" style="display: none;"></div>
+      <div id="myinfoProtectedContent" class="register-page" style="display: none;">
+        <div class="data-table-container register-card">
+          <div class="register-header">
+            <div>
+              <h2 class="register-title">👤 내 정보</h2>
+              <p class="register-sub">Google 가입 계정 정보와 주일학교 가족 등록(시트와 동일)을 관리합니다.</p>
+            </div>
+            <div id="registerStatusBadge" class="register-status" hidden></div>
+          </div>
+
+          <div class="register-section myinfo-account-section">
+            <h3 class="register-section-title">계정</h3>
+            <div class="myinfo-account-card" id="myinfoAccountCard">
+              <!-- filled by JS -->
+            </div>
+          </div>
+
+          <div class="register-section" id="myinfoFamilySummary" hidden></div>
+
+          <form id="sundaySchoolRegisterForm" class="register-form" novalidate>
+            <div class="register-section">
+              <h3 class="register-section-title">가족 등록 · 신청자 · 배우자</h3>
+              <p class="register-section-lead">Google 등록 시트와 동일한 항목입니다. 자녀수만큼 자녀 정보를 입력하고, 마지막 동의 항목에 체크해 주세요.</p>
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label class="form-label" for="regEmail">이메일 주소 *</label>
+                  <input type="email" id="regEmail" class="form-control" required autocomplete="email" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="regTimestamp">타임스탬프</label>
+                  <input type="text" id="regTimestamp" class="form-control" readonly placeholder="제출 시 자동 기록" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="regApplicantName">이름(신청자) *</label>
+                  <input type="text" id="regApplicantName" class="form-control" required autocomplete="name" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="regApplicantBaptismal">세례명(신청자)</label>
+                  <input type="text" id="regApplicantBaptismal" class="form-control" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="regApplicantPhone">전화번호(신청자) 예) 519-xxx-xxxx</label>
+                  <input type="tel" id="regApplicantPhone" class="form-control" placeholder="519-xxx-xxxx" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="regAddress">주소 예) 10-258 258 Clarke Rd</label>
+                  <input type="text" id="regAddress" class="form-control" placeholder="10-258 258 Clarke Rd" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="regSpouseName">이름(배우자)</label>
+                  <input type="text" id="regSpouseName" class="form-control" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="regSpouseBaptismal">세례명(배우자)</label>
+                  <input type="text" id="regSpouseBaptismal" class="form-control" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="regSpousePhone">전화번호(배우자) 예) 519-xxx-xxxx</label>
+                  <input type="tel" id="regSpousePhone" class="form-control" placeholder="519-xxx-xxxx" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="regChildCount">자녀수 *</label>
+                  <select id="regChildCount" class="form-control" required>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="register-section">
+              <h3 class="register-section-title">자녀 정보</h3>
+              <div id="regChildrenFields" class="register-children"></div>
+            </div>
+
+            <div class="register-section register-consent-section">
+              <h3 class="register-section-title">동의</h3>
+              <div id="regConsentFields" class="register-consents"></div>
+            </div>
+
+            <div class="register-footer">
+              <p class="register-hint" id="registerFormHint">제출 후 관리자 승인·프로필 연결을 기다립니다.</p>
+              <button type="submit" class="btn btn-primary" id="btnSubmitSundayRegister">내 정보 저장</button>
+            </div>
+          </form>
+        </div>
       </div>
     </section>
 

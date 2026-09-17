@@ -195,29 +195,69 @@ const FAMILY_CONSENT = {
   tuitionTransferAck: true,
 };
 
+/** Google Sheet(2026-2027주일학교등록) 동의 문항 — 헤더 문구와 동일 */
+export const REGISTRATION_CONSENTS = [
+  {
+    id: 'photoVideoConsent',
+    title: '* 사진 및 영상 촬영·게시 동의',
+    body: '주일학교 활동 중 사진 또는 영상이 촬영될 수 있으며, 촬영된 자료는 주일학교 활동 기록 및 홍보를 목적으로 성당 홈페이지, SNS 및 기타 성당 공식 홍보 채널에 게시될 수 있습니다.',
+  },
+  {
+    id: 'firstCommunionNoticeAck',
+    title: '* G2 이상 첫 영성체를 받을 수 있습니다.',
+    body: '',
+  },
+  {
+    id: 'ministryServicePledge',
+    title: '* 복사/전례/성가/현악 부서 활동에 적극 참여 바랍니다. 또한 부서 활동 시, 성실하게 봉사할 것을 약속 합니다.',
+    body: '',
+  },
+  {
+    id: 'tuitionTransferAck',
+    title: '* 주일학교 등록금$30 / 인 (sundayschoollondon@gmail.com 으로 E-Transfer)',
+    body: '',
+  },
+];
+
+/** 시트 자녀 슬롯 최대 수 (자녀1~자녀4) */
+export const REGISTRATION_MAX_CHILDREN = 4;
+
+/** 부서 선택 옵션 (시트 응답값과 호환) */
+export const REGISTRATION_DEPT_OPTIONS = [
+  '복사',
+  '전례(해설/독서)',
+  '성가대',
+  '현악',
+  '밴드',
+];
+
+export const REGISTRATION_DEPT_NONE_PREV = '부서 활동 안함';
+export const REGISTRATION_DEPT_NONE_HOPE = '희망 안함';
+
 /** 시트와 동일한 논리 헤더 (폼/붙여넣기 안내용) */
 export const REGISTRATION_SHEET_HEADERS = [
   '타임스탬프',
   '이메일 주소',
   '이름(신청자)',
   '세례명(신청자)',
-  '전화번호(신청자)',
-  '주소',
+  '전화번호(신청자) 예) 519-xxx-xxxx',
+  '주소 예) 10-258 258 Clarke Rd',
   '이름(배우자)',
   '세례명(배우자)',
-  '전화번호(배우자)',
+  '전화번호(배우자) 예) 519-xxx-xxxx',
   '자녀수',
   ...[1, 2, 3, 4].flatMap(n => [
     `이름(자녀${n})`,
     `세례명(자녀${n})`,
     `성별(자녀${n})`,
-    `학년(자녀${n})`,
+    `학년(자녀${n}) *26년 9월 기준`,
     `축일(자녀${n})`,
-    `첫영성체(자녀${n})`,
+    `첫 영성체(자녀${n})`,
     `견진(자녀${n})`,
-    `2025-2026 부서(자녀${n})`,
-    `2026-2027 희망부서(자녀${n})`,
+    `2025-2026 주일학교 부서 활동 및 단체(자녀${n})`,
+    `2026-2027 주일학교 부서 희망 활동 및 단체(자녀${n})`,
   ]),
+  ...REGISTRATION_CONSENTS.map(c => (c.body ? `${c.title}${c.body}` : c.title)),
 ];
 
 /**
@@ -238,7 +278,10 @@ export const REGISTRATION_SHEET_HEADERS = [
  *     confirmation?: boolean|string,
  *     departmentsPrev?: string,
  *     departments?: string|string[],
- *   }>
+ *   }>,
+ *   consent?: Partial<typeof FAMILY_CONSENT>,
+ *   source?: string,
+ *   createdByUid?: string,
  * }} record
  * @returns {{ family: object|null, persons: object[], errors: string[] }}
  */
@@ -256,9 +299,18 @@ export function buildPersonsFromFamilyRecord(record) {
     return { family: null, persons: [], errors };
   }
 
+  const consent = {
+    photoVideoConsent: Boolean(record?.consent?.photoVideoConsent ?? FAMILY_CONSENT.photoVideoConsent),
+    firstCommunionNoticeAck: Boolean(record?.consent?.firstCommunionNoticeAck ?? FAMILY_CONSENT.firstCommunionNoticeAck),
+    ministryServicePledge: Boolean(record?.consent?.ministryServicePledge ?? FAMILY_CONSENT.ministryServicePledge),
+    tuitionTransferAck: Boolean(record?.consent?.tuitionTransferAck ?? FAMILY_CONSENT.tuitionTransferAck),
+  };
+
   const address = String(record?.address || '').trim();
   const familyKey = makeFamilyKey(registrationEmail);
   const applicantKey = makeImportKey(registrationEmail, applicantName);
+  const createdByUid = record?.createdByUid || '';
+  const source = record?.source || 'family_form';
 
   const spouseName = normalizePersonName(record?.spouse?.name);
   const spouseKey = spouseName && !isPlaceholderName(spouseName)
@@ -304,7 +356,8 @@ export function buildPersonsFromFamilyRecord(record) {
         parentPersonIds: [applicantKey, ...(spouseKey ? [spouseKey] : [])],
       },
       notes: '',
-      source: record?.source || 'family_form',
+      source,
+      ...(createdByUid ? { createdByUid } : {}),
     };
     children.push(student);
     persons.push(student);
@@ -328,8 +381,9 @@ export function buildPersonsFromFamilyRecord(record) {
     },
     studentInfo: null,
     notes: '',
-    source: record?.source || 'family_form',
-    ...FAMILY_CONSENT,
+    source,
+    ...(createdByUid ? { createdByUid } : {}),
+    ...consent,
   };
   persons.push(applicant);
 
@@ -353,8 +407,9 @@ export function buildPersonsFromFamilyRecord(record) {
       },
       studentInfo: null,
       notes: '',
-      source: record?.source || 'family_form',
-      ...FAMILY_CONSENT,
+      source,
+      ...(createdByUid ? { createdByUid } : {}),
+      ...consent,
     };
     persons.push(spouse);
   }
@@ -365,7 +420,7 @@ export function buildPersonsFromFamilyRecord(record) {
     applicant,
     spouse,
     children,
-    consent: { ...FAMILY_CONSENT },
+    consent: { ...consent },
   };
 
   return { family, persons, errors };

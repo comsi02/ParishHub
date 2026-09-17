@@ -161,8 +161,30 @@ service cloud.firestore {
 
     // 등록 시트 임포트 Person (학부모·학생)
     match /catechesis_persons/{personId} {
-      allow read: if isCatechesisAdmin() || isCatechesisActiveUser();
-      allow write: if isCatechesisAdmin() || isCatechesisActiveUser();
+      allow read: if isCatechesisAdmin() || isCatechesisActiveUser() || (
+        isAuthenticated() &&
+        resource.data.createdByUid == request.auth.uid
+      );
+      allow create: if isCatechesisAdmin() || isCatechesisActiveUser() || (
+        isAuthenticated() &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.source == 'self_register' &&
+        (
+          request.resource.data.roles.hasOnly(['parent']) ||
+          request.resource.data.roles.hasOnly(['student'])
+        )
+      );
+      allow update: if isCatechesisAdmin() || isCatechesisActiveUser() || (
+        isAuthenticated() &&
+        resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.source == 'self_register' &&
+        (
+          request.resource.data.roles.hasOnly(['parent']) ||
+          request.resource.data.roles.hasOnly(['student'])
+        )
+      );
+      allow delete: if isCatechesisAdmin() || isCatechesisActiveUser();
     }
 
     // 주일학교 학사 일정
