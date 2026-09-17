@@ -61,6 +61,9 @@ import {
 import { bindSearchableSelect, bindSearchableSelects } from './services/searchableSelect.js';
 import { parseRegistrationCsv, buildPersonsFromFamilyRecord } from './services/registrationImport.js';
 
+/** 윈도우/모바일 모든 환경에서 100% 선명하게 렌더링되는 황금 은총 코인 SVG */
+export const GRACE_COIN_SVG = `<svg class="grace-coin-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#F59E0B" stroke="#B45309" stroke-width="1.2"/><circle cx="12" cy="12" r="7.8" fill="#FEF3C7" stroke="#D97706" stroke-width="0.8"/><path d="M12 6.8v10.4M8.2 10.2h7.6" stroke="#92400E" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+
 // --- State ---
 let currentTab = 'dashboard';
 let currentAttClassFilter = 'all'; // 'all' | classId
@@ -616,7 +619,7 @@ function showUserDetail(type, id) {
       </div>
       <div class="detail-item">
         <div class="detail-label">보유 은총표</div>
-        <div class="detail-value detail-grace-points">🪙 ${(st.totalGracePoints || 0).toLocaleString()} P</div>
+        <div class="detail-value detail-grace-points">${GRACE_COIN_SVG} ${(st.totalGracePoints || 0).toLocaleString()} P</div>
       </div>
       <div class="detail-item">
         <div class="detail-label">첫영성체</div>
@@ -678,7 +681,7 @@ function showUserDetail(type, id) {
           <div style="margin-top: 0.25rem;">
             🧒 <span class="clickable-name" data-detail-type="student" data-detail-id="${c.id}">${c.name}</span>
             (${c.baptismalName || '세례명 없음'}, <span class="badge badge-grade" style="font-size: 0.7rem;">${c.studentInfo?.grade || '-'}</span>)
-            • 🪙 ${c.totalGracePoints} P
+            • ${GRACE_COIN_SVG} ${c.totalGracePoints} P
           </div>
         `).join('');
         childrenSection = `
@@ -787,7 +790,7 @@ function showUserDetail(type, id) {
           <div style="margin-top: 0.35rem;">
             🧒 <span class="clickable-name" data-detail-type="student" data-detail-id="${ch.id}">${ch.name}</span>
             (${ch.baptismalName || '세례명 없음'}, <span class="badge badge-grade" style="font-size: 0.72rem;">${ch.studentInfo?.grade || '-'}</span>)
-            • 🪙 ${ch.totalGracePoints} P
+            • ${GRACE_COIN_SVG} ${ch.totalGracePoints} P
           </div>
         `).join('')
       : '등록된 자녀가 없습니다.';
@@ -3017,7 +3020,7 @@ function renderDashboard() {
         ? `<strong class="clickable-name" data-detail-type="student" data-detail-id="${st.id}">${displayName}</strong>`
         : `<strong style="color: var(--text-muted); cursor: default;" title="로그인 후 상세 확인 가능">${displayName}</strong>`;
       const gradeBadge = `<span class="badge badge-grade">${st.studentInfo?.grade || '-'}</span>`;
-      const points = `<span class="grace-badge"><span class="coin">🪙</span> ${st.totalGracePoints.toLocaleString()} P</span>`;
+      const points = `<span class="grace-badge"><span class="coin">${GRACE_COIN_SVG}</span> ${st.totalGracePoints.toLocaleString()} P</span>`;
 
       return {
         table: `
@@ -3223,7 +3226,7 @@ function renderAttendance() {
               </div>
             </div>
             <span class="grace-badge">
-              <span class="coin">🪙</span> ${st.totalGracePoints} P
+              <span class="coin">${GRACE_COIN_SVG}</span> ${st.totalGracePoints} P
             </span>
           </div>
           ${depts
@@ -3676,7 +3679,7 @@ function renderGraceBank() {
     const gradeBadge = `<span class="badge badge-grade">${st.studentInfo?.grade || '-'}</span>`;
     const totalBadge = `
           <span class="grace-badge" style="font-size: 0.95rem;">
-            <span class="coin">🪙</span> ${totalPts.toLocaleString()} P
+            <span class="coin">${GRACE_COIN_SVG}</span> ${totalPts.toLocaleString()} P
           </span>
     `;
     const actions = `
@@ -3746,7 +3749,7 @@ function showGraceLedgerModal(studentId) {
   const ledger = dataProvider.getGraceLedger(studentId).reverse();
   document.getElementById('ledgerStudentInfo').textContent = `${st.name} (${st.baptismalName || '세례명 미등록'}, ${st.studentInfo?.grade || '-'})`;
   document.getElementById('ledgerStudentSub').textContent = `활동부서: ${(st.studentInfo?.departments || []).join(', ') || '없음'}`;
-  document.getElementById('ledgerTotalBadge').innerHTML = `🪙 ${st.totalGracePoints.toLocaleString()} P`;
+  document.getElementById('ledgerTotalBadge').innerHTML = `${GRACE_COIN_SVG} ${st.totalGracePoints.toLocaleString()} P`;
 
   const rows = document.getElementById('ledgerHistoryRows');
   if (ledger.length === 0) {
@@ -3850,7 +3853,7 @@ function renderStudentsDirectory(search = '') {
           <span class="badge badge-grade">${si.grade || '-'}</span>
           ${className !== si.grade ? `<div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">${className}</div>` : ''}
     `;
-    const points = `<span class="grace-badge"><span class="coin">🪙</span> ${st.totalGracePoints} P</span>`;
+    const points = `<span class="grace-badge"><span class="coin">${GRACE_COIN_SVG}</span> ${st.totalGracePoints} P</span>`;
     const action = `
       <div style="display:flex; gap:0.3rem; flex-wrap:wrap;">
         <button class="btn btn-secondary btn-sm btn-quick-bonus" data-id="${st.id}">+ 점수</button>
@@ -4901,7 +4904,7 @@ document.getElementById('bonusPointsForm')?.addEventListener('submit', async (e)
   const issuer = document.getElementById('bonusIssuer').value;
   try {
     await addBonusPointsRemote({ studentId, amount, reason, issuedBy: issuer });
-    showToast(`은총표 ${amount >= 0 ? '+' : ''}${amount} P 처리 완료!`, '🪙');
+    showToast(`은총표 ${amount >= 0 ? '+' : ''}${amount} P 처리 완료!`, GRACE_COIN_SVG);
     closeModal('modalBonusPoints');
     renderGraceBank();
     renderDashboard();
