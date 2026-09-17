@@ -2611,6 +2611,28 @@ function initTheme() {
 // ============================================================
 //  Sunday School D-Day & Progress Calculation
 // ============================================================
+
+/** 요일별(0=일~6=토) 따뜻한 가톨릭 격려 문구 (정통 가톨릭 신앙 생활) */
+const DDAY_WEEKDAY_QUOTES = [
+  // 0 일요일 — 주님의 날 (미사와 성체 은총)
+  '✝️ 주님의 날, 오늘 미사에서 모신 예수님의 은총을 한 주 동안 마음에 간직해요 ✨',
+  // 1 월요일 — 새로운 시작 (성호경과 한 주 봉헌)
+  '🌅 새로운 한 주! 정성껏 성호경을 바치며 주님과 함께 힘차게 출발해요 ✨',
+  // 2 화요일 — 사랑 실천 (이웃 사랑과 나눔)
+  '💛 “서로 사랑하여라” 하신 예수님 말씀처럼 친구에게 따뜻한 사랑을 실천해요 ✨',
+  // 3 수요일 — 지혜와 말씀 (주일 복음 묵상)
+  '📖 한 주의 중심 수요일! 주일 복음 말씀을 읽으며 예수님의 지혜를 배워요 ✨',
+  // 4 목요일 — 감사의 기도 (성체 신심과 화살기도)
+  '🙏 감사의 목요일, 오늘 하루 받은 주님의 축복을 떠올리며 감사의 화살기도를 바쳐요 ✨',
+  // 5 금요일 — 주일학교 준비 (교리책과 미사 준비)
+  '🎒 내일은 토요 주일학교! 교리책과 미사 준비물을 챙기며 설레는 마음으로 기다려요 ✨',
+  // 6 토요일 — 주일학교의 날 (기쁨의 미사와 교리)
+  '🎉 신나는 토요 주일학교 날! 친구들과 기쁘게 미사 참례하고 교리 배워요 ⛪✨',
+];
+
+/** 요일별(0=일~6=토) 테마 상징 이모지 배지 */
+const DDAY_WEEKDAY_BADGES = ['✨', '🌅', '💛', '📖', '🙏', '🎒', '⛪'];
+
 function renderDDayProgress() {
   const now = new Date();
   const daysOfWeek = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
@@ -2640,6 +2662,7 @@ function renderDDayProgress() {
   const subquote = document.getElementById('ddaySubquote');
   const stepsRow = document.getElementById('ddayStepsRow');
   const progressBarFill = document.getElementById('ddayProgressBarFill');
+  const runnerAvatar = document.getElementById('ddayRunnerAvatar');
   const nextSatText = document.getElementById('ddayNextSatText');
   const progressPercentText = document.getElementById('ddayProgressPercentText');
 
@@ -2657,13 +2680,23 @@ function renderDDayProgress() {
       highlightBadge.textContent = '🏃 D-1';
       highlightBadge.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
       headline.textContent = `🏃 주일학교까지 딱 하루! — ${schoolTitle}`;
-      subquote.textContent = '내일은 토요 주일학교! 교리 책과 성경을 미리 챙겨두어요 🎒';
+      subquote.textContent = '내일은 토요 주일학교! 교리책과 미사 준비물을 챙기며 설레는 마음으로 기다려요 🎒';
     } else {
       highlightBadge.textContent = `🏃 D-${daysLeft}`;
       highlightBadge.style.background = 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)';
       headline.textContent = `다음 주일학교까지 D-${daysLeft}일 — ${schoolTitle}`;
-      subquote.textContent = '평일에도 예수님 사랑 실천하며 즐거운 마음으로 성당 갈 준비를 해요 ✨';
+      // ✨ 요일별 맞춤 격려 문구
+      subquote.textContent = DDAY_WEEKDAY_QUOTES[currentDayIndex];
     }
+  }
+
+  // 🏃 달려가는 사랑스러운 3D 남녀 학생 듀오 아이콘 (배경 없는 투명 PNG + 요일별 포인트 배지)
+  if (runnerAvatar) {
+    const badgeEmoji = DDAY_WEEKDAY_BADGES[currentDayIndex] || '⛪';
+    runnerAvatar.innerHTML = `
+      <img src="/images/kids-running-duo.png" alt="성당으로 함께 달리는 주일학교 어린이들" width="60" height="60" decoding="async" />
+      <span class="dday-runner-badge" title="오늘의 요일 테마">${badgeEmoji}</span>
+    `;
   }
 
   if (stepsRow) {
