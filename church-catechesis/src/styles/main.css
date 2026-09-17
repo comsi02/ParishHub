@@ -2361,26 +2361,30 @@ body {
   height: 2px;
   background: var(--border);
 }
-.org-tier-split {
+.org-tier-lead-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem 2rem;
+  grid-template-areas:
+    "principal youth"
+    "vice ." ;
+  gap: 0 2rem;
   align-items: start;
   width: 100%;
   max-width: 44rem;
   justify-items: center;
 }
-.org-branch-col {
+.org-lead-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
   width: 100%;
-  align-self: start;
-}
-.org-branch-col-school,
-.org-branch-col-youth {
   max-width: 16rem;
+}
+.org-lead-principal { grid-area: principal; }
+.org-lead-youth { grid-area: youth; }
+.org-lead-vice { grid-area: vice; }
+.org-lead-vice .org-connector-short {
+  margin: 0.35rem 0;
 }
 .org-tier-staff {
   width: 100%;
@@ -2515,24 +2519,72 @@ body {
 }
 
 @media (max-width: 767px) {
-  .org-chart { padding: 0.85rem 0.65rem 1rem; }
-  .org-tier-split {
-    grid-template-columns: 1fr;
-    max-width: 100%;
-  }
-  .org-branch-bar { width: 40%; }
-  .org-branch-col-school,
-  .org-branch-col-youth { max-width: none; }
-  .org-node { flex: 1 1 calc(50% - 0.4rem); max-width: none; }
-  .org-node-priest,
-  .org-node-lead,
-  .org-node-youth {
+  .org-chart { padding: 0.85rem 0.5rem 1rem; }
+  .org-branch { width: 90%; }
+  .org-branch-bar { width: 62%; }
+
+  /* [ 신부님 ] 상단 노드 */
+  .org-tier-top .org-node-priest {
     width: 100%;
     min-width: 0;
-    max-width: none;
-    flex: 1 1 100%;
+    max-width: 20rem;
+    align-self: center;
   }
-  .org-tier-staff .org-node { flex: 1 1 calc(50% - 0.4rem); max-width: none; }
+
+  /* [ 교감 ] [ 청소년분과장 ]
+     [ 부교감 ]               2열 그리드 배치 */
+  .org-tier-lead-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "principal youth"
+      "vice ." ;
+    gap: 0 0.5rem;
+    width: 100%;
+    max-width: 100%;
+  }
+  .org-lead-item {
+    width: 100%;
+    max-width: 100%;
+  }
+  .org-lead-principal .org-node,
+  .org-lead-youth .org-node,
+  .org-lead-vice .org-node {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .org-lead-vice .org-connector-short {
+    margin: 0.25rem 0;
+    height: 0.5rem;
+  }
+
+  /* [교리] [전례부]
+     [복사] [총무]   2x2 교사회 그리드 배치 */
+  .org-tier-staff {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    width: 100%;
+    max-width: 100%;
+  }
+  .org-tier-staff .org-node {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex: none;
+    box-sizing: border-box;
+  }
+
+  .org-node {
+    padding: 0.5rem 0.35rem;
+  }
+  .org-node-title {
+    font-size: 0.72rem;
+  }
+  .org-node-person {
+    font-size: 0.82rem;
+  }
   .org-parent-group { flex: 1 1 100%; max-width: none; }
 }
 

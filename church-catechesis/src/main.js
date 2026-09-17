@@ -818,7 +818,7 @@ function showUserDetail(type, id) {
   currentDetailPerson = { type, id };
   const editBtn = document.getElementById('btnEditPersonFromDetail');
   const deleteBtn = document.getElementById('btnDeletePersonFromDetail');
-  const canEdit = isUserApproved();
+  const canEdit = isUserAdmin();
   const canDelete = isUserAdmin();
   if (editBtn) editBtn.style.display = canEdit ? '' : 'none';
   if (deleteBtn) deleteBtn.style.display = canDelete ? '' : 'none';
@@ -840,6 +840,10 @@ function fillStudentParentSelect(selectedId = '') {
 }
 
 function openStudentFormCreate() {
+  if (!isUserAdmin()) {
+    showToast('관리자만 학생을 등록할 수 있습니다.', '🔒');
+    return;
+  }
   document.getElementById('editStudentId').value = '';
   document.getElementById('modalStudentTitle').textContent = '+ 새 학생 등록';
   document.getElementById('btnSubmitStudentForm').textContent = '학생 등록';
@@ -849,6 +853,10 @@ function openStudentFormCreate() {
 }
 
 function openStudentFormEdit(personId) {
+  if (!isUserAdmin()) {
+    showToast('관리자만 학생 정보를 수정할 수 있습니다.', '🔒');
+    return;
+  }
   const st = dataProvider.getStudentById(personId) || dataProvider.getPersonById(personId);
   if (!st) return;
   const si = st.studentInfo || {};
@@ -872,6 +880,10 @@ function openStudentFormEdit(personId) {
 }
 
 function openParentFormCreate() {
+  if (!isUserAdmin()) {
+    showToast('관리자만 학부모를 등록할 수 있습니다.', '🔒');
+    return;
+  }
   document.getElementById('editParentId').value = '';
   document.getElementById('modalParentTitle').textContent = '+ 새 학부모 등록';
   document.getElementById('btnSubmitParentForm').textContent = '학부모 등록';
@@ -884,6 +896,10 @@ function openParentFormCreate() {
 }
 
 function openParentFormEdit(personId) {
+  if (!isUserAdmin()) {
+    showToast('관리자만 학부모 정보를 수정할 수 있습니다.', '🔒');
+    return;
+  }
   const p = dataProvider.getPersonById(personId);
   if (!p) return;
   document.getElementById('editParentId').value = p.id;
@@ -925,8 +941,8 @@ function readTeacherDutyRolesFromForm() {
 }
 
 function openTeacherFormCreate() {
-  if (!isUserApproved()) {
-    showToast('승인된 회원만 교사를 등록할 수 있습니다.', '🔒');
+  if (!isUserAdmin()) {
+    showToast('관리자만 교사를 등록할 수 있습니다.', '🔒');
     return;
   }
   document.getElementById('editTeacherId').value = '';
@@ -939,6 +955,10 @@ function openTeacherFormCreate() {
 }
 
 function openTeacherFormEdit(personId) {
+  if (!isUserAdmin()) {
+    showToast('관리자만 교사 정보를 수정할 수 있습니다.', '🔒');
+    return;
+  }
   const p = dataProvider.getPersonById(personId);
   if (!p) return;
   document.getElementById('editTeacherId').value = p.id;
@@ -956,7 +976,7 @@ function openTeacherFormEdit(personId) {
 function updateDirectoryActionButtons() {
   const actionBtns = document.getElementById('directoryActionBtns');
   if (!actionBtns) return;
-  if (currentDirectoryView === 'classes') {
+  if (currentDirectoryView === 'classes' || !isUserAdmin()) {
     actionBtns.style.display = 'none';
     return;
   }
@@ -976,8 +996,8 @@ function updateDirectoryActionButtons() {
 function openEditPersonFromDetail() {
   const { type, id } = currentDetailPerson || {};
   if (!id) return;
-  if (!isUserApproved()) {
-    showToast('승인된 회원만 수정할 수 있습니다.', '🔒');
+  if (!isUserAdmin()) {
+    showToast('관리자만 수정할 수 있습니다.', '🔒');
     return;
   }
   if (type === 'student') openStudentFormEdit(id);
@@ -985,11 +1005,10 @@ function openEditPersonFromDetail() {
   else if (type === 'teacher' || type === 'priest') openTeacherFormEdit(id);
 }
 
-async function deletePersonFromDetail() {
-  const { id } = currentDetailPerson || {};
+async function deletePersonById(id) {
   if (!id) return;
   if (!isUserAdmin()) {
-    showToast('Person 삭제는 관리자만 할 수 있습니다.', '🛡️');
+    showToast('삭제는 관리자만 할 수 있습니다.', '🛡️');
     return;
   }
   const person = dataProvider.getPersonById(id);
@@ -1011,6 +1030,13 @@ async function deletePersonFromDetail() {
   } catch (err) {
     console.error(err);
     showToast('삭제 중 오류가 발생했습니다.', '⚠️');
+  }
+}
+
+async function deletePersonFromDetail() {
+  const { id } = currentDetailPerson || {};
+  if (id) {
+    await deletePersonById(id);
   }
 }
 
@@ -1117,8 +1143,8 @@ function fillFamilyFormFromParsedFamily(family) {
 }
 
 function openFamilyForm() {
-  if (!isUserApproved()) {
-    showToast('승인된 회원만 가족을 등록할 수 있습니다.', '🔒');
+  if (!isUserAdmin()) {
+    showToast('관리자만 가족을 등록할 수 있습니다.', '🔒');
     return;
   }
   const host = document.getElementById('familyChildrenFields');
@@ -2834,16 +2860,18 @@ function renderOrgChart() {
       <div class="org-branch-stem"></div>
       <div class="org-branch-bar"></div>
     </div>
-    <div class="org-tier org-tier-split">
-      <div class="org-branch-col org-branch-col-school">
+    <div class="org-tier org-tier-lead-grid">
+      <div class="org-lead-item org-lead-principal">
         <div class="org-connector org-connector-short" aria-hidden="true"></div>
         ${orgNodeHtml({ title: '교감', people: principals, tone: 'lead', approved })}
-        <div class="org-connector" aria-hidden="true"></div>
-        ${orgNodeHtml({ title: '부교감', people: vicePrincipals, tone: 'lead', approved })}
       </div>
-      <div class="org-branch-col org-branch-col-youth">
+      <div class="org-lead-item org-lead-youth">
         <div class="org-connector org-connector-short" aria-hidden="true"></div>
         ${orgNodeHtml({ title: '청소년분과장', people: youth, tone: 'youth', approved })}
+      </div>
+      <div class="org-lead-item org-lead-vice">
+        <div class="org-connector org-connector-short" aria-hidden="true"></div>
+        ${orgNodeHtml({ title: '부교감', people: vicePrincipals, tone: 'lead', approved })}
       </div>
     </div>
     <div class="org-connector" aria-hidden="true"></div>
@@ -3644,6 +3672,9 @@ function renderGraceBank() {
   if (protectedEl) protectedEl.style.display = '';
   if (lockedEl) lockedEl.style.display = 'none';
 
+  const openBonusBtn = document.getElementById('btnOpenBonusModal');
+  if (openBonusBtn) openBonusBtn.style.display = isUserAdmin() ? '' : 'none';
+
   const students = dataProvider.getStudents();
   const ledger = dataProvider.getGraceLedger();
   const search = document.getElementById('graceSearchInput')?.value.trim().toLowerCase() || '';
@@ -3665,6 +3696,8 @@ function renderGraceBank() {
     return;
   }
 
+  const isAdmin = isUserAdmin();
+
   const rows = filtered.map(st => {
     const studentLedger = ledger.filter(l => l.studentPersonId === st.id || l.studentId === st.id);
     const attPts = studentLedger.filter(l => l.type === '출석').reduce((s, i) => s + Number(i.amount || 0), 0);
@@ -3684,7 +3717,7 @@ function renderGraceBank() {
     `;
     const actions = `
           <button class="btn btn-secondary btn-sm btn-view-ledger" data-id="${st.id}">원장 조회</button>
-          <button class="btn btn-grace btn-sm btn-quick-bonus" data-id="${st.id}">+ 점수</button>
+          ${isAdmin ? `<button class="btn btn-grace btn-sm btn-quick-bonus" data-id="${st.id}">+ 점수</button>` : ''}
     `;
 
     return {
@@ -3733,6 +3766,10 @@ function renderGraceBank() {
 }
 
 function openBonusModalForStudent(studentId = '') {
+  if (!isUserAdmin()) {
+    showToast('은총표 부여는 관리자만 할 수 있습니다.', '🔒');
+    return;
+  }
   const students = dataProvider.getStudents();
   const sel = document.getElementById('bonusStudentSelect');
   if (!sel) return;
@@ -3792,6 +3829,8 @@ function renderDirectory() {
   if (protectedEl) protectedEl.style.display = '';
   if (lockedEl) lockedEl.style.display = 'none';
 
+  updateDirectoryActionButtons();
+
   const searchInput = document.getElementById('directorySearchInput');
   if (searchInput) {
     searchInput.placeholder = canViewContactInfo()
@@ -3834,6 +3873,8 @@ function renderStudentsDirectory(search = '') {
     return;
   }
 
+  const isAdmin = isUserAdmin();
+
   const rows = filtered.map(st => {
     const si = st.studentInfo || {};
     const parents = dataProvider.getParentsOfStudent(st.id);
@@ -3854,11 +3895,12 @@ function renderStudentsDirectory(search = '') {
           ${className !== si.grade ? `<div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">${className}</div>` : ''}
     `;
     const points = `<span class="grace-badge"><span class="coin">${GRACE_COIN_SVG}</span> ${st.totalGracePoints} P</span>`;
-    const action = `
+    const action = isAdmin ? `
       <div style="display:flex; gap:0.3rem; flex-wrap:wrap;">
         <button class="btn btn-secondary btn-sm btn-quick-bonus" data-id="${st.id}">+ 점수</button>
         <button class="btn btn-secondary btn-sm btn-edit-person" data-edit-type="student" data-id="${st.id}">수정</button>
-      </div>`;
+        <button class="btn btn-sm btn-delete-person" data-edit-type="student" data-id="${st.id}">삭제</button>
+      </div>` : '';
 
     return {
       table: `
@@ -3871,7 +3913,7 @@ function renderStudentsDirectory(search = '') {
         <td>${depts}</td>
         <td>${parentInfo}</td>
         <td>${points}</td>
-        <td>${action}</td>
+        <td>${action || '<span style="color: var(--text-muted); font-size: 0.82rem;">-</span>'}</td>
       </tr>
     `,
       card: `
@@ -3891,7 +3933,7 @@ function renderStudentsDirectory(search = '') {
           <div class="mobile-card-side">${points}</div>
         </div>
         <div class="mobile-card-sub">학부모: ${parentInfo}</div>
-        <div class="mobile-card-actions">${action}</div>
+        ${action ? `<div class="mobile-card-actions">${action}</div>` : ''}
       </article>
     `
     };
@@ -3906,6 +3948,10 @@ function renderStudentsDirectory(search = '') {
   bindInRoots([studentsBody, cardList], '.btn-edit-person', (e) => {
     const id = e.currentTarget.getAttribute('data-id');
     if (id) openStudentFormEdit(id);
+  });
+  bindInRoots([studentsBody, cardList], '.btn-delete-person', (e) => {
+    const id = e.currentTarget.getAttribute('data-id');
+    if (id) deletePersonById(id);
   });
 }
 
@@ -3930,6 +3976,8 @@ function renderParentsDirectory(search = '') {
     setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
+
+  const isAdmin = isUserAdmin();
 
   const rows = filtered.map(p => {
     const teacherRoles = dataProvider.getTeacherRoles();
@@ -3967,11 +4015,11 @@ function renderParentsDirectory(search = '') {
       return s ? `<span class="clickable-name" data-detail-type="student" data-detail-id="${s.id}">${s.name}</span>(${s.studentInfo?.grade || '-'})` : '';
     }).filter(Boolean).join(', ') || '등록 자녀 없음';
 
-    const detailBtn = `
+    const actionBtn = isAdmin ? `
       <div style="display:flex; gap:0.3rem; flex-wrap:wrap;">
-        <button class="btn btn-secondary btn-sm" onclick="showUserDetailGlobal('parent', '${p.id}')">상세</button>
         <button class="btn btn-secondary btn-sm btn-edit-person" data-edit-type="parent" data-id="${p.id}">수정</button>
-      </div>`;
+        <button class="btn btn-sm btn-delete-person" data-edit-type="parent" data-id="${p.id}">삭제</button>
+      </div>` : '';
 
     return {
       table: `
@@ -3986,7 +4034,7 @@ function renderParentsDirectory(search = '') {
         <td>${formatPhoneHtml(p.phone)}</td>
         <td style="font-size: 0.85rem; color: var(--text-muted);">${formatAddressHtml(p.address, { prefix: '', empty: '-' })}</td>
         <td><span style="font-size: 0.85rem;">${childNames}</span></td>
-        <td>${detailBtn}</td>
+        <td>${actionBtn || '<span style="color: var(--text-muted); font-size: 0.82rem;">-</span>'}</td>
       </tr>
     `,
       card: `
@@ -4003,7 +4051,7 @@ function renderParentsDirectory(search = '') {
           </div>
         </div>
         <div class="mobile-card-meta">자녀: ${childNames}</div>
-        <div class="mobile-card-actions">${detailBtn}</div>
+        ${actionBtn ? `<div class="mobile-card-actions">${actionBtn}</div>` : ''}
       </article>
     `
     };
@@ -4014,6 +4062,10 @@ function renderParentsDirectory(search = '') {
   bindInRoots([parentsBody, cardList], '.btn-edit-person', (e) => {
     const id = e.currentTarget.getAttribute('data-id');
     if (id) openParentFormEdit(id);
+  });
+  bindInRoots([parentsBody, cardList], '.btn-delete-person', (e) => {
+    const id = e.currentTarget.getAttribute('data-id');
+    if (id) deletePersonById(id);
   });
 }
 
@@ -4038,6 +4090,8 @@ function renderTeachersDirectory(search = '') {
     setMobileCards(cardList, emptyMobileCards(emptyMsg));
     return;
   }
+
+  const isAdmin = isUserAdmin();
 
   const rows = filtered.map(t => {
     const isPriest = (t.roles || []).includes('priest');
@@ -4070,11 +4124,11 @@ function renderTeachersDirectory(search = '') {
       : '<span style="color: var(--text-muted);">-</span>';
 
     const detailType = isPriest ? 'priest' : 'teacher';
-    const detailBtn = `
+    const actionBtn = isAdmin ? `
       <div style="display:flex; gap:0.3rem; flex-wrap:wrap;">
-        <button class="btn btn-secondary btn-sm" onclick="showUserDetailGlobal('${detailType}', '${t.id}')">상세</button>
         <button class="btn btn-secondary btn-sm btn-edit-person" data-edit-type="${detailType}" data-id="${t.id}">수정</button>
-      </div>`;
+        <button class="btn btn-sm btn-delete-person" data-edit-type="${detailType}" data-id="${t.id}">삭제</button>
+      </div>` : '';
 
     return {
       table: `
@@ -4087,7 +4141,7 @@ function renderTeachersDirectory(search = '') {
         <td>${assignedClassHtml}</td>
         <td>${formatPhoneHtml(t.phone, { linkStyle: 'color: var(--primary);' })}</td>
         <td>${dualHtml}</td>
-        <td>${detailBtn}</td>
+        <td>${actionBtn || '<span style="color: var(--text-muted); font-size: 0.82rem;">-</span>'}</td>
       </tr>
     `,
       card: `
@@ -4102,7 +4156,7 @@ function renderTeachersDirectory(search = '') {
           </div>
         </div>
         <div class="mobile-card-sub">${formatPhonePlainText(t.phone) || (canViewContactInfo() ? '' : '🔒 연락처 관리자 전용')}${dualRoles.length ? ` · ${dualRoles.join(', ')}` : ''}</div>
-        <div class="mobile-card-actions">${detailBtn}</div>
+        ${actionBtn ? `<div class="mobile-card-actions">${actionBtn}</div>` : ''}
       </article>
     `
     };
@@ -4114,12 +4168,22 @@ function renderTeachersDirectory(search = '') {
     const id = e.currentTarget.getAttribute('data-id');
     if (id) openTeacherFormEdit(id);
   });
+  bindInRoots([teachersBody, cardList], '.btn-delete-person', (e) => {
+    const id = e.currentTarget.getAttribute('data-id');
+    if (id) deletePersonById(id);
+  });
 }
 
 function renderClassesView() {
   const classes = dataProvider.getClasses();
   const grid = document.getElementById('classesGrid');
   if (!grid) return;
+
+  const addClassBtn = document.getElementById('btnOpenAddClassModal');
+  if (addClassBtn) {
+    addClassBtn.style.display = isUserAdmin() ? '' : 'none';
+  }
+  const isAdmin = isUserAdmin();
 
   if (classes.length === 0) {
     grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 2rem; color: var(--text-muted);">등록된 반이 없습니다.</div>';
@@ -4145,10 +4209,12 @@ function renderClassesView() {
             <div style="font-size: 1.02rem; font-weight: 700; color: var(--primary-dark);">🏫 ${cls.name}</div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">${cls.notes || ''}</div>
           </div>
-          <div style="display: flex; gap: 0.35rem;">
-            <button class="btn btn-secondary btn-sm btn-edit-class" data-id="${cls.id}">편집</button>
-            <button class="btn btn-sm btn-delete-class" data-id="${cls.id}">삭제</button>
-          </div>
+          ${isAdmin ? `
+            <div style="display: flex; gap: 0.35rem;">
+              <button class="btn btn-secondary btn-sm btn-edit-class" data-id="${cls.id}">편집</button>
+              <button class="btn btn-sm btn-delete-class" data-id="${cls.id}">삭제</button>
+            </div>
+          ` : ''}
         </div>
         <div style="margin-bottom: 0.6rem;">
           <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem;">학년 구성</div>
@@ -4183,6 +4249,15 @@ function renderClassesView() {
       }
     });
   });
+}
+
+function openEditClassModal(classId) {
+  if (!isUserAdmin()) {
+    showToast('관리자만 반 정보를 수정할 수 있습니다.', '🔒');
+    return;
+  }
+  populateClassModal(classId);
+  openModal('modalAddClass');
 }
 
 // ============================================================
@@ -4229,10 +4304,6 @@ function populateClassModal(editClassId = null) {
   }
 }
 
-function openEditClassModal(classId) {
-  populateClassModal(classId);
-  openModal('modalAddClass');
-}
 
 document.getElementById('btnOpenAddClassModal')?.addEventListener('click', () => {
   populateClassModal(null);
@@ -4898,6 +4969,10 @@ document.getElementById('btnOpenBonusModal')?.addEventListener('click', () => {
 
 document.getElementById('bonusPointsForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!isUserAdmin()) {
+    showToast('은총표 부여는 관리자만 할 수 있습니다.', '🔒');
+    return;
+  }
   const studentId = document.getElementById('bonusStudentSelect').value;
   const amount = Number(document.getElementById('bonusAmount').value);
   const reason = document.getElementById('bonusReason').value;
