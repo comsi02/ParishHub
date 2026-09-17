@@ -3399,14 +3399,14 @@ function renderDutyAddCard(def) {
   const { id, label, tone, icon } = def;
   return `
     <button type="button" class="duty-role-card duty-tone-${escapeHtml(tone || 'narrator')} duty-role-add-card"
-      data-duty-add="${escapeHtml(id)}" aria-label="${escapeHtml(label)} 인원 추가">
+      data-duty-add="${escapeHtml(id)}" aria-label="${escapeHtml(label)} 인원 추가" title="${escapeHtml(label)} 인원 추가">
       <div class="duty-role-card-top">
         <span class="duty-role-icon" aria-hidden="true">${icon || ''}</span>
         <div class="duty-role-label">${escapeHtml(label)}</div>
       </div>
       <div class="duty-role-add-body">
         <span class="duty-role-add-plus">+</span>
-        <span class="duty-role-add-text">추가</span>
+        <span class="duty-role-add-text">${escapeHtml(label)} 추가</span>
       </div>
     </button>
   `;
@@ -3415,7 +3415,12 @@ function renderDutyAddCard(def) {
 function dutySlotValuesForRole(def, assignments) {
   if (!def.multi) return [assignments[def.id] || ''];
   const ids = Array.isArray(assignments[def.id]) ? assignments[def.id] : [];
-  return ids.length ? ids : [''];
+  const minCount = def.defaultCount || 1;
+  const result = [...ids];
+  while (result.length < minCount) {
+    result.push('');
+  }
+  return result;
 }
 
 function renderDutyRowCards(def, assignments, { canEdit, optionsHtml }) {
@@ -3427,12 +3432,11 @@ function renderDutyRowCards(def, assignments, { canEdit, optionsHtml }) {
 
   const slots = dutySlotValuesForRole(def, assignments);
   if (!canEdit) {
-    const filled = slots.filter(Boolean);
-    if (!filled.length) return renderDutySingleCardView(def, '');
-    return filled.map(pid => renderDutySingleCardView(def, pid)).join('');
+    return slots.map(pid => renderDutySingleCardView(def, pid)).join('');
   }
 
-  const canRemove = slots.length > 1;
+  const minCount = def.defaultCount || 1;
+  const canRemove = slots.length > minCount;
   const cards = slots.map((pid, i) =>
     renderDutySingleCardEdit(def, optionsHtml, pid, i, { multi: true, canRemove })
   ).join('');
@@ -3450,8 +3454,11 @@ function bindDutyMultiEditors(grid, optionsHtml) {
       btn.insertAdjacentHTML('beforebegin',
         renderDutySingleCardEdit(def, optionsHtml, '', index, { multi: true, canRemove: true })
       );
-      // 기존 카드에도 제거 버튼 보이게 재렌더 대신 동기화
-      row.querySelectorAll(`.duty-role-card.is-editable[data-duty-role-card="${CSS.escape(roleId)}"]`).forEach((card, i) => {
+      // 기존 카드에도 제거 버튼 보이게 동기화
+      const allCards = [...row.querySelectorAll(`.duty-role-card.is-editable[data-duty-role-card="${CSS.escape(roleId)}"]`)];
+      const minCount = def.defaultCount || 1;
+      const shouldHaveRemove = allCards.length > minCount;
+      allCards.forEach((card, i) => {
         card.setAttribute('data-duty-multi-index', String(i));
         const sel = card.querySelector('select');
         if (sel && !sel.id.endsWith(`_${i}`)) {
@@ -3459,11 +3466,14 @@ function bindDutyMultiEditors(grid, optionsHtml) {
           const lab = card.querySelector('label.duty-role-label');
           if (lab) lab.setAttribute('for', sel.id);
         }
-        if (!card.querySelector('.duty-multi-remove')) {
+        const existingRemove = card.querySelector('.duty-multi-remove');
+        if (shouldHaveRemove && !existingRemove) {
           const top = card.querySelector('.duty-role-card-top');
           top?.insertAdjacentHTML('beforeend',
             `<button type="button" class="btn btn-secondary btn-sm duty-multi-remove" title="제거" aria-label="${escapeHtml(def.label)} 카드 제거">×</button>`
           );
+        } else if (!shouldHaveRemove && existingRemove) {
+          existingRemove.remove();
         }
       });
       const newSel = btn.previousElementSibling?.querySelector('select');
@@ -3484,8 +3494,10 @@ function bindDutyRemoveButtons(grid) {
       const row = card?.closest('.duty-roster-row');
       const roleId = card?.getAttribute('data-duty-role-card');
       if (!card || !row || !roleId) return;
+      const def = getDutyRoleDef(roleId);
+      const minCount = def?.defaultCount || 1;
       const cards = [...row.querySelectorAll(`.duty-role-card.is-editable[data-duty-role-card="${CSS.escape(roleId)}"]`)];
-      if (cards.length <= 1) {
+      if (cards.length <= minCount) {
         const sel = card.querySelector('select');
         if (sel) {
           sel.value = '';
@@ -3495,6 +3507,7 @@ function bindDutyRemoveButtons(grid) {
       }
       card.remove();
       const left = [...row.querySelectorAll(`.duty-role-card.is-editable[data-duty-role-card="${CSS.escape(roleId)}"]`)];
+      const shouldHaveRemove = left.length > minCount;
       left.forEach((c, i) => {
         c.setAttribute('data-duty-multi-index', String(i));
         const sel = c.querySelector('select');
@@ -3503,7 +3516,7 @@ function bindDutyRemoveButtons(grid) {
           const lab = c.querySelector('label.duty-role-label');
           if (lab) lab.setAttribute('for', sel.id);
         }
-        if (left.length <= 1) c.querySelector('.duty-multi-remove')?.remove();
+        if (!shouldHaveRemove) c.querySelector('.duty-multi-remove')?.remove();
       });
     });
   });
@@ -3521,7 +3534,7 @@ function renderDutyRoster() {
   if (saveBtn) saveBtn.style.display = canEdit ? '' : 'none';
   if (hint) {
     hint.textContent = canEdit
-      ? '관리자만 봉사자를 지정·저장할 수 있습니다. 성가대·현악·밴드는 + 카드로 인원을 늘릴 수 있습니다.'
+      ? '관리자만 봉사자를 지정·저장할 수 있습니다. 반주·성가대·현악·밴드는 + 카드로 인원을 늘릴 수 있습니다.'
       : '조회만 가능합니다. 배정 변경은 관리자에게 요청해 주세요.';
   }
 

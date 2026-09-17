@@ -19,20 +19,21 @@ const DUTY_COLLECTION = 'catechesis_duty_assignments';
  * multi: true → 인원 수 가변 (배열), false → 1명 (문자열 personId)
  */
 export const DUTY_ROLE_DEFS = [
-  { id: '해설', label: '해설', tone: 'narrator', icon: '🎙️', multi: false, row: 'liturgy' },
-  { id: '대복사', label: '대복사', tone: 'server', icon: '🕯️', multi: false, row: 'liturgy' },
-  { id: '소복사', label: '소복사', tone: 'server', icon: '✨', multi: false, row: 'liturgy' },
-  { id: '1독서', label: '1독서', tone: 'reader', icon: '📖', multi: false, row: 'reader' },
-  { id: '2독서', label: '2독서', tone: 'reader', icon: '📗', multi: false, row: 'reader' },
-  { id: '반주', label: '반주', tone: 'music', icon: '🎹', multi: false, row: 'accomp' },
-  { id: '성가대', label: '성가대', tone: 'choir', icon: '🎵', multi: true, row: 'choir' },
-  { id: '현악', label: '현악', tone: 'strings', icon: '🎻', multi: true, row: 'strings' },
-  { id: '밴드', label: '밴드', tone: 'band', icon: '🎸', multi: true, row: 'band' },
+  { id: '해설', label: '해설', tone: 'narrator', icon: '🎙️', multi: false, defaultCount: 1, row: 'narrator' },
+  { id: '대복사', label: '대복사', tone: 'server', icon: '🕯️', multi: false, defaultCount: 1, row: 'servers' },
+  { id: '소복사', label: '소복사', tone: 'server', icon: '✨', multi: false, defaultCount: 1, row: 'servers' },
+  { id: '1독서', label: '1독서', tone: 'reader', icon: '📖', multi: false, defaultCount: 1, row: 'reader' },
+  { id: '2독서', label: '2독서', tone: 'reader', icon: '📗', multi: false, defaultCount: 1, row: 'reader' },
+  { id: '반주', label: '반주', tone: 'music', icon: '🎹', multi: true, defaultCount: 2, row: 'accomp' },
+  { id: '성가대', label: '성가대', tone: 'choir', icon: '🎵', multi: true, defaultCount: 3, row: 'choir' },
+  { id: '현악', label: '현악', tone: 'strings', icon: '🎻', multi: true, defaultCount: 3, row: 'strings' },
+  { id: '밴드', label: '밴드', tone: 'band', icon: '🎸', multi: true, defaultCount: 3, row: 'band' },
 ];
 
-/** 화면 행 순서 (해설·대복사·소복사 / 1·2독서 / 반주 / 성가대 / 현악 / 밴드) */
+/** 화면 행 순서 (해설 / 대복사·소복사 / 1·2독서 / 반주(2) / 성가대(3) / 현악(3) / 밴드(3)) */
 export const DUTY_ROLE_ROWS = [
-  { id: 'liturgy', roleIds: ['해설', '대복사', '소복사'] },
+  { id: 'narrator', roleIds: ['해설'] },
+  { id: 'servers', roleIds: ['대복사', '소복사'] },
   { id: 'reader', roleIds: ['1독서', '2독서'] },
   { id: 'accomp', roleIds: ['반주'] },
   { id: 'choir', roleIds: ['성가대'] },
