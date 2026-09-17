@@ -1995,48 +1995,46 @@ async function renderAdminUsersPage() {
 
         return `
           <article class="mobile-data-card admin-user-card" data-person-id="${escapeHtml(person.id)}">
-            <div class="mobile-card-top">
-              <div>
-                <div class="mobile-card-title">${escapeHtml(person.name || '이름 없음')}</div>
-                <div class="mobile-card-sub">${metaBits || '연락처 미등록'}</div>
+            <div class="admin-person-card-grid">
+              <!-- Left Column: Person & Connection Info (6) -->
+              <div class="admin-person-info-col">
+                <div class="admin-person-header">
+                  <strong class="mobile-card-title">${escapeHtml(person.name || '이름 없음')}</strong>
+                  ${linkBadge}
+                </div>
+                <div class="mobile-card-sub" style="margin-top: 0.2rem;">${metaBits || '연락처 미등록'}</div>
+
+                <div class="admin-user-card-row" style="margin-top: 0.45rem;">
+                  <span class="admin-user-card-label" style="margin:0;">등록 역할</span>
+                  ${personRolesBadgesHtml({ ...person, roles: displayRoles })}
+                </div>
+
+                ${linked ? `
+                  <div class="admin-user-card-row" style="margin-top: 0.45rem;">
+                    <span class="admin-user-card-label" style="margin:0;">연결 계정</span>
+                    <span style="font-size:0.8rem; color:var(--text);">${escapeHtml(linked.displayName || '')} · ${escapeHtml(linked.email || linkedUid)}</span>
+                  </div>
+                  <div class="admin-user-card-inline-approval" style="margin-top: 0.45rem; display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+                    <span class="admin-user-card-label" style="margin:0;">가입 승인</span>
+                    ${approvalSwitchHtml(linkedUid, linkedApproved)}
+                    <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-person-id="${escapeHtml(person.id)}" data-uid="${escapeHtml(linkedUid)}" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">
+                      연결 해제
+                    </button>
+                  </div>
+                ` : ''}
               </div>
-              <div class="mobile-card-side">${linkBadge}</div>
-            </div>
-            <div class="admin-user-card-row">
-              <span class="admin-user-card-label" style="margin:0;">등록 역할</span>
-              ${personRolesBadgesHtml({ ...person, roles: displayRoles })}
-            </div>
-            ${linked ? `
-              <div class="admin-user-card-row">
-                <span class="admin-user-card-label" style="margin:0;">연결된 계정</span>
-                <span style="font-size:0.82rem;">${escapeHtml(linked.displayName || '')} · ${escapeHtml(linked.email || linkedUid)}</span>
+
+              <!-- Right Column: Role Checkboxes (6) -->
+              <div class="admin-person-role-col">
+                <div class="admin-user-card-label" style="margin-bottom: 0.35rem;">역할 (변경 시 자동 저장)</div>
+                <div class="admin-role-checks" data-person-id="${escapeHtml(person.id)}">
+                  ${accountRolesChecksHtml(person.id, displayRoles, {
+                    defaultTeacher: displayRoles.length === 0,
+                    ownerAttr: 'data-person-id',
+                    allowAdmin: false,
+                  })}
+                </div>
               </div>
-              <div class="admin-user-card-block">
-                <div class="admin-user-card-label">가입 승인</div>
-                ${approvalSwitchHtml(linkedUid, linkedApproved)}
-                <p style="font-size:0.75rem; color:var(--text-muted); margin:0.35rem 0 0;">Person 연동과 별개입니다. 켜면 바로 이용 가능합니다.</p>
-              </div>
-            ` : `
-              <p style="font-size:0.8rem; color:var(--text-muted); margin:0.55rem 0 0;">
-                역할은 Person에 저장됩니다. Google 연결은 「2️⃣ Google 가입」탭에서 하세요.
-              </p>
-            `}
-            <div class="admin-user-card-block">
-              <div class="admin-user-card-label">역할 (변경 시 자동 저장)</div>
-              <div class="admin-role-checks" data-person-id="${escapeHtml(person.id)}">
-                ${accountRolesChecksHtml(person.id, displayRoles, {
-                  defaultTeacher: displayRoles.length === 0,
-                  ownerAttr: 'data-person-id',
-                  allowAdmin: false,
-                })}
-              </div>
-            </div>
-            <div class="mobile-card-actions">
-              ${linked && linkedUid ? `
-                <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-person-id="${escapeHtml(person.id)}" data-uid="${escapeHtml(linkedUid)}">
-                  연결 해제
-                </button>
-              ` : ''}
             </div>
           </article>
         `;
@@ -2148,56 +2146,63 @@ async function renderAdminUsersPage() {
 
         return `
           <article class="mobile-data-card admin-user-card" data-uid="${escapeHtml(uid)}">
-            <div class="mobile-card-top">
-              <div>
-                <div class="mobile-card-title">${escapeHtml(u.displayName || '이름 없음')}</div>
-                <div class="mobile-card-sub">${escapeHtml(u.email || uid)}</div>
+            <div class="admin-person-card-grid">
+              <!-- Left Column: Google Account & Approval (6) -->
+              <div class="admin-person-info-col">
+                <div class="admin-person-header">
+                  <strong class="mobile-card-title">${escapeHtml(u.displayName || '이름 없음')}</strong>
+                  ${statusBadge}
+                </div>
+                <div class="mobile-card-sub" style="margin-top: 0.15rem;">${escapeHtml(u.email || uid)} · 신청 ${reqDate}</div>
+
+                <div class="admin-user-card-row" style="margin-top: 0.45rem;">
+                  <span class="badge badge-present" style="font-size:0.75rem;">${escapeHtml(roleSummary)}</span>
+                  ${isAdminRole ? '<span class="badge badge-sacrament" style="font-size:0.75rem;">관리자</span>' : ''}
+                </div>
+
+                <div class="admin-user-card-row" style="margin-top: 0.45rem;">
+                  <span class="admin-user-card-label" style="margin:0;">현재 Person</span>
+                  <span style="font-size:0.82rem; color:var(--text); font-weight:600;">
+                    ${linkedPerson ? `${escapeHtml(linkedPerson.name)}${linkedPerson.baptismalName ? ` (${escapeHtml(linkedPerson.baptismalName)})` : ''}` : '<span style="color:var(--text-muted); font-weight:normal;">미연결</span>'}
+                  </span>
+                </div>
+
+                <div class="admin-user-card-inline-approval" style="margin-top: 0.45rem; display: flex; align-items: center; gap: 0.65rem;">
+                  <span class="admin-user-card-label" style="margin:0;">가입 승인</span>
+                  ${approvalSwitchHtml(uid, isApproved)}
+                </div>
               </div>
-              <div class="mobile-card-side">${statusBadge}</div>
-            </div>
-            <div class="admin-user-card-row">
-              <span class="mobile-card-points">신청 ${reqDate}</span>
-              <span class="badge badge-present" style="font-size:0.72rem;">${escapeHtml(roleSummary)}</span>
-              ${isAdminRole ? '<span class="badge badge-sacrament" style="font-size:0.72rem;">관리자</span>' : ''}
-            </div>
-            ${linkedPerson ? `
-              <div class="admin-user-card-row">
-                <span class="admin-user-card-label" style="margin:0;">현재 Person</span>
-                <span style="font-size:0.82rem;">${escapeHtml(linkedPerson.name)}${linkedPerson.baptismalName ? ` (${escapeHtml(linkedPerson.baptismalName)})` : ''}</span>
+
+              <!-- Right Column: Person Mapping & Admin Settings (6) -->
+              <div class="admin-person-role-col">
+                <div class="admin-user-card-label" style="margin-bottom: 0.3rem;">Person 매핑</div>
+                <select class="admin-person-pick admin-person-link" data-uid="${escapeHtml(uid)}" style="width:100%; margin-bottom: 0.45rem;">
+                  ${personOptionsHtml(u.personId || '')}
+                </select>
+
+                <div style="margin-top: 0.65rem; margin-bottom: 0.65rem;">
+                  <label class="admin-admin-toggle">
+                    <input type="checkbox" class="admin-google-admin-check" data-uid="${escapeHtml(uid)}" ${isAdminRole ? 'checked' : ''} />
+                    <span>관리자 권한 부여</span>
+                  </label>
+                </div>
+
+                <div class="admin-user-card-actions" style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+                  <button type="button" class="btn btn-primary btn-sm btn-save-google-mapping" data-uid="${escapeHtml(uid)}" style="padding: 0.25rem 0.65rem;">
+                    💾 매핑·관리자 저장
+                  </button>
+                  ${u.personId ? `
+                    <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-uid="${escapeHtml(uid)}" style="padding: 0.25rem 0.55rem;">
+                      연결 해제
+                    </button>
+                  ` : ''}
+                  ${!isApproved ? `
+                    <button type="button" class="btn btn-secondary btn-sm btn-reject-user" data-uid="${escapeHtml(uid)}" style="color:#dc2626; padding: 0.25rem 0.55rem;">
+                      거절
+                    </button>
+                  ` : ''}
+                </div>
               </div>
-            ` : ''}
-            <div class="admin-user-card-block">
-              <div class="admin-user-card-label">가입 승인</div>
-              ${approvalSwitchHtml(uid, isApproved)}
-              <p style="font-size:0.75rem; color:var(--text-muted); margin:0.35rem 0 0;">Person 연동과 별개입니다. 스위치를 켜야 사이트 이용이 가능합니다.</p>
-            </div>
-            <div class="admin-user-card-block">
-              <div class="admin-user-card-label">Person 매핑</div>
-              <select class="admin-person-pick admin-person-link" data-uid="${escapeHtml(uid)}">
-                ${personOptionsHtml(u.personId || '')}
-              </select>
-            </div>
-            <div class="admin-user-card-block">
-              <label class="admin-admin-toggle">
-                <input type="checkbox" class="admin-google-admin-check" data-uid="${escapeHtml(uid)}" ${isAdminRole ? 'checked' : ''} />
-                <span>관리자 권한 부여</span>
-              </label>
-              <p style="font-size:0.75rem; color:var(--text-muted); margin:0.35rem 0 0;">학생·신부님 전용 계정에는 관리자를 함께 부여할 수 없습니다.</p>
-            </div>
-            <div class="mobile-card-actions">
-              <button type="button" class="btn btn-primary btn-sm btn-save-google-mapping" data-uid="${escapeHtml(uid)}">
-                💾 매핑·관리자 저장
-              </button>
-              ${u.personId ? `
-                <button type="button" class="btn btn-secondary btn-sm btn-unlink-person-google" data-uid="${escapeHtml(uid)}">
-                  연결 해제
-                </button>
-              ` : ''}
-              ${!isApproved ? `
-                <button type="button" class="btn btn-secondary btn-sm btn-reject-user" data-uid="${escapeHtml(uid)}" style="color:#dc2626;">
-                  거절
-                </button>
-              ` : ''}
             </div>
           </article>
         `;
@@ -3436,11 +3441,11 @@ function renderDutyRowCards(def, assignments, { canEdit, optionsHtml }) {
   }
 
   const minCount = def.defaultCount || 1;
-  const canRemove = slots.length > minCount;
+  const canRemove = !def.fixed && slots.length > minCount;
   const cards = slots.map((pid, i) =>
     renderDutySingleCardEdit(def, optionsHtml, pid, i, { multi: true, canRemove })
   ).join('');
-  return cards + renderDutyAddCard(def);
+  return def.fixed ? cards : cards + renderDutyAddCard(def);
 }
 
 function bindDutyMultiEditors(grid, optionsHtml) {

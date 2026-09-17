@@ -24,7 +24,7 @@ export const DUTY_ROLE_DEFS = [
   { id: '소복사', label: '소복사', tone: 'server', icon: '✨', multi: false, defaultCount: 1, row: 'servers' },
   { id: '1독서', label: '1독서', tone: 'reader', icon: '📖', multi: false, defaultCount: 1, row: 'reader' },
   { id: '2독서', label: '2독서', tone: 'reader', icon: '📗', multi: false, defaultCount: 1, row: 'reader' },
-  { id: '반주', label: '반주', tone: 'music', icon: '🎹', multi: true, defaultCount: 2, row: 'accomp' },
+  { id: '반주', label: '반주', tone: 'music', icon: '🎹', multi: true, defaultCount: 2, fixed: true, row: 'accomp' },
   { id: '성가대', label: '성가대', tone: 'choir', icon: '🎵', multi: true, defaultCount: 3, row: 'choir' },
   { id: '현악', label: '현악', tone: 'strings', icon: '🎻', multi: true, defaultCount: 3, row: 'strings' },
   { id: '밴드', label: '밴드', tone: 'band', icon: '🎸', multi: true, defaultCount: 3, row: 'band' },
