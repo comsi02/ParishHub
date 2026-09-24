@@ -1329,6 +1329,32 @@ function resolveMyFamilyMembers() {
   return { applicant, spouse, children, familyKey, registrationEmail: regEmail || email };
 }
 
+function lockConsentItem(el, isLocked) {
+  if (!el) return;
+  if (isLocked) {
+    el.checked = true;
+    el.disabled = true;
+  }
+  const parent = el.closest('.register-consent-item');
+  if (parent) {
+    if (isLocked) {
+      parent.classList.add('is-locked');
+      if (!parent.querySelector('.consent-locked-tag')) {
+        const titleEl = parent.querySelector('.register-consent-title');
+        if (titleEl) {
+          const tag = document.createElement('span');
+          tag.className = 'consent-locked-tag';
+          tag.textContent = '🔒 동의 완료 (수정 불가)';
+          titleEl.appendChild(tag);
+        }
+      }
+    } else {
+      parent.classList.remove('is-locked');
+      parent.querySelector('.consent-locked-tag')?.remove();
+    }
+  }
+}
+
 function fillMyInfoFormFromFamily(family, { force = false } = {}) {
   if (!family?.applicant) return false;
   const form = document.getElementById('sundaySchoolRegisterForm');
@@ -1377,8 +1403,14 @@ function fillMyInfoFormFromFamily(family, { force = false } = {}) {
     const el = document.querySelector(`[data-reg-consent="${c.id}"]`);
     if (!el) return;
     const v = applicant[c.id];
-    if (typeof v === 'boolean') el.checked = v;
-    else if (v == null && (spouse?.[c.id] != null)) el.checked = Boolean(spouse[c.id]);
+    let isAgreed = false;
+    if (typeof v === 'boolean') isAgreed = v;
+    else if (v == null && (spouse?.[c.id] != null)) isAgreed = Boolean(spouse[c.id]);
+    else if (applicant.photoVideoConsent != null) isAgreed = true;
+
+    if (isAgreed) {
+      lockConsentItem(el, true);
+    }
   });
 
   form.dataset.filledFromFamily = '1';
@@ -1514,6 +1546,12 @@ function renderMyInfo() {
   const badge = document.getElementById('registerStatusBadge');
   const hint = document.getElementById('registerFormHint');
   if (regDone) {
+    REGISTRATION_CONSENTS.forEach(c => {
+      const el = document.querySelector(`[data-reg-consent="${c.id}"]`);
+      if (el) {
+        lockConsentItem(el, true);
+      }
+    });
     if (badge) {
       badge.hidden = false;
       badge.textContent = hasFamily ? '연동 가족 정보 표시 중' : '등록 제출 완료 · 승인 대기';
@@ -5037,12 +5075,12 @@ const SCHEDULE_TYPE_LABELS = {
 };
 
 function canEditSchedule() {
-  return isUserApproved();
+  return isUserAdmin();
 }
 
 function requireScheduleEditPermission(actionLabel = '일정 수정') {
   if (canEditSchedule()) return true;
-  showToast(`🔒 ${actionLabel}은(는) 승인된 교사만 가능합니다. 로그인 후 이용해 주세요.`, '🔒');
+  showToast(`🔒 ${actionLabel}은(는) 관리자만 가능합니다.`, '🔒');
   return false;
 }
 
