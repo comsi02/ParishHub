@@ -400,12 +400,15 @@
         <div class="toolbar">
           <div class="toolbar-group">
             <span style="font-weight: 600; font-size: 0.88rem;">출석 일자 (학사 수업일):</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnAttPrevSchoolDate" aria-label="이전 수업일">← 이전</button>
             <input type="date" id="attDatePicker" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" />
+            <button type="button" class="btn btn-secondary btn-sm" id="btnAttNextSchoolDate" aria-label="다음 수업일">다음 →</button>
           </div>
           <div class="toolbar-group">
             <div class="pill-group" id="attClassFilterGroup" role="group" aria-label="반별 필터">
               <button type="button" class="pill-btn active" data-class-filter="all">전체 반</button>
             </div>
+            <select id="attClassFilterSelect" class="form-control mobile-filter-select" aria-label="출석 반 필터"></select>
           </div>
           <div class="toolbar-group">
             <button class="btn btn-secondary btn-sm" id="btnMarkAllPresent">
@@ -436,7 +439,9 @@
             </div>
             <div class="duty-roster-controls">
               <label class="form-label" for="dutyDateSelect" style="margin:0;">수업일</label>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnDutyPrevSchoolDate" aria-label="이전 수업일">← 이전</button>
               <select id="dutyDateSelect" class="form-control" style="min-width: min(100%, 16rem);"></select>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnDutyNextSchoolDate" aria-label="다음 수업일">다음 →</button>
             </div>
           </div>
           <div id="dutyScheduleMeta" class="duty-schedule-meta"></div>
@@ -560,6 +565,9 @@
               <button class="pill-btn" data-filter="elementary">초등부</button>
               <button class="pill-btn" data-filter="youth">중고등부</button>
             </div>
+            <select id="graceGradeFilterSelect" class="form-control mobile-filter-select" aria-label="은총표 반 필터">
+              <option value="all">전체</option><option value="kinder">유치부</option><option value="elementary">초등부</option><option value="youth">중고등부</option>
+            </select>
           </div>
           <div class="toolbar-group">
             <button class="btn btn-grace" id="btnOpenBonusModal">
@@ -605,6 +613,9 @@
               <button class="pill-btn" data-dir="teachers">✝️ 교사 명부</button>
               <button class="pill-btn" data-dir="classes">🏫 반 구성</button>
             </div>
+            <select id="directoryTabSelect" class="form-control mobile-filter-select" aria-label="명부 필터">
+              <option value="students">학생 명부</option><option value="parents">학부모 명부</option><option value="teachers">교사 명부</option><option value="classes">반 구성</option>
+            </select>
             <input type="text" id="directorySearchInput" class="search-input" placeholder="이름, 세례명 검색..." />
           </div>
           <div class="toolbar-group" id="directoryActionBtns">
@@ -797,6 +808,10 @@
                 </div>
               </div>
             </div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-card-header"><div><h3 class="stats-card-title">🎓 Grade별 출석률 비교</h3><p class="stats-card-sub">학년별 시즌 평균 출석률</p></div></div>
+            <div class="stats-card-body"><div class="class-ranking-list" id="gradeRankingList"></div></div>
           </div>
 
           <!-- Class Comparison Ranking Chart -->

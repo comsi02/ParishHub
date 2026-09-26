@@ -539,6 +539,8 @@ body {
 }
 
 .pill-group { display: inline-flex; background: var(--surface-subtle); padding: 0.2rem; border-radius: var(--radius-full); border: 1.5px solid var(--border); }
+.mobile-filter-select { display: none; }
+.mobile-filter-searchable { display: none; }
 .pill-btn { background: none; border: none; padding: 0.3rem 0.9rem; border-radius: var(--radius-full); font-size: 0.82rem; font-weight: 700; color: var(--text-muted); cursor: pointer; transition: var(--transition); font-family: 'Noto Sans KR', sans-serif; }
 .pill-btn.active { background: var(--primary); color: white; box-shadow: 0 2px 6px rgba(43,84,126,0.25); }
 
@@ -2604,7 +2606,7 @@ body {
   grid-template-columns: 1fr 1fr;
   grid-template-areas:
     "principal youth"
-    "vice ." ;
+    "vice .";
   gap: 0 2rem;
   align-items: start;
   width: 100%;
@@ -2757,6 +2759,8 @@ body {
 }
 
 @media (max-width: 767px) {
+  .mobile-filter-searchable { display: block; width: 100%; }
+  #attClassFilterGroup, #graceGradeFilter, #directoryTabSwitch { display: none !important; }
   .org-chart { padding: 0.85rem 0.5rem 1rem; }
   .org-branch { width: 90%; }
   .org-branch-bar { width: 62%; }
@@ -2775,7 +2779,7 @@ body {
     grid-template-columns: 1fr 1fr;
     grid-template-areas:
       "principal youth"
-      "vice ." ;
+      "vice .";
     gap: 0 0.5rem;
     width: 100%;
     max-width: 100%;

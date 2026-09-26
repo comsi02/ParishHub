@@ -440,6 +440,12 @@ function getClassGradeSortOrder(cls) {
   return Math.min(...grades.map(g => GRADE_SORT_MAP[g] ?? 99));
 }
 
+function bindMobileSearchFilter(select, placeholder) {
+  if (!select) return;
+  const state = bindSearchableSelect(select, { placeholder });
+  state?.wrap.classList.add('mobile-filter-searchable');
+}
+
 function syncAttendanceClassFilterPills() {
   const group = document.getElementById('attClassFilterGroup');
   if (!group) return;
@@ -464,6 +470,26 @@ function syncAttendanceClassFilterPills() {
       return `<button type="button" class="pill-btn${currentAttClassFilter === c.id ? ' active' : ''}" data-class-filter="${escapeHtml(c.id)}">${escapeHtml(c.name || '반')} (${count})</button>`;
     }),
   ].join('');
+  const select = document.getElementById('attClassFilterSelect');
+  if (select) {
+    select.innerHTML = '<option value="all">전체 반</option>' + classes.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name || '반')}</option>`).join('');
+    select.value = currentAttClassFilter;
+    bindMobileSearchFilter(select, '반 이름 검색...');
+  }
+}
+
+function shiftToSchoolDate(dateInputId, direction) {
+  const input = document.getElementById(dateInputId);
+  if (!input) return;
+  const dates = dataProvider.getSchoolDates().slice().sort();
+  if (!dates.length) { showToast('등록된 학사 수업일이 없습니다.', '📅'); return; }
+  const current = input.value;
+  const index = dates.indexOf(current);
+  const next = index < 0
+    ? (direction > 0 ? dates.find(d => d > current) || dates[dates.length - 1] : dates.filter(d => d < current).pop() || dates[0])
+    : dates[Math.max(0, Math.min(dates.length - 1, index + direction))];
+  input.value = next;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 // 역할 한글 레이블 목록 (복수 역할 대응)
@@ -3843,6 +3869,16 @@ function fillDutyDateSelect(preferredDate = '') {
   else sel.value = dates[0];
 }
 
+function shiftDutySchoolDate(direction) {
+  const sel = document.getElementById('dutyDateSelect');
+  if (!sel) return;
+  const dates = dataProvider.getSchoolDates().slice().sort();
+  if (!dates.length) { showToast('등록된 학사 수업일이 없습니다.', '📅'); return; }
+  const index = dates.indexOf(sel.value);
+  sel.value = dates[Math.max(0, Math.min(dates.length - 1, (index < 0 ? dates.findIndex(d => d >= preferredDutySchoolDate()) : index) + direction))];
+  renderDutyRoster();
+}
+
 function normalizeDutyAssignmentsMap(raw = {}) {
   const out = emptyDutyAssignments();
   DUTY_ROLE_DEFS.forEach(({ id }) => {
@@ -4194,6 +4230,11 @@ function renderGraceBank() {
   }
   if (protectedEl) protectedEl.style.display = '';
   if (lockedEl) lockedEl.style.display = 'none';
+  const graceSelect = document.getElementById('graceGradeFilterSelect');
+  if (graceSelect) {
+    graceSelect.value = currentGraceGradeFilter;
+    bindMobileSearchFilter(graceSelect, '부서 검색...');
+  }
 
   const openBonusBtn = document.getElementById('btnOpenBonusModal');
   if (openBonusBtn) openBonusBtn.style.display = isUserAdmin() ? '' : 'none';
@@ -4986,6 +5027,20 @@ function renderStats() {
     }
   }
 
+  const gradeRankingList = document.getElementById('gradeRankingList');
+  if (gradeRankingList) {
+    const students = dataProvider.getStudents();
+    const statSchoolDates = new Set(stats.weeklyHistory.map(w => w.date));
+    const gradeStats = Object.keys(GRADE_SORT_MAP).map(grade => {
+      const gradeStudents = students.filter(s => s.studentInfo?.grade === grade);
+      const ids = new Set(gradeStudents.map(s => s.id));
+      const present = dataProvider.getAttendanceBySeason(selectedSeason).filter(a => statSchoolDates.has(a.date) && ids.has(a.studentPersonId || a.studentId) && a.status === '출석').length;
+      const possible = stats.totalWeeks * gradeStudents.length;
+      return { grade, count: gradeStudents.length, rate: possible ? Math.round(present / possible * 1000) / 10 : 0 };
+    }).filter(g => g.count).sort((a, b) => (GRADE_SORT_MAP[a.grade] ?? 99) - (GRADE_SORT_MAP[b.grade] ?? 99));
+    gradeRankingList.innerHTML = gradeStats.length ? gradeStats.map(g => `<div class="class-rank-item"><div class="class-rank-header"><span>${escapeHtml(g.grade)} <small>(${g.count}명)</small></span><strong>${g.rate}%</strong></div><div class="class-rank-bar-bg"><div class="class-rank-bar-fill" style="width:${g.rate}%;"></div></div></div>`).join('') : '<p style="color:var(--text-muted);font-size:.85rem">등록된 학년이 없습니다.</p>';
+  }
+
   // 6. Honor Students List (개근 & 정근)
   const honorList = document.getElementById('honorStudentsList');
   if (honorList) {
@@ -5393,6 +5448,11 @@ document.querySelectorAll('#directoryTabSwitch .pill-btn').forEach(btn => {
     document.querySelectorAll('#directoryTabSwitch .pill-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentDirectoryView = btn.getAttribute('data-dir');
+    const directorySelect = document.getElementById('directoryTabSelect');
+    if (directorySelect) {
+      directorySelect.value = currentDirectoryView;
+      bindSearchableSelect(directorySelect).syncFromSelect();
+    }
 
     // 컨테이너 표시/숨김
     const containers = {
@@ -5411,6 +5471,10 @@ document.querySelectorAll('#directoryTabSwitch .pill-btn').forEach(btn => {
     renderDirectory();
   });
 });
+document.getElementById('directoryTabSelect')?.addEventListener('change', (e) => {
+  document.querySelector(`#directoryTabSwitch [data-dir="${CSS.escape(e.target.value)}"]`)?.click();
+});
+bindMobileSearchFilter(document.getElementById('directoryTabSelect'), '명부 종류 검색...');
 
 // Date pickers
 const attDatePicker = document.getElementById('attDatePicker');
@@ -5428,6 +5492,14 @@ document.getElementById('attClassFilterGroup')?.addEventListener('click', (e) =>
   currentAttClassFilter = btn.getAttribute('data-class-filter') || 'all';
   renderAttendance();
 });
+document.getElementById('attClassFilterSelect')?.addEventListener('change', (e) => {
+  currentAttClassFilter = e.target.value || 'all';
+  renderAttendance();
+});
+document.getElementById('btnAttPrevSchoolDate')?.addEventListener('click', () => shiftToSchoolDate('attDatePicker', -1));
+document.getElementById('btnAttNextSchoolDate')?.addEventListener('click', () => shiftToSchoolDate('attDatePicker', 1));
+document.getElementById('btnDutyPrevSchoolDate')?.addEventListener('click', () => shiftDutySchoolDate(-1));
+document.getElementById('btnDutyNextSchoolDate')?.addEventListener('click', () => shiftDutySchoolDate(1));
 
 // Grace bank grade filter
 document.querySelectorAll('#graceGradeFilter .pill-btn').forEach(btn => {
@@ -5437,6 +5509,11 @@ document.querySelectorAll('#graceGradeFilter .pill-btn').forEach(btn => {
     currentGraceGradeFilter = btn.getAttribute('data-filter');
     renderGraceBank();
   });
+});
+document.getElementById('graceGradeFilterSelect')?.addEventListener('change', (e) => {
+  currentGraceGradeFilter = e.target.value || 'all';
+  document.querySelectorAll('#graceGradeFilter .pill-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === currentGraceGradeFilter));
+  renderGraceBank();
 });
 
 document.getElementById('graceSearchInput')?.addEventListener('input', () => renderGraceBank());
