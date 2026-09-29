@@ -1,0 +1,9 @@
+{
+  "name": "church-daily-mass-functions",
+  "private": true,
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "dependencies": {
+    "firebase-functions": "^6.0.0"
+  }
+}

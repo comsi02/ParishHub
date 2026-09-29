@@ -1,0 +1,17 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default"
+    }
+  ],
+  "hosting": {
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/api/cbck/**", "function": "missaApi" },
+      { "source": "/api/missa/**", "function": "missaApi" },
+      { "source": "**", "destination": "/index.html" }
+    ]
+  }
+}

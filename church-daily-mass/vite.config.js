@@ -14,6 +14,13 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/cbck/, ''),
       },
+      // Firebase Function과 같은 URL을 개발 시에는 CBCK 상세 HTML로 전달합니다.
+      // 브라우저의 detailService가 이 HTML을 JSON과 같은 형태로 임시 파싱합니다.
+      '/api/missa': {
+        target: 'https://missa.cbck.or.kr',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/missa/, '/DailyMissa'),
+      },
     },
   },
 });

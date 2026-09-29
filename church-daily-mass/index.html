@@ -44,6 +44,15 @@
       <p>성경 말씀 출처: <a href="https://missa.cbck.or.kr" target="_blank" rel="noreferrer">한국천주교주교회의 매일미사</a></p>
       <p>매일미사 © 한국천주교중앙협의회 · 본 서비스는 원문 링크를 제공합니다.</p>
     </footer>
+    <dialog id="readingDialog" class="reading-dialog" aria-labelledby="detailTitle">
+      <div class="dialog-header">
+        <div><p id="detailDate" class="dialog-date"></p><h2 id="detailTitle">미사 말씀</h2></div>
+        <button id="closeDialog" class="close-dialog" type="button" aria-label="닫기">×</button>
+      </div>
+      <div id="detailStatus" class="detail-status">말씀 본문을 불러오는 중입니다.</div>
+      <div id="detailReadings"></div>
+      <a id="detailSource" class="detail-source" href="#" target="_blank" rel="noreferrer">한국천주교주교회의 원문 보기 ↗</a>
+    </dialog>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
