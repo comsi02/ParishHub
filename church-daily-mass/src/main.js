@@ -7,6 +7,18 @@ const weekLabelElement = document.querySelector('#weekLabel');
 const today = toKstDateString(new Date());
 let selectedWeek = startOfWeek();
 const dialog = document.querySelector('#readingDialog');
+const fontSizeButtons = document.querySelectorAll('[data-font-size]');
+const fontSizeStorageKey = 'church-daily-mass-font-size';
+const fontSizeOptions = ['grade3', 'grade4', 'grade5', 'grade6', 'grade7'];
+
+function setFontSize(size) {
+  const selectedSize = fontSizeOptions.includes(size) ? size : 'grade4';
+  document.documentElement.dataset.fontSize = selectedSize;
+  fontSizeButtons.forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.fontSize === selectedSize));
+  });
+  localStorage.setItem(fontSizeStorageKey, selectedSize);
+}
 
 function formatWeek(date) {
   const end = addDays(date, 6);
@@ -43,12 +55,15 @@ async function openDetail(date) {
     document.querySelector('#detailDate').textContent = missa.dateText || date;
     document.querySelector('#detailTitle').textContent = missa.title || '미사 말씀';
     document.querySelector('#detailSource').href = missa.sourceUrl;
-    detailReadings.innerHTML = missa.readings.map((reading) => `<article class="detail-reading">
+    const visibleReadings = missa.readings
+      .map((reading) => ({ ...reading, text: removeDuplicateSubtitle(reading.text, reading.subtitle, reading.type) }))
+      .filter((reading) => reading.text);
+    detailReadings.innerHTML = visibleReadings.map((reading) => `<article class="detail-reading">
       <p class="detail-type">${escapeHtml(reading.type)} ${reading.reference ? `<span>${escapeHtml(reading.reference)}</span>` : ''}</p>
       ${reading.subtitle ? `<h3>${escapeHtml(reading.subtitle)}</h3>` : ''}
       <p class="detail-text">${escapeHtml(reading.text)}</p>
     </article>`).join('');
-    if (!missa.readings.length) throw new Error('독서와 복음을 찾지 못했습니다.');
+    if (!visibleReadings.length) throw new Error('독서와 복음을 찾지 못했습니다.');
     detailStatus.hidden = true;
   } catch (error) {
     detailStatus.textContent = '본문을 불러오지 못했습니다. 아래 원문 링크에서 확인해 주세요.';
@@ -58,6 +73,27 @@ async function openDetail(date) {
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+}
+
+function removeDuplicateSubtitle(text, subtitle, type = '') {
+  const normalizedSubtitle = normalizeText(subtitle);
+  if (!normalizedSubtitle) return text;
+  const duplicateTitles = new Set([
+    normalizedSubtitle,
+    normalizeText(`${type} ${subtitle}`),
+    normalizeText(`${type}: ${subtitle}`),
+    normalizeText(`${String(type).replace(/^제/, '')} ${subtitle}`),
+  ]);
+
+  return String(text)
+    .split('\n')
+    .filter((line) => !duplicateTitles.has(normalizeText(line)))
+    .join('\n')
+    .trim();
+}
+
+function normalizeText(value) {
+  return String(value).replace(/\s+/g, ' ').trim();
 }
 
 async function loadWeek() {
@@ -90,5 +126,9 @@ readingsElement.addEventListener('click', (event) => {
 });
 document.querySelector('#closeDialog').addEventListener('click', () => dialog.close());
 dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+fontSizeButtons.forEach((button) => {
+  button.addEventListener('click', () => setFontSize(button.dataset.fontSize));
+});
 
+setFontSize(localStorage.getItem(fontSizeStorageKey));
 loadWeek();
