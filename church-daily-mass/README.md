@@ -30,9 +30,10 @@ Firebase CLI 로그인 및 프로젝트 연결 후 다음 순서로 배포합니
 ```bash
 npm install
 (cd functions && npm install)
-npm run build
-firebase deploy
+npm run deploy
 ```
+
+`npm run deploy`는 프런트엔드 빌드 후 Firebase Hosting, Cloud Functions, Firestore 보안 규칙을 함께 배포합니다. Firebase CLI가 설치되어 있지 않다면 먼저 `npm install -g firebase-tools`를 실행하세요.
 
 첫 배포 전 Firebase Console에서 프로젝트의 **Cloud Firestore 데이터베이스를 Native mode로 생성**하세요. Firestore 사용량(문서 읽기·쓰기)에는 Firebase 요금제가 적용될 수 있습니다.
 
