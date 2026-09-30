@@ -46,14 +46,14 @@ async function openDetail(date) {
   const detailReadings = document.querySelector('#detailReadings');
   dialog.showModal();
   document.querySelector('#detailDate').textContent = date;
-  document.querySelector('#detailTitle').textContent = '미사 말씀';
+  document.querySelector('#detailTitle').textContent = '전례';
   detailReadings.innerHTML = '';
   detailStatus.hidden = false;
   detailStatus.textContent = '말씀 본문을 불러오는 중입니다.';
   try {
     const missa = await getMissaDetail(date);
     document.querySelector('#detailDate').textContent = missa.dateText || date;
-    document.querySelector('#detailTitle').textContent = missa.title || '미사 말씀';
+    document.querySelector('#detailTitle').textContent = missa.title || '전례';
     document.querySelector('#detailSource').href = missa.sourceUrl;
     const visibleReadings = missa.readings
       .map((reading) => ({ ...reading, text: removeDuplicateSubtitle(reading.text, reading.subtitle, reading.type) }))
@@ -129,6 +129,10 @@ dialog.addEventListener('click', (event) => { if (event.target === dialog) dialo
 fontSizeButtons.forEach((button) => {
   button.addEventListener('click', () => setFontSize(button.dataset.fontSize));
 });
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+}
 
 setFontSize(localStorage.getItem(fontSizeStorageKey));
 loadWeek();

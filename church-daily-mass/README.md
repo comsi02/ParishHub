@@ -1,4 +1,4 @@
-# 이번 주 미사 말씀
+# 이번 주 전례
 
 한국천주교주교회의 매일미사 월별 JSON 데이터(`MissaLoad`)를 읽어, 일요일부터 토요일까지의 독서·복음 성경 구절을 보여주는 Vite 앱입니다.
 
@@ -38,6 +38,13 @@ npm run deploy
 첫 배포 전 Firebase Console에서 프로젝트의 **Cloud Firestore 데이터베이스를 Native mode로 생성**하세요. Firestore 사용량(문서 읽기·쓰기)에는 Firebase 요금제가 적용될 수 있습니다.
 
 목록과 상세 본문은 같은 Firebase Hosting의 `/api/cbck/MissaLoad`, `/api/missa/YYYYMMDD`로 자동 요청됩니다. 별도 환경 변수 없이 사용할 수 있습니다.
+
+## 스마트폰 홈 화면에 추가
+
+Firebase Hosting에 배포한 HTTPS 주소를 휴대폰에서 연 뒤 홈 화면에 추가하면 독립 실행 앱처럼 열립니다.
+
+- iPhone Safari: 공유 버튼 → **홈 화면에 추가**
+- Android Chrome: 메뉴(⋮) → **앱 설치** 또는 **홈 화면에 추가**
 
 화면의 모든 카드에는 공식 원문 링크가 남아 있어, 데이터 조회가 실패해도 사용자가 원문을 확인할 수 있습니다.
 

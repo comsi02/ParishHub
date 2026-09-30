@@ -5,15 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#123a63" />
     <meta name="description" content="천주교 매일미사 주간 성경 말씀 안내" />
-    <title>이번 주 미사 말씀 | 런던 한인성당</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/app-icon.svg" />
+    <title>이번 주 전례 | 런던 한인성당</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <header class="site-header">
       <div class="header-inner">
-        <a class="brand" href="/" aria-label="이번 주 미사 말씀 첫 화면">
+        <a class="brand" href="/" aria-label="이번 주 전례 첫 화면">
           <span class="cross" aria-hidden="true">✝</span>
-          <span><strong>런던 한인성당</strong><small>WEEKLY MASS READINGS</small></span>
+          <span><strong>런던 한인성당</strong><small>WEEKLY LITURGY OF THE WORD</small></span>
         </a>
         <a class="source-link" href="https://missa.cbck.or.kr" target="_blank" rel="noreferrer">매일미사 원문 ↗</a>
       </div>
@@ -22,7 +26,7 @@
     <main class="page-shell">
       <section class="hero" aria-labelledby="page-title">
         <p class="eyebrow">✦ 말씀과 함께하는 한 주</p>
-        <h1 id="page-title">이번 주 미사 성경 말씀</h1>
+        <h1 id="page-title">이번 주 전례</h1>
         <p id="weekLabel" class="week-label" aria-live="polite">말씀을 불러오는 중입니다.</p>
         <div class="week-controls" aria-label="주간 이동">
           <button id="previousWeek" type="button">← 이전 주</button>
@@ -37,7 +41,7 @@
       </section>
 
       <section id="status" class="status" aria-live="polite">공식 매일미사 자료를 불러오는 중입니다.</section>
-      <section id="readings" class="readings-grid" aria-label="주간 미사 말씀"></section>
+      <section id="readings" class="readings-grid" aria-label="주간 전례"></section>
     </main>
 
     <nav class="font-size-menu" aria-label="글씨 크기 선택">
@@ -56,7 +60,7 @@
     </footer>
     <dialog id="readingDialog" class="reading-dialog" aria-labelledby="detailTitle">
       <div class="dialog-header">
-        <div><p id="detailDate" class="dialog-date"></p><h2 id="detailTitle">미사 말씀</h2></div>
+        <div><p id="detailDate" class="dialog-date"></p><h2 id="detailTitle">전례</h2></div>
         <button id="closeDialog" class="close-dialog" type="button" aria-label="닫기">×</button>
       </div>
       <div id="detailStatus" class="detail-status">말씀 본문을 불러오는 중입니다.</div>

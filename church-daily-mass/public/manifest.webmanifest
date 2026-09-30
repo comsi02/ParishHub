@@ -1,0 +1,18 @@
+{
+  "name": "이번 주 전례 | 런던 한인성당",
+  "short_name": "이번 주 전례",
+  "description": "런던 한인성당의 주간 전례 안내",
+  "lang": "ko",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf8f2",
+  "theme_color": "#123a63",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
