@@ -1,7 +1,13 @@
 const { onRequest } = require('firebase-functions/v2/https');
 const { logger } = require('firebase-functions');
+const { getApps, initializeApp } = require('firebase-admin/app');
+const { FieldValue, getFirestore } = require('firebase-admin/firestore');
 
 const CBCK_ORIGIN = 'https://missa.cbck.or.kr';
+const CACHE_COLLECTION = 'dailyMissaCache';
+
+if (!getApps().length) initializeApp();
+const database = getFirestore();
 
 /**
  * GET /api/missa/20261004
@@ -19,6 +25,12 @@ exports.missaApi = onRequest({ region: 'northamerica-northeast1', timeoutSeconds
   if (!date || !isValidDate(date)) return response.status(400).json({ error: 'YYYYMMDD 형식의 유효한 날짜가 필요합니다.' });
 
   try {
+    const cached = await database.collection(CACHE_COLLECTION).doc(date).get();
+    if (cached.exists) {
+      response.set('Cache-Control', 'public, max-age=3600, s-maxage=21600');
+      return response.json({ ...cached.data(), cache: 'firestore' });
+    }
+
     const upstream = await fetch(`${CBCK_ORIGIN}/DailyMissa/${date}`, {
       headers: { 'User-Agent': 'ParishHub weekly-mass reader (official-source link preserved)' },
     });
@@ -26,8 +38,13 @@ exports.missaApi = onRequest({ region: 'northamerica-northeast1', timeoutSeconds
 
     const missa = parseMissaHtml(await upstream.text(), date);
     if (!missa.readings.length) throw new Error('독서·복음 영역을 찾지 못했습니다.');
+    await database.collection(CACHE_COLLECTION).doc(date).set({
+      ...missa,
+      cachedAt: FieldValue.serverTimestamp(),
+      schemaVersion: 1,
+    });
     response.set('Cache-Control', 'public, max-age=3600, s-maxage=21600');
-    return response.json(missa);
+    return response.json({ ...missa, cache: 'source' });
   } catch (error) {
     logger.error('CBCK missa proxy failed', { date, error: error.message });
     return response.status(502).json({ error: '공식 매일미사 자료를 불러오지 못했습니다.' });

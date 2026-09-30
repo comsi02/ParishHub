@@ -15,6 +15,8 @@ npm run dev
 
 `firebase.json`과 `functions/`에 Firebase Hosting용 프록시가 포함되어 있습니다. 이는 공식 서버가 브라우저 CORS 헤더를 반환하지 않는 문제를 해결하며, 상세 HTML에서 제1독서·제2독서·복음 본문을 파싱해 JSON으로 전달합니다.
 
+상세 원문은 처음 요청될 때 `dailyMissaCache/YYYYMMDD` Firestore 문서에 저장됩니다. 이후 모든 사용자는 공식 사이트를 다시 요청하지 않고 이 공유 캐시를 받습니다. 캐시는 Cloud Function만 읽고 쓸 수 있으며, 브라우저의 Firestore 직접 접근은 차단됩니다.
+
 ```
 GET /api/cbck/MissaLoad?start=YYYY-MM-DD&end=YYYY-MM-DD
 → https://missa.cbck.or.kr/MissaLoad?start=YYYY-MM-DD&end=YYYY-MM-DD
@@ -31,6 +33,8 @@ npm install
 npm run build
 firebase deploy
 ```
+
+첫 배포 전 Firebase Console에서 프로젝트의 **Cloud Firestore 데이터베이스를 Native mode로 생성**하세요. Firestore 사용량(문서 읽기·쓰기)에는 Firebase 요금제가 적용될 수 있습니다.
 
 목록과 상세 본문은 같은 Firebase Hosting의 `/api/cbck/MissaLoad`, `/api/missa/YYYYMMDD`로 자동 요청됩니다. 별도 환경 변수 없이 사용할 수 있습니다.
 

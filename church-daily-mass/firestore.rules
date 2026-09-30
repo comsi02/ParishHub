@@ -1,0 +1,10 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 원문 캐시는 Cloud Function(Admin SDK)만 접근합니다.
+    match /dailyMissaCache/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
