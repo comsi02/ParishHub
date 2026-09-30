@@ -1,0 +1,18 @@
+{
+  "name": "런던 한인성당 전례 제어",
+  "short_name": "전례 제어",
+  "description": "런던 한인성당 전례 진행 제어 도구",
+  "lang": "ko",
+  "start_url": "/control",
+  "display": "standalone",
+  "background_color": "#6e3b62",
+  "theme_color": "#6e3b62",
+  "icons": [
+    {
+      "src": "/icons/control-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
