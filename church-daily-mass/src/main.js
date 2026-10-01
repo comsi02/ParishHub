@@ -4,12 +4,15 @@ import { getMissaDetail } from './detailService.js';
 const readingsElement = document.querySelector('#readings');
 const statusElement = document.querySelector('#status');
 const weekLabelElement = document.querySelector('#weekLabel');
+const weekLoadingElement = document.querySelector('#weekLoading');
 const today = toKstDateString(new Date());
 let selectedWeek = startOfWeek();
 const dialog = document.querySelector('#readingDialog');
 const fontSizeButtons = document.querySelectorAll('[data-font-size]');
 const fontSizeStorageKey = 'church-daily-mass-font-size';
-const fontSizeOptions = ['grade3', 'grade4', 'grade5', 'grade6', 'grade7'];
+const fontSizeOptions = ['grade3', 'grade4', 'grade5', 'grade6'];
+const themeToggle = document.querySelector('#themeToggle');
+const themeStorageKey = 'church-daily-mass-theme';
 
 function setFontSize(size) {
   const selectedSize = fontSizeOptions.includes(size) ? size : 'grade4';
@@ -20,10 +23,25 @@ function setFontSize(size) {
   localStorage.setItem(fontSizeStorageKey, selectedSize);
 }
 
+function setTheme(theme) {
+  const selectedTheme = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = selectedTheme;
+  const isDark = selectedTheme === 'dark';
+  themeToggle.setAttribute('aria-pressed', String(isDark));
+  themeToggle.setAttribute('aria-label', isDark ? '라이트 모드로 전환' : '다크 모드로 전환');
+  themeToggle.title = isDark ? '라이트 모드로 전환' : '다크 모드로 전환';
+  document.querySelector('meta[name="theme-color"]').content = isDark ? '#111c2b' : '#123a63';
+  localStorage.setItem(themeStorageKey, selectedTheme);
+}
+
 function formatWeek(date) {
   const end = addDays(date, 6);
   const formatter = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric' });
   return `${formatter.format(date)} – ${formatter.format(end)}`;
+}
+
+function setWeekLoading(isLoading) {
+  weekLoadingElement.hidden = !isLoading;
 }
 
 function renderReadings(readings) {
@@ -98,9 +116,9 @@ function normalizeText(value) {
 
 async function loadWeek() {
   weekLabelElement.textContent = `${formatWeek(selectedWeek)} 주간`;
-  statusElement.hidden = false;
+  statusElement.hidden = true;
   statusElement.className = 'status';
-  statusElement.textContent = '공식 매일미사 자료를 불러오는 중입니다.';
+  setWeekLoading(true);
   readingsElement.setAttribute('aria-busy', 'true');
   try {
     renderReadings(await getWeekReadings(selectedWeek));
@@ -111,6 +129,7 @@ async function loadWeek() {
     statusElement.innerHTML = `말씀을 불러오지 못했습니다. <a href="https://missa.cbck.or.kr" target="_blank" rel="noreferrer">매일미사 원문에서 확인하기 ↗</a>`;
     console.error(error);
   } finally {
+    setWeekLoading(false);
     readingsElement.removeAttribute('aria-busy');
   }
 }
@@ -129,10 +148,12 @@ dialog.addEventListener('click', (event) => { if (event.target === dialog) dialo
 fontSizeButtons.forEach((button) => {
   button.addEventListener('click', () => setFontSize(button.dataset.fontSize));
 });
+themeToggle.addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
 }
 
 setFontSize(localStorage.getItem(fontSizeStorageKey));
+setTheme(localStorage.getItem(themeStorageKey));
 loadWeek();

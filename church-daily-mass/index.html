@@ -10,6 +10,11 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/app-icon.svg" />
     <title>이번 주 전례 | 런던 한인성당</title>
+    <script>
+      if (localStorage.getItem('church-daily-mass-theme') === 'dark') {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    </script>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
@@ -17,9 +22,9 @@
       <div class="header-inner">
         <a class="brand" href="/" aria-label="이번 주 전례 첫 화면">
           <span class="cross" aria-hidden="true">✝</span>
-          <span><strong>런던 한인성당</strong><small>WEEKLY LITURGY OF THE WORD</small></span>
+          <span><strong>런던 한인성당</strong></span>
         </a>
-        <a class="source-link" href="https://missa.cbck.or.kr" target="_blank" rel="noreferrer">매일미사 원문 ↗</a>
+        <a class="source-link" href="https://missa.cbck.or.kr" target="_blank" rel="noreferrer">매일미사 ↗</a>
       </div>
     </header>
 
@@ -27,7 +32,7 @@
       <section class="hero" aria-labelledby="page-title">
         <p class="eyebrow">✦ 말씀과 함께하는 한 주</p>
         <h1 id="page-title">이번 주 전례</h1>
-        <p id="weekLabel" class="week-label" aria-live="polite">말씀을 불러오는 중입니다.</p>
+        <p id="weekLabel" class="week-label" aria-live="polite"></p>
         <div class="week-controls" aria-label="주간 이동">
           <button id="previousWeek" type="button">← 이전 주</button>
           <button id="todayWeek" type="button" class="today-button">이번 주</button>
@@ -40,17 +45,24 @@
         <p>주일 미사의 독서와 복음을 한눈에 확인하세요. 각 날짜를 누르면 한국천주교주교회의 매일미사 원문으로 이동합니다.</p>
       </section>
 
-      <section id="status" class="status" aria-live="polite">공식 매일미사 자료를 불러오는 중입니다.</section>
+      <section id="status" class="status" aria-live="polite" hidden></section>
       <section id="readings" class="readings-grid" aria-label="주간 전례"></section>
     </main>
+
+    <div id="weekLoading" class="loading-overlay" role="status" aria-live="polite" aria-label="전례 정보를 불러오는 중입니다.">
+      <div class="loading-mark" aria-hidden="true"><span>✝</span></div>
+    </div>
 
     <nav class="font-size-menu" aria-label="글씨 크기 선택">
       <div class="font-size-options" role="group" aria-label="글씨 크기 단계">
         <button type="button" data-font-size="grade3" aria-label="G3, 30대용 글씨 크기">G3</button>
         <button type="button" data-font-size="grade4" aria-label="G4, 40대용 글씨 크기">G4</button>
         <button type="button" data-font-size="grade5" aria-label="G5, 50대용 글씨 크기">G5</button>
-        <button type="button" data-font-size="grade6" aria-label="G6, 60대용 글씨 크기">G6</button>
-        <button type="button" data-font-size="grade7" aria-label="G7+, 70대 이상용 글씨 크기">G7+</button>
+        <button type="button" data-font-size="grade6" aria-label="G6+, 60대 이상용 글씨 크기">G6+</button>
+        <button id="themeToggle" class="theme-toggle" type="button" aria-label="다크 모드로 전환" aria-pressed="false" title="다크 모드로 전환">
+          <span class="theme-icon theme-icon-light" aria-hidden="true">☼</span>
+          <span class="theme-icon theme-icon-dark" aria-hidden="true">☾</span>
+        </button>
       </div>
     </nav>
 
