@@ -12,17 +12,8 @@
   <link rel="apple-touch-icon" href="/icons/display-icon.svg">
   <script src="/register-sw.js"></script>
   <script>
-    // Simple router
-    document.addEventListener('DOMContentLoaded', () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const page = urlParams.get('page') || 'display';
-      
-      if (page === 'control') {
-        window.location.href = '/control.html';
-      } else {
-        window.location.href = '/display.html';
-      }
-    });
+    // 루트 주소는 항상 표시 화면의 공개 URL로 보냅니다.
+    window.location.replace('/display');
   </script>
 </head>
 <body>
