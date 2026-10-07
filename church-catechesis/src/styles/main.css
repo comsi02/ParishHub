@@ -2247,6 +2247,13 @@ body {
   color: var(--text-muted);
   min-height: 1.2rem;
 }
+.registration-preview-list { display: grid; gap: 0.55rem; margin-top: 0.65rem; }
+.registration-preview-family { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-subtle); color: var(--text-main); }
+.registration-preview-family summary { padding: 0.6rem 0.7rem; font-weight: 700; cursor: pointer; }
+.registration-preview-family-body { display: grid; gap: 0.45rem; padding: 0 0.7rem 0.7rem; }
+.registration-preview-meta, .registration-preview-consents { color: var(--text-muted); font-size: 0.76rem; line-height: 1.55; }
+.registration-preview-person, .registration-preview-child { display: grid; gap: 0.15rem; padding: 0.5rem 0.6rem; border-radius: 6px; background: var(--surface); font-size: 0.78rem; line-height: 1.45; }
+.registration-preview-children { display: grid; gap: 0.35rem; }
 .admin-persons-toolbar {
   display: flex;
   flex-wrap: wrap;

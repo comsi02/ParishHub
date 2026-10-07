@@ -2380,15 +2380,45 @@ function renderRegistrationImportPreview() {
   const errHtml = errors?.length
     ? `<div style="color:#b91c1c; margin-bottom:0.35rem;">${errors.map(escapeHtml).join('<br>')}</div>`
     : '';
-  const sample = (families || []).slice(0, 5).map(f => {
-    const kids = (f.children || []).map(c => c.name).join(', ') || '자녀 없음';
-    const spouse = f.spouse ? ` · 배우자 ${f.spouse.name}` : '';
-    return `<li>${escapeHtml(f.applicant.name)}${escapeHtml(spouse)} → ${escapeHtml(kids)}</li>`;
+  const value = (input) => escapeHtml(input || '—');
+  const yesNo = (input) => input ? '예' : '아니요';
+  const previewCards = (families || []).map((family, index) => {
+    const parent = family.applicant || {};
+    const spouse = family.spouse || null;
+    const children = family.children || [];
+    const parentLine = `${parent.name || '이름 없음'}${spouse ? ` · ${spouse.name || '이름 없음'}` : ''}`;
+    const parentHtml = (label, person) => person ? `
+      <div class="registration-preview-person">
+        <strong>${label}</strong>
+        <span>이름: ${value(person.name)} · 세례명: ${value(person.baptismalName)} · 전화: ${value(person.phone)}</span>
+      </div>
+    ` : '';
+    const childrenHtml = children.length ? children.map((child, childIndex) => `
+      <div class="registration-preview-child">
+        <strong>자녀 ${childIndex + 1}</strong>
+        <span>이름: ${value(child.name)} · 세례명: ${value(child.baptismalName)} · 학년: ${value(child.grade)} · 성별: ${value(child.gender)}</span>
+        <span>축일: ${value(child.feastDay)} · 첫영성체: ${yesNo(child.firstCommunion)} · 견진: ${yesNo(child.confirmation)}</span>
+        <span>기존 활동: ${value(child.departmentsPrev)} · 희망 활동: ${value(Array.isArray(child.departments) ? child.departments.join(', ') : child.departments)}</span>
+      </div>
+    `).join('') : '<div class="registration-preview-child">등록된 자녀 없음</div>';
+    const consent = family.consent || {};
+    return `
+      <details class="registration-preview-family" open>
+        <summary>${index + 1}. ${value(parentLine)} · 자녀 ${children.length}명</summary>
+        <div class="registration-preview-family-body">
+          <div class="registration-preview-meta">등록 이메일: ${value(family.registrationEmail)} · 접수 시각: ${value(family.timestamp)}<br>주소: ${value(family.address)}</div>
+          ${parentHtml('학부모 1', parent)}
+          ${parentHtml('학부모 2', spouse)}
+          <div class="registration-preview-children">${childrenHtml}</div>
+          <div class="registration-preview-consents">동의: 사진·영상 ${yesNo(consent.photoVideoConsent)} · 첫영성체 안내 ${yesNo(consent.firstCommunionNoticeAck)} · 봉사 서약 ${yesNo(consent.ministryServicePledge)} · 회비 이체 ${yesNo(consent.tuitionTransferAck)}</div>
+        </div>
+      </details>
+    `;
   }).join('');
   el.innerHTML = `
     ${errHtml}
     <strong>가정 ${summary.families}건</strong> · 학부모 ${summary.parents}명 · 학생 ${summary.students}명
-    ${sample ? `<ul style="margin:0.4rem 0 0; padding-left:1.1rem;">${sample}${families.length > 5 ? `<li>…외 ${families.length - 5}가정</li>` : ''}</ul>` : ''}
+    ${previewCards ? `<div class="registration-preview-list">${previewCards}</div>` : ''}
   `;
 }
 
@@ -2469,7 +2499,7 @@ function initRegistrationImportUI() {
     if (!confirm(`학부모·학생 ${pendingRegistrationImport.persons.length}명을 저장할까요? (동일 ID는 덮어씁니다)`)) return;
     try {
       btnApply.disabled = true;
-      const result = await upsertPersons(pendingRegistrationImport.persons);
+      const result = await upsertPersons(pendingRegistrationImport.persons, { preserveExistingRoles: true });
       showToast(`저장 완료: Person ${result.count}명`, '✅');
       pendingRegistrationImport = null;
       input.value = '';

@@ -416,7 +416,9 @@ export function buildPersonsFromFamilyRecord(record) {
 
   const family = {
     familyKey,
+    registrationEmail,
     timestamp: String(record?.timestamp || '').trim(),
+    address,
     applicant,
     spouse,
     children,

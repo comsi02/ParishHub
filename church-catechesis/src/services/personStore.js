@@ -110,6 +110,25 @@ export function upsertPersonsLocal(persons) {
 }
 
 /**
+ * 시트에서 다시 가져온 가족 정보에 기존의 수동 역할을 합칩니다.
+ * 시트는 학부모·학생 기본 정보만 가지므로, 관리자가 지정한 교사·임원 역할을 덮어쓰면 안 됩니다.
+ */
+function preserveExistingRolesForImport(persons) {
+  const existingById = new Map(dataProvider.getPersons().map(person => [person.id, person]));
+  return persons.map(person => {
+    const previous = existingById.get(person.id);
+    if (!previous) return person;
+
+    return {
+      ...person,
+      roles: [...new Set([...(previous.roles || []), ...(person.roles || [])])],
+      // 시트에는 교사 상세 정보가 없으므로 기존 설정을 유지합니다.
+      teacherInfo: person.teacherInfo ?? previous.teacherInfo ?? null,
+    };
+  });
+}
+
+/**
  * Firestore 에서 전체 persons 로드 후 로컬 캐시에 반영
  */
 export async function loadPersonsFromFirestore() {
@@ -130,18 +149,22 @@ export async function loadPersonsFromFirestore() {
 /**
  * persons 를 Firestore + local 에 upsert
  * @param {object[]} persons
+ * @param {{ preserveExistingRoles?: boolean }} [options]
  */
-export async function upsertPersons(persons) {
+export async function upsertPersons(persons, options = {}) {
   if (!persons?.length) return { count: 0 };
 
   await loadPersonsFromFirestore();
   const resolved = resolvePersonIdsForUpsert(persons);
-  upsertPersonsLocal(resolved);
+  const prepared = options.preserveExistingRoles
+    ? preserveExistingRolesForImport(resolved)
+    : resolved;
+  upsertPersonsLocal(prepared);
 
   if (isFirebaseMode && db) {
     const chunkSize = 400;
-    for (let i = 0; i < resolved.length; i += chunkSize) {
-      const chunk = resolved.slice(i, i + chunkSize);
+    for (let i = 0; i < prepared.length; i += chunkSize) {
+      const chunk = prepared.slice(i, i + chunkSize);
       const batch = writeBatch(db);
       chunk.forEach(p => {
         const ref = doc(db, PERSONS_COLLECTION, p.id);
@@ -152,7 +175,7 @@ export async function upsertPersons(persons) {
     }
   }
 
-  return { count: resolved.length, persons: resolved };
+  return { count: prepared.length, persons: prepared };
 }
 
 /**
