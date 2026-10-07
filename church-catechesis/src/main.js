@@ -60,6 +60,7 @@ import {
   saveDutyAssignment,
 } from './services/dutyStore.js';
 import { bindSearchableSelect, bindSearchableSelects } from './services/searchableSelect.js';
+import { includesClientLike } from './services/clientSearch.js';
 import {
   parseRegistrationCsv,
   buildPersonsFromFamilyRecord,
@@ -4349,9 +4350,7 @@ function renderGraceBank() {
   const cardList = document.getElementById('graceOverviewCardList');
 
   let filtered = students.filter(st => {
-    const matchSearch = !search ||
-      st.name.toLowerCase().includes(search) ||
-      (st.baptismalName && st.baptismalName.toLowerCase().includes(search));
+    const matchSearch = includesClientLike(search, st.name, st.baptismalName);
     const matchGrade = matchGradeGroup(st.studentInfo?.grade || '', currentGraceGradeFilter);
     return matchSearch && matchGrade;
   });
@@ -4521,9 +4520,7 @@ function renderStudentsDirectory(search = '') {
   const filtered = students.filter(s => {
     if (!search) return true;
     const si = s.studentInfo || {};
-    return s.name.toLowerCase().includes(search) ||
-           (s.baptismalName && s.baptismalName.toLowerCase().includes(search)) ||
-           (si.grade && si.grade.toLowerCase().includes(search));
+    return includesClientLike(search, s.name, s.baptismalName, si.grade);
   });
 
   // 학년 순 정렬
@@ -4629,12 +4626,10 @@ function renderParentsDirectory(search = '') {
 
   const filtered = parents.filter(p => {
     if (!search) return true;
-    const basic = p.name.toLowerCase().includes(search) ||
-           (p.baptismalName && p.baptismalName.toLowerCase().includes(search));
+    const basic = includesClientLike(search, p.name, p.baptismalName);
     if (basic) return true;
     if (!canViewContactInfo()) return false;
-    return (p.phone && p.phone.includes(search)) ||
-           (p.address && p.address.toLowerCase().includes(search));
+    return includesClientLike(search, p.phone, p.address);
   });
 
   if (filtered.length === 0) {
@@ -4747,8 +4742,7 @@ function renderTeachersDirectory(search = '') {
 
   const filtered = teachers.filter(t => {
     if (!search) return true;
-    return t.name.toLowerCase().includes(search) ||
-           (t.baptismalName && t.baptismalName.toLowerCase().includes(search));
+    return includesClientLike(search, t.name, t.baptismalName);
   });
 
   if (filtered.length === 0) {

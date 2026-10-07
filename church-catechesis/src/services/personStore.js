@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase-init.js';
 import { dataProvider } from './DataProvider.js';
+import { includesClientLike } from './clientSearch.js';
 
 const isFirebaseMode = import.meta.env.VITE_PROVIDER === 'firebase';
 const PERSONS_COLLECTION = 'catechesis_persons';
@@ -188,12 +189,7 @@ export function searchPersons(query, { role, limit = 50 } = {}) {
   let list = dataProvider.getPersons();
   if (role) list = list.filter(p => p.roles?.includes(role));
   if (q) {
-    list = list.filter(p =>
-      (p.name || '').toLowerCase().includes(q) ||
-      (p.baptismalName || '').toLowerCase().includes(q) ||
-      (p.email || '').toLowerCase().includes(q) ||
-      String(p.phone || '').toLowerCase().includes(q)
-    );
+    list = list.filter(p => includesClientLike(q, p.name, p.baptismalName, p.email, p.phone));
   }
   list = list.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
   if (limit == null || limit < 0) return list;
