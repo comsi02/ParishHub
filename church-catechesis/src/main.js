@@ -870,7 +870,7 @@ function showUserDetail(type, id) {
   currentDetailPerson = { type, id };
   const editBtn = document.getElementById('btnEditPersonFromDetail');
   const deleteBtn = document.getElementById('btnDeletePersonFromDetail');
-  const canEdit = isUserAdmin() && (type === 'teacher' || type === 'parent' || type === 'priest');
+  const canEdit = isUserAdmin() && ['student', 'teacher', 'parent', 'priest'].includes(type);
   const canDelete = isUserAdmin();
   if (editBtn) editBtn.style.display = canEdit ? '' : 'none';
   if (deleteBtn) deleteBtn.style.display = canDelete ? '' : 'none';
@@ -1117,7 +1117,7 @@ function openEditPersonFromDetail() {
     return;
   }
   if (type === 'student') {
-    showToast('학생은 이 화면에서 수정할 항목이 없습니다.', 'ℹ️');
+    openStudentFormEdit(id);
     return;
   }
   if (type === 'teacher' || type === 'parent' || type === 'priest') openTeacherFormEdit(id);
@@ -5692,6 +5692,10 @@ document.getElementById('btnOpenAddStudentModal')?.addEventListener('click', () 
 
 document.getElementById('addStudentForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!isUserAdmin()) {
+    showToast('관리자만 학생 정보를 저장할 수 있습니다.', '🔒');
+    return;
+  }
   const editId = document.getElementById('editStudentId')?.value || '';
   const name = document.getElementById('newStudentName').value.trim();
   const baptismalName = document.getElementById('newStudentBaptismal').value.trim();
@@ -5793,6 +5797,10 @@ document.getElementById('btnOpenAddParentModal')?.addEventListener('click', () =
 
 document.getElementById('addParentForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!isUserAdmin()) {
+    showToast('관리자만 학부모 정보를 저장할 수 있습니다.', '🔒');
+    return;
+  }
   const editId = document.getElementById('editParentId')?.value || '';
   const name = document.getElementById('newParentName').value.trim();
   const baptismalName = document.getElementById('newParentBaptismal').value.trim();
@@ -5867,6 +5875,10 @@ document.getElementById('btnOpenAddTeacherModal')?.addEventListener('click', () 
 
 document.getElementById('editTeacherForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!isUserAdmin()) {
+    showToast('관리자만 구성원 정보를 저장할 수 있습니다.', '🔒');
+    return;
+  }
   const id = document.getElementById('editTeacherId')?.value || '';
   const name = document.getElementById('editTeacherName').value.trim();
   const baptismalName = document.getElementById('editTeacherBaptismal').value.trim();

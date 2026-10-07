@@ -174,17 +174,8 @@ service cloud.firestore {
           request.resource.data.roles.hasOnly(['student'])
         )
       );
-      allow update: if isCatechesisAdmin() || isCatechesisActiveUser() || (
-        isAuthenticated() &&
-        resource.data.createdByUid == request.auth.uid &&
-        request.resource.data.createdByUid == request.auth.uid &&
-        request.resource.data.source == 'self_register' &&
-        (
-          request.resource.data.roles.hasOnly(['parent']) ||
-          request.resource.data.roles.hasOnly(['student'])
-        )
-      );
-      allow delete: if isCatechesisAdmin() || isCatechesisActiveUser();
+      // Person 정보의 수정·삭제는 관리자만 허용합니다.
+      allow update, delete: if isCatechesisAdmin();
     }
 
     // 주일학교 학사 일정
