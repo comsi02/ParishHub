@@ -787,7 +787,10 @@ function showUserDetail(type, id) {
     // 교사 겸임 여부 확인
     const teacherRoles = dataProvider.getTeacherRoles();
     const isTeacher = person.roles && person.roles.some(r => teacherRoles.includes(r));
-    badgeEl.textContent = isTeacher ? `학부모 (${getPrimaryRoleLabel(person)} 겸임)` : '학부모';
+    const parentLeaderLabels = (person.roles || [])
+      .filter(role => PARENT_LEADER_ROLES.includes(role))
+      .map(role => PERSON_ROLES[role]?.label || role);
+    badgeEl.textContent = parentLeaderLabels[0] || (isTeacher ? `학부모 (${getPrimaryRoleLabel(person)} 겸임)` : '학부모');
     subEl.textContent = `세례명: ${person.baptismalName || '미등록'}`;
 
     // 학부모 1 정보 (동일 포맷)
@@ -856,13 +859,17 @@ function showUserDetail(type, id) {
         <div class="detail-label">등록 자녀 목록 (클릭 시 학생 정보 조회)</div>
         <div class="detail-value">${childrenHtml}</div>
       </div>
+      <div class="detail-item detail-item-full">
+        <div class="detail-label">학부모 역할</div>
+        <div class="detail-value">${parentLeaderLabels.length ? parentLeaderLabels.join(', ') : '일반 학부모'}</div>
+      </div>
     `;
   }
 
   currentDetailPerson = { type, id };
   const editBtn = document.getElementById('btnEditPersonFromDetail');
   const deleteBtn = document.getElementById('btnDeletePersonFromDetail');
-  const canEdit = isUserAdmin();
+  const canEdit = isUserAdmin() && (type === 'teacher' || type === 'parent' || type === 'priest');
   const canDelete = isUserAdmin();
   if (editBtn) editBtn.style.display = canEdit ? '' : 'none';
   if (deleteBtn) deleteBtn.style.display = canDelete ? '' : 'none';
@@ -932,6 +939,7 @@ function openParentFormCreate() {
   document.getElementById('modalParentTitle').textContent = '+ 새 학부모 등록';
   document.getElementById('btnSubmitParentForm').textContent = '학부모 등록';
   document.getElementById('addParentForm').reset();
+  fillParentLeaderChecks();
   const spouseBlock = document.getElementById('parentSpouseCreateBlock');
   if (spouseBlock) spouseBlock.style.display = '';
   const heading = document.getElementById('parentPrimaryHeading');
@@ -953,14 +961,38 @@ function openParentFormEdit(personId) {
   document.getElementById('newParentBaptismal').value = p.baptismalName || '';
   document.getElementById('newParentPhone').value = p.phone || '';
   document.getElementById('newParentAddress').value = p.address || '';
-  const teacherRoles = dataProvider.getTeacherRoles();
-  document.getElementById('newParentIsTeacher').checked = !!(p.roles || []).some(r => teacherRoles.includes(r));
+  fillParentLeaderChecks(p.roles || []);
   const spouseBlock = document.getElementById('parentSpouseCreateBlock');
   if (spouseBlock) spouseBlock.style.display = 'none';
   const heading = document.getElementById('parentPrimaryHeading');
   if (heading) heading.textContent = '👤 학부모 정보';
   closeModal('modalUserDetail');
   openModal('modalAddParent');
+}
+
+const PARENT_LEADER_DUTY_ROLES = [
+  { id: 'fathers_chair', label: '자부회장' },
+  { id: 'mothers_chair', label: '자모회장' },
+  { id: 'fathers_secretary', label: '자부회총무' },
+  { id: 'mothers_secretary', label: '자모회총무' },
+];
+
+function fillParentLeaderChecks(selectedRoles = []) {
+  const host = document.getElementById('editParentLeaderChecks');
+  if (!host) return;
+  const selected = new Set(selectedRoles);
+  host.innerHTML = PARENT_LEADER_DUTY_ROLES.map(role => `
+    <label class="admin-role-option">
+      <input type="checkbox" class="parent-leader-check" value="${escapeHtml(role.id)}"${selected.has(role.id) ? ' checked' : ''} />
+      <span>${escapeHtml(role.label)}</span>
+    </label>
+  `).join('');
+}
+
+function readParentLeaderRolesFromForm() {
+  return [...document.querySelectorAll('#editParentLeaderChecks .parent-leader-check:checked')]
+    .map(check => check.value)
+    .filter(role => PARENT_LEADER_ROLES.includes(role));
 }
 
 function fillTeacherDutyChecks(selectedRoles = ['teacher']) {
@@ -984,6 +1016,36 @@ function readTeacherDutyRolesFromForm() {
     .filter(Boolean);
 }
 
+function fillPersonParentLeaderChecks(selectedRoles = []) {
+  const host = document.getElementById('editPersonParentLeaderChecks');
+  if (!host) return;
+  const selected = new Set(selectedRoles);
+  host.innerHTML = PARENT_LEADER_DUTY_ROLES.map(role => `
+    <label class="admin-role-option">
+      <input type="checkbox" class="person-parent-leader-check" value="${escapeHtml(role.id)}"${selected.has(role.id) ? ' checked' : ''} />
+      <span>${escapeHtml(role.label)}</span>
+    </label>
+  `).join('');
+}
+
+function readPersonParentLeaderRolesFromForm() {
+  return [...document.querySelectorAll('#editPersonParentLeaderChecks .person-parent-leader-check:checked')]
+    .map(check => check.value)
+    .filter(role => PARENT_LEADER_ROLES.includes(role));
+}
+
+function configurePersonRoleEditor(person, { creatingTeacher = false } = {}) {
+  const teacherGroup = document.getElementById('teacherDutyGroup');
+  const parentGroup = document.getElementById('parentLeaderDutyGroup');
+  const roles = person?.roles || [];
+  const isTeacher = creatingTeacher || roles.some(role => dataProvider.getTeacherRoles().includes(role));
+  const isParent = !creatingTeacher && (roles.includes('parent') || roles.some(role => PARENT_LEADER_ROLES.includes(role)));
+  if (teacherGroup) teacherGroup.hidden = !isTeacher;
+  if (parentGroup) parentGroup.hidden = !isParent;
+  fillTeacherDutyChecks(isTeacher ? roles : []);
+  fillPersonParentLeaderChecks(isParent ? roles : []);
+}
+
 function openTeacherFormCreate() {
   if (!isUserAdmin()) {
     showToast('관리자만 교사를 등록할 수 있습니다.', '🔒');
@@ -994,25 +1056,34 @@ function openTeacherFormCreate() {
   document.getElementById('btnSubmitTeacherForm').textContent = '교사 등록';
   document.getElementById('editTeacherForm').reset();
   document.getElementById('editTeacherId').value = '';
-  fillTeacherDutyChecks(['teacher']);
+  configurePersonRoleEditor({ roles: ['teacher'] }, { creatingTeacher: true });
   openModal('modalEditTeacher');
 }
 
 function openTeacherFormEdit(personId) {
   if (!isUserAdmin()) {
-    showToast('관리자만 교사 정보를 수정할 수 있습니다.', '🔒');
+    showToast('관리자만 구성원 정보를 수정할 수 있습니다.', '🔒');
     return;
   }
   const p = dataProvider.getPersonById(personId);
   if (!p) return;
   document.getElementById('editTeacherId').value = p.id;
-  document.getElementById('modalTeacherTitle').textContent = '교사 정보 수정';
+  const isPriest = p.roles?.includes('priest');
+  const isTeacher = p.roles?.some(role => dataProvider.getTeacherRoles().includes(role));
+  const isParent = p.roles?.includes('parent') || p.roles?.some(role => PARENT_LEADER_ROLES.includes(role));
+  document.getElementById('modalTeacherTitle').textContent = isPriest
+    ? '신부님 정보 수정'
+    : isTeacher && isParent
+      ? '교사 · 학부모 정보 수정'
+      : isTeacher
+        ? '교사 정보 수정'
+        : '학부모 정보 수정';
   document.getElementById('btnSubmitTeacherForm').textContent = '저장';
   document.getElementById('editTeacherName').value = p.name || '';
   document.getElementById('editTeacherBaptismal').value = p.baptismalName || '';
   document.getElementById('editTeacherPhone').value = p.phone || '';
   document.getElementById('editTeacherNotes').value = p.notes || '';
-  fillTeacherDutyChecks(p.roles || ['teacher']);
+  configurePersonRoleEditor(p);
   closeModal('modalUserDetail');
   openModal('modalEditTeacher');
 }
@@ -1044,9 +1115,11 @@ function openEditPersonFromDetail() {
     showToast('관리자만 수정할 수 있습니다.', '🔒');
     return;
   }
-  if (type === 'student') openStudentFormEdit(id);
-  else if (type === 'parent') openParentFormEdit(id);
-  else if (type === 'teacher' || type === 'priest') openTeacherFormEdit(id);
+  if (type === 'student') {
+    showToast('학생은 이 화면에서 수정할 항목이 없습니다.', 'ℹ️');
+    return;
+  }
+  if (type === 'teacher' || type === 'parent' || type === 'priest') openTeacherFormEdit(id);
 }
 
 async function deletePersonById(id) {
@@ -4625,7 +4698,7 @@ function renderParentsDirectory(search = '') {
   setMobileCards(cardList, rows.map(r => r.card).join(''));
   bindInRoots([parentsBody, cardList], '.btn-edit-person', (e) => {
     const id = e.currentTarget.getAttribute('data-id');
-    if (id) openParentFormEdit(id);
+    if (id) openTeacherFormEdit(id);
   });
   bindInRoots([parentsBody, cardList], '.btn-delete-person', (e) => {
     const id = e.currentTarget.getAttribute('data-id');
@@ -5700,11 +5773,10 @@ document.getElementById('addParentForm')?.addEventListener('submit', async (e) =
   const name = document.getElementById('newParentName').value.trim();
   const baptismalName = document.getElementById('newParentBaptismal').value.trim();
   const phone = document.getElementById('newParentPhone').value.trim();
-  const isTeacher = document.getElementById('newParentIsTeacher').checked;
+  const parentLeaderRoles = readParentLeaderRolesFromForm();
   const parent2Name = document.getElementById('newParent2Name').value.trim();
   const parent2Baptismal = document.getElementById('newParent2Baptismal').value.trim();
   const parent2Phone = document.getElementById('newParent2Phone').value.trim();
-  const parent2IsTeacher = document.getElementById('newParent2IsTeacher').checked;
   const address = document.getElementById('newParentAddress').value.trim();
 
   try {
@@ -5714,39 +5786,35 @@ document.getElementById('addParentForm')?.addEventListener('submit', async (e) =
         showToast('수정할 학부모를 찾을 수 없습니다.', '⚠️');
         return;
       }
-      const teacherRoles = dataProvider.getTeacherRoles();
-      let roles = [...(prev.roles || [])];
-      if (isTeacher) {
-        if (!roles.some(r => teacherRoles.includes(r))) roles.push('teacher');
-        if (!roles.includes('parent')) roles.push('parent');
-      } else {
-        roles = roles.filter(r => !teacherRoles.includes(r));
-        if (!roles.includes('parent')) roles.push('parent');
-      }
+      const roles = [...new Set([
+        ...(prev.roles || []).filter(role => !PARENT_LEADER_ROLES.includes(role)),
+        'parent',
+        ...parentLeaderRoles,
+      ])];
       const updated = dataProvider.updatePerson(editId, {
         name,
         baptismalName,
         phone,
         address,
         roles,
-        teacherInfo: isTeacher
-          ? (prev.teacherInfo || { assignedClassIds: [], specialRole: null })
-          : null,
       });
       await upsertPersons([updated || dataProvider.getPersonById(editId)]);
       showToast(`${name} 학부모 정보가 저장되었습니다.`, '✅');
     } else {
       const newParent1 = dataProvider.addParent({
         id: allocatePersonId(),
-        name, baptismalName, phone, isTeacher, address,
+        name, baptismalName, phone, isTeacher: false, address,
       });
-      const toSave = [newParent1];
+      const parent1WithRoles = dataProvider.updatePerson(newParent1.id, {
+        roles: [...new Set(['parent', ...parentLeaderRoles])],
+      }) || dataProvider.getPersonById(newParent1.id);
+      const toSave = [parent1WithRoles];
 
       if (parent2Name) {
         const newParent2 = dataProvider.addParent({
           id: allocatePersonId(),
           name: parent2Name, baptismalName: parent2Baptismal,
-          phone: parent2Phone, isTeacher: parent2IsTeacher, address,
+          phone: parent2Phone, isTeacher: false, address,
           spousePersonId: newParent1.id,
         });
         const linked1 = dataProvider.updatePerson(newParent1.id, {
@@ -5781,11 +5849,14 @@ document.getElementById('editTeacherForm')?.addEventListener('submit', async (e)
   const phone = document.getElementById('editTeacherPhone').value.trim();
   const notes = document.getElementById('editTeacherNotes').value.trim();
   const duties = readTeacherDutyRolesFromForm();
+  const parentLeaderRoles = readPersonParentLeaderRolesFromForm();
+  const editsTeacherRoles = !document.getElementById('teacherDutyGroup')?.hidden;
+  const editsParentRoles = !document.getElementById('parentLeaderDutyGroup')?.hidden;
   if (!name) {
     showToast('이름을 입력해 주세요.', '⚠️');
     return;
   }
-  if (!duties.length) {
+  if (editsTeacherRoles && !duties.length) {
     showToast('교사 직책을 하나 이상 선택해 주세요.', '⚠️');
     return;
   }
@@ -5794,27 +5865,34 @@ document.getElementById('editTeacherForm')?.addEventListener('submit', async (e)
     if (id) {
       const prev = dataProvider.getPersonById(id);
       if (!prev) {
-        showToast('교사 정보를 찾을 수 없습니다.', '⚠️');
+        showToast('구성원 정보를 찾을 수 없습니다.', '⚠️');
         return;
       }
       const teacherRoleIds = dataProvider.getTeacherRoles();
-      // 학부모·임원·신부님 등은 유지하고 교사 직책만 교체
-      const keepRoles = (prev.roles || []).filter(r => !teacherRoleIds.includes(r));
-      const nextRoles = [...new Set([...duties, ...keepRoles])];
+      let nextRoles = [...(prev.roles || [])];
+      if (editsTeacherRoles) {
+        nextRoles = [...duties, ...nextRoles.filter(role => !teacherRoleIds.includes(role))];
+      }
+      if (editsParentRoles) {
+        nextRoles = [...nextRoles.filter(role => !PARENT_LEADER_ROLES.includes(role)), 'parent', ...parentLeaderRoles];
+      }
 
-      const updated = await patchPerson(id, {
+      const changes = {
         name,
         baptismalName,
         phone,
         notes,
-        roles: nextRoles,
-        teacherInfo: prev.teacherInfo || { assignedClassIds: [], specialRole: null },
-      });
+        roles: [...new Set(nextRoles)],
+      };
+      if (editsTeacherRoles) {
+        changes.teacherInfo = prev.teacherInfo || { assignedClassIds: [], specialRole: null };
+      }
+      const updated = await patchPerson(id, changes);
       if (!updated) {
-        showToast('교사 정보를 찾을 수 없습니다.', '⚠️');
+        showToast('구성원 정보를 찾을 수 없습니다.', '⚠️');
         return;
       }
-      showToast('교사 정보가 저장되었습니다.', '✅');
+      showToast('구성원 정보가 저장되었습니다.', '✅');
     } else {
       const created = dataProvider.addTeacher({
         id: allocatePersonId(),
@@ -5835,7 +5913,7 @@ document.getElementById('editTeacherForm')?.addEventListener('submit', async (e)
     if (typeof renderOrgChart === 'function') renderOrgChart();
   } catch (err) {
     console.error(err);
-    showToast('교사 저장에 실패했습니다.', '⚠️');
+    showToast('구성원 정보 저장에 실패했습니다.', '⚠️');
   }
 });
 

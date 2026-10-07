@@ -1440,13 +1440,12 @@
                 <label class="form-label">전화번호 *</label>
                 <input type="tel" id="newParentPhone" class="form-control" placeholder="예: 416-555-0101" required />
               </div>
-              <div class="form-group" style="margin-bottom: 0.35rem; display: flex; align-items: flex-end;">
-                <label class="checkbox-item checkbox-item-block">
-                  <input type="checkbox" id="newParentIsTeacher" />
-                  ✝ 본당 주일학교 교사 겸임
-                </label>
-              </div>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">학부모 역할 (복수 선택 가능)</label>
+            <div id="editParentLeaderChecks" class="admin-role-row" style="margin-top: 0.35rem;"></div>
           </div>
 
           <div id="parentSpouseCreateBlock"
@@ -1472,12 +1471,6 @@
                 <label class="form-label">전화번호</label>
                 <input type="tel" id="newParent2Phone" class="form-control" placeholder="예: 416-555-2111" />
               </div>
-              <div class="form-group" style="margin-bottom: 0.35rem; display: flex; align-items: flex-end;">
-                <label class="checkbox-item checkbox-item-block">
-                  <input type="checkbox" id="newParent2IsTeacher" />
-                  ✝ 본당 주일학교 교사 겸임
-                </label>
-              </div>
             </div>
           </div>
 
@@ -1499,7 +1492,7 @@
   <div class="modal-backdrop" id="modalEditTeacher">
     <div class="modal-content" style="max-width: 520px;">
       <div class="modal-header">
-        <h3 id="modalTeacherTitle">교사 정보 수정</h3>
+        <h3 id="modalTeacherTitle">구성원 정보 수정</h3>
         <button class="modal-close-btn" data-close="modalEditTeacher">&times;</button>
       </div>
       <form id="editTeacherForm">
@@ -1519,10 +1512,14 @@
             <label class="form-label">전화번호</label>
             <input type="tel" id="editTeacherPhone" class="form-control" />
           </div>
-          <div class="form-group">
+          <div class="form-group" id="teacherDutyGroup">
             <label class="form-label">교사 직책 * (복수 선택 가능)</label>
             <div id="editTeacherDutyChecks" class="admin-role-row" style="margin-top: 0.35rem;"></div>
-            <small style="color: var(--text-muted);">학부모·학생 없이 교사만 등록할 수 있습니다. 담당 반은 반 구성에서 지정하세요.</small>
+            <small style="color: var(--text-muted);">학부모와 교사 역할은 겸임할 수 있습니다. 담당 반은 반 구성에서 지정하세요.</small>
+          </div>
+          <div class="form-group" id="parentLeaderDutyGroup">
+            <label class="form-label">학부모 역할 (복수 선택 가능)</label>
+            <div id="editPersonParentLeaderChecks" class="admin-role-row" style="margin-top: 0.35rem;"></div>
           </div>
           <div class="form-group">
             <label class="form-label">메모</label>
